@@ -44,8 +44,5 @@ namespace cryptonote
 
     bool check_hash(const crypto::hash &hash, uint64_t difficulty);
 
-    uint64_t next_difficulty(std::vector<uint64_t> timestamps, std::vector<difficulty_type_128> cumulative_difficulties, size_t target_seconds);
-    uint64_t next_difficulty_v2(std::vector<uint64_t> timestamps, std::vector<difficulty_type_128> cumulative_difficulties, size_t target_seconds);
-    uint64_t next_difficulty_v3(std::vector<uint64_t> timestamps, std::vector<difficulty_type_128> cumulative_difficulties, size_t target_seconds, bool v4);
     uint64_t next_difficulty_v6(std::vector<uint64_t> timestamps, std::vector<difficulty_type_128> cumulative_difficulties, size_t target_seconds);
 }
