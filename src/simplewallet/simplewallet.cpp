@@ -115,16 +115,6 @@ typedef cryptonote::simple_wallet sw;
 
 #define PRINT_USAGE(usage_help) fail_msg_writer() << boost::format(tr("usage: %s")) % usage_help;
 
-#define LONG_PAYMENT_ID_SUPPORT_CHECK() \
-  do { \
-    if (!m_long_payment_id_support) { \
-      fail_msg_writer() << tr("Warning: Long payment IDs are obsolete."); \
-      fail_msg_writer() << tr("Long payment IDs are not encrypted on the blockchain, and will harm your privacy."); \
-      fail_msg_writer() << tr("Use --long-payment-id-support if you really must use one, and warn the recipient they are using an obsolete feature that will disappear in the future."); \
-      return true; \
-    } \
-  } while(0)
-
 #define REFRESH_PERIOD 90 // seconds
 
 static std::string get_human_readable_timespan(std::chrono::seconds seconds);
@@ -158,7 +148,6 @@ namespace
   const command_line::arg_descriptor<bool> arg_create_address_file = {"create-address-file", sw::tr("Create an address file for new wallets"), false};
   const command_line::arg_descriptor<std::string> arg_subaddress_lookahead = {"subaddress-lookahead", tools::wallet2::tr("Set subaddress lookahead sizes to <major>:<minor>"), ""};
   const command_line::arg_descriptor<bool> arg_use_english_language_names = {"use-english-language-names", sw::tr("Display English language names"), false};
-  const command_line::arg_descriptor<bool> arg_long_payment_id_support = {"long-payment-id-support", sw::tr("Support obsolete long (unencrypted) payment ids (using them harms your privacy)"), false};
 
   const command_line::arg_descriptor< std::vector<std::string> > arg_command = {"command", ""};
 
@@ -892,8 +881,6 @@ bool simple_wallet::change_password(const std::vector<std::string> &args)
 
 bool simple_wallet::payment_id(const std::vector<std::string> &args/* = std::vector<std::string>()*/)
 {
-  LONG_PAYMENT_ID_SUPPORT_CHECK();
-
   crypto::hash payment_id;
   if (args.size() > 0)
   {
@@ -2374,8 +2361,6 @@ bool simple_wallet::set_refresh_type(const std::vector<std::string> &args/* = st
 
 bool simple_wallet::set_confirm_missing_payment_id(const std::vector<std::string> &args/* = std::vector<std::string>()*/)
 {
-  LONG_PAYMENT_ID_SUPPORT_CHECK();
-
   const auto pwd_container = get_and_verify_password();
   if (pwd_container)
   {
@@ -4224,14 +4209,6 @@ bool simple_wallet::init(const boost::program_options::variables_map& vm)
   if (welcome)
     message_writer(console_color_yellow, true) << tr("If you are new to Nerva, type \"welcome\" for a brief overview.");
 
-  if (m_long_payment_id_support)
-  {
-    message_writer(console_color_red, false) <<
-        tr("WARNING: obsolete long payment IDs are enabled. Sending transactions with those payment IDs are bad for your privacy.");
-    message_writer(console_color_red, false) <<
-        tr("It is recommended that you do not use them, and ask recipients who ask for one to not endanger your privacy.");
-  }
-
   m_last_activity_time = time(NULL);
 
   return true;
@@ -4266,7 +4243,6 @@ bool simple_wallet::handle_command_line(const boost::program_options::variables_
   m_do_not_relay                  = command_line::get_arg(vm, arg_do_not_relay);
   m_subaddress_lookahead          = command_line::get_arg(vm, arg_subaddress_lookahead);
   m_use_english_language_names    = command_line::get_arg(vm, arg_use_english_language_names);
-  m_long_payment_id_support       = command_line::get_arg(vm, arg_long_payment_id_support);
   m_restoring                     = !m_generate_from_view_key.empty() ||
                                     !m_generate_from_spend_key.empty() ||
                                     !m_generate_from_keys.empty() ||
@@ -5923,8 +5899,6 @@ bool simple_wallet::transfer_main(const std::vector<std::string> &args_, bool ca
     bool r = true;
     if (tools::wallet2::parse_long_payment_id(payment_id_str, payment_id))
     {
-      LONG_PAYMENT_ID_SUPPORT_CHECK();
-
       std::string extra_nonce;
       set_payment_id_to_tx_extra_nonce(extra_nonce, payment_id);
       r = add_extra_nonce_to_tx_extra(extra, extra_nonce);
@@ -6018,7 +5992,6 @@ bool simple_wallet::transfer_main(const std::vector<std::string> &args_, bool ca
       }
       else if (tools::wallet2::parse_payment_id(payment_id_uri, payment_id))
       {
-        LONG_PAYMENT_ID_SUPPORT_CHECK();
         set_payment_id_to_tx_extra_nonce(extra_nonce, payment_id);
         message_writer() << tr("Warning: Unencrypted payment IDs will harm your privacy: ask the recipient to use subaddresses instead");
       }
@@ -6040,7 +6013,7 @@ bool simple_wallet::transfer_main(const std::vector<std::string> &args_, bool ca
   }
 
   // prompt is there is no payment id and confirmation is required
-  if (m_long_payment_id_support && !payment_id_seen && m_wallet->confirm_missing_payment_id() && dsts.size() > num_subaddresses)
+  if (!payment_id_seen && m_wallet->confirm_missing_payment_id() && dsts.size() > num_subaddresses)
   {
      std::string accepted = input_line(tr("No payment id is included with this transaction. Is this okay?"), true);
      if (std::cin.eof())
@@ -6442,8 +6415,6 @@ bool simple_wallet::sweep_main(uint64_t below, const std::vector<std::string> &a
     bool r = tools::wallet2::parse_long_payment_id(payment_id_str, payment_id);
     if(r)
     {
-      LONG_PAYMENT_ID_SUPPORT_CHECK();
-
       std::string extra_nonce;
       set_payment_id_to_tx_extra_nonce(extra_nonce, payment_id);
       r = add_extra_nonce_to_tx_extra(extra, extra_nonce);
@@ -6500,7 +6471,7 @@ bool simple_wallet::sweep_main(uint64_t below, const std::vector<std::string> &a
   }
 
   // prompt is there is no payment id and confirmation is required
-  if (m_long_payment_id_support && !payment_id_seen && m_wallet->confirm_missing_payment_id() && !info.is_subaddress)
+  if (!payment_id_seen && m_wallet->confirm_missing_payment_id() && !info.is_subaddress)
   {
      std::string accepted = input_line(tr("No payment id is included with this transaction. Is this okay?"), true);
      if (std::cin.eof())
@@ -6685,7 +6656,6 @@ bool simple_wallet::sweep_single(const std::vector<std::string> &args_)
     std::string extra_nonce;
     if (tools::wallet2::parse_long_payment_id(local_args.back(), payment_id))
     {
-      LONG_PAYMENT_ID_SUPPORT_CHECK();
       set_payment_id_to_tx_extra_nonce(extra_nonce, payment_id);
     }
     else if(tools::wallet2::parse_short_payment_id(local_args.back(), payment_id8))
@@ -6747,7 +6717,7 @@ bool simple_wallet::sweep_single(const std::vector<std::string> &args_)
   }
 
   // prompt if there is no payment id and confirmation is required
-  if (m_long_payment_id_support && !payment_id_seen && m_wallet->confirm_missing_payment_id() && !info.is_subaddress)
+  if (!payment_id_seen && m_wallet->confirm_missing_payment_id() && !info.is_subaddress)
   {
      std::string accepted = input_line(tr("No payment id is included with this transaction. Is this okay?"), true);
      if (std::cin.eof())
@@ -8848,7 +8818,6 @@ bool simple_wallet::address_book(const std::vector<std::string> &args/* = std::v
     {
       if (tools::wallet2::parse_long_payment_id(args[3], payment_id))
       {
-        LONG_PAYMENT_ID_SUPPORT_CHECK();
         description_start += 2;
       }
       else if (tools::wallet2::parse_short_payment_id(args[3], info.payment_id))
@@ -9596,7 +9565,6 @@ int main(int argc, char* argv[])
   command_line::add_arg(desc_params, arg_create_address_file);
   command_line::add_arg(desc_params, arg_subaddress_lookahead);
   command_line::add_arg(desc_params, arg_use_english_language_names);
-  command_line::add_arg(desc_params, arg_long_payment_id_support);
 
   po::positional_options_description positional_options;
   positional_options.add(arg_command.name, -1);
