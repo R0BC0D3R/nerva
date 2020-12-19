@@ -133,10 +133,6 @@ if(NOT IOS)
   
 endif()
 
-if(BUILD_UTILS)
-  add_subdirectory(blockchain_utilities)
-endif()
-
 if (BUILD_EXTRAS)
   add_subdirectory(extras)
 endif()
