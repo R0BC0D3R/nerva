@@ -59,7 +59,6 @@ const char* const GetTransactionPool::name = "get_transaction_pool";
 const char* const HardForkInfo::name = "hard_fork_info";
 const char* const GetOutputHistogram::name = "get_output_histogram";
 const char* const GetOutputKeys::name = "get_output_keys";
-const char* const GetRPCVersion::name = "get_rpc_version";
 const char* const GetPerKBFeeEstimate::name = "get_dynamic_per_kb_fee_estimate";
 const char* const GetOutputDistribution::name = "get_output_distribution";
 
@@ -749,30 +748,6 @@ rapidjson::Value GetOutputKeys::Response::toJson(rapidjson::Document& doc) const
 void GetOutputKeys::Response::fromJson(rapidjson::Value& val)
 {
   GET_FROM_JSON_OBJECT(val, keys, keys);
-}
-
-
-rapidjson::Value GetRPCVersion::Request::toJson(rapidjson::Document& doc) const
-{
-  return Message::toJson(doc);
-}
-
-void GetRPCVersion::Request::fromJson(rapidjson::Value& val)
-{
-}
-
-rapidjson::Value GetRPCVersion::Response::toJson(rapidjson::Document& doc) const
-{
-  auto val = Message::toJson(doc);
-
-  INSERT_INTO_JSON_OBJECT(val, doc, version, version);
-
-  return val;
-}
-
-void GetRPCVersion::Response::fromJson(rapidjson::Value& val)
-{
-  GET_FROM_JSON_OBJECT(val, version, version);
 }
 
 rapidjson::Value GetPerKBFeeEstimate::Request::toJson(rapidjson::Document& doc) const

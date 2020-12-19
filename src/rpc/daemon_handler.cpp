@@ -746,12 +746,6 @@ namespace rpc
     res.status = Message::STATUS_OK;
   }
 
-  void DaemonHandler::handle(const GetRPCVersion::Request& req, GetRPCVersion::Response& res)
-  {
-    res.version = DAEMON_RPC_VERSION_ZMQ;
-    res.status = Message::STATUS_OK;
-  }
-
   void DaemonHandler::handle(const GetPerKBFeeEstimate::Request& req, GetPerKBFeeEstimate::Response& res)
   {
     res.estimated_fee_per_kb = m_core.get_blockchain_storage().get_dynamic_per_kb_fee_estimate(req.num_grace_blocks);
@@ -862,7 +856,6 @@ namespace rpc
       REQ_RESP_TYPES_MACRO(request_type, HardForkInfo, req_json, resp_message, handle);
       REQ_RESP_TYPES_MACRO(request_type, GetOutputHistogram, req_json, resp_message, handle);
       REQ_RESP_TYPES_MACRO(request_type, GetOutputKeys, req_json, resp_message, handle);
-      REQ_RESP_TYPES_MACRO(request_type, GetRPCVersion, req_json, resp_message, handle);
       REQ_RESP_TYPES_MACRO(request_type, GetPerKBFeeEstimate, req_json, resp_message, handle);
       REQ_RESP_TYPES_MACRO(request_type, GetOutputDistribution, req_json, resp_message, handle);
 

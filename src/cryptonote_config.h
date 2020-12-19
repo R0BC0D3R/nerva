@@ -47,11 +47,10 @@
 #define TRANSACTION_VERSION_V2                                          2
 #define TRANSACTION_VERSION_MAX                                         TRANSACTION_VERSION_V2
 #define CRYPTONOTE_BLOCK_FUTURE_TIME_LIMIT                              60 * 60 * 2
-#define CRYPTONOTE_DEFAULT_TX_SPENDABLE_AGE                             10
+#define CRYPTONOTE_DEFAULT_TX_SPENDABLE_AGE                             20
 
 #define BULLETPROOF_MAX_OUTPUTS                                         16
-#define BULLETPROOF_SIMPLE_FORK_HEIGHT                                  8
-#define BULLETPROOF_FULL_FORK_HEIGHT                                    11
+#define BULLETPROOF_FULL_FORK_HEIGHT                                    1
 
 #define BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW_V2                            12
 
@@ -142,7 +141,7 @@
 
 #define DEFAULT_TXPOOL_MAX_WEIGHT                                       648000000ull
 
-#define HF_VERSION_LONG_TERM_BLOCK_WEIGHT                               12
+#define HF_VERSION_LONG_TERM_BLOCK_WEIGHT                               2
 #define CRYPTONOTE_SHORT_TERM_BLOCK_WEIGHT_SURGE_FACTOR                 50
 
 #define CRYPTONOTE_NOISE_MIN_EPOCH                                      5
@@ -172,7 +171,6 @@ namespace config
     uint64_t const CRYPTONOTE_PUBLIC_SUBADDRESS_BASE58_PREFIX = 0x1080;
     uint16_t const P2P_DEFAULT_PORT = 17565;
     uint16_t const RPC_DEFAULT_PORT = 17566;
-    uint16_t const ZMQ_RPC_DEFAULT_PORT = 17567;
     boost::uuids::uuid const NETWORK_ID = {{0x12, 0x30, 0xF1, 0x71, 0x61, 0x04, 0x41, 0x61, 0x17, 0x31, 0x00, 0x82, 0x16, 0xA1, 0xA1, 0x12}};
     std::string const GENESIS_TX = "010a01ff0001ffffffffffff0f029b2e4c0281c0b02e7c53291a94d1d0cbff8883f8024f5142ee494ffbbd0880712101abf318a3dc8d66a0263839cffce83daa85963a27635a608a2ba9973055bcc8e400";
 
@@ -190,7 +188,6 @@ namespace config
     {
         uint16_t const P2P_DEFAULT_PORT = 18565;
         uint16_t const RPC_DEFAULT_PORT = 18566;
-        uint16_t const ZMQ_RPC_DEFAULT_PORT = 18567;
         boost::uuids::uuid const NETWORK_ID = {{0x13, 0x22, 0xF0, 0x55, 0x42, 0x18, 0x40, 0x33, 0x16, 0x88, 0x01, 0x92, 0xAA, 0xBC, 0xFF, 0x13}};
 
         std::string const HF_MIN_VERSION = "0.2.0.0";
@@ -206,7 +203,6 @@ namespace config
     {
         uint16_t const P2P_DEFAULT_PORT = 19565;
         uint16_t const RPC_DEFAULT_PORT = 19566;
-        uint16_t const ZMQ_RPC_DEFAULT_PORT = 19567;
         boost::uuids::uuid const NETWORK_ID = {{0x14, 0x31, 0xF1, 0x22, 0x54, 0x86, 0x36, 0xFF, 0xAB, 0x51, 0x00, 0x4F, 0x3C, 0x3D, 0xAA, 0x16}};
         
         static const hard_fork hard_forks[] = {
@@ -258,7 +254,6 @@ namespace cryptonote
         uint64_t const CRYPTONOTE_PUBLIC_SUBADDRESS_BASE58_PREFIX;
         uint16_t const P2P_DEFAULT_PORT;
         uint16_t const RPC_DEFAULT_PORT;
-        uint16_t const ZMQ_RPC_DEFAULT_PORT;
         boost::uuids::uuid const NETWORK_ID;
         std::string const GENESIS_TX;
         uint32_t const GENESIS_NONCE;
@@ -274,7 +269,6 @@ namespace cryptonote
             ::config::CRYPTONOTE_PUBLIC_SUBADDRESS_BASE58_PREFIX,
             ::config::P2P_DEFAULT_PORT,
             ::config::RPC_DEFAULT_PORT,
-            ::config::ZMQ_RPC_DEFAULT_PORT,
             ::config::NETWORK_ID,
             ::config::GENESIS_TX,
             ::config::GENESIS_NONCE,
@@ -287,7 +281,6 @@ namespace cryptonote
             ::config::CRYPTONOTE_PUBLIC_SUBADDRESS_BASE58_PREFIX,
             ::config::testnet::P2P_DEFAULT_PORT,
             ::config::testnet::RPC_DEFAULT_PORT,
-            ::config::testnet::ZMQ_RPC_DEFAULT_PORT,
             ::config::testnet::NETWORK_ID,
             ::config::GENESIS_TX,
             ::config::GENESIS_NONCE,
@@ -300,7 +293,6 @@ namespace cryptonote
             ::config::CRYPTONOTE_PUBLIC_SUBADDRESS_BASE58_PREFIX,
             ::config::stagenet::P2P_DEFAULT_PORT,
             ::config::stagenet::RPC_DEFAULT_PORT,
-            ::config::stagenet::ZMQ_RPC_DEFAULT_PORT,
             ::config::stagenet::NETWORK_ID,
             ::config::GENESIS_TX,
             ::config::GENESIS_NONCE,

@@ -90,25 +90,6 @@ void cn_fast_hash(const void *data, size_t length, char *hash);
 
 #define CN_SCRATCHPAD_MEMORY 1048576
 #define CN_SALT_MEMORY 262144
-#define CN_RANDOM_VALUES 32
-
-enum {
-  NOP = 0,
-  ADD,
-  SUB,
-  XOR,
-  OR,
-  AND,
-  COMP,
-  EQ
-};
-
-typedef struct cn_random_values
-{
-  uint8_t operators[CN_RANDOM_VALUES];
-  uint32_t indices[CN_RANDOM_VALUES];
-  int8_t values[CN_RANDOM_VALUES];
-} cn_random_values_t;
 
 typedef struct cn_hash_context
 {
@@ -119,15 +100,11 @@ typedef struct cn_hash_context
   int scratchpad_is_mapped;
   char *salt;
   int salt_is_mapped;
-  cn_random_values_t random_values;
   uint64_t cached_height;
 } cn_hash_context_t;
 
 cn_hash_context_t *cn_hash_context_create(void);
 void cn_hash_context_free(cn_hash_context_t *context);
 
-void cn_slow_hash(cn_hash_context_t *context, const void *data, size_t length, char *hash, int variant, int prehashed, size_t iters);
+void cn_slow_hash(cn_hash_context_t *context, const void *data, size_t length, char *hash, int prehashed);
 void cn_slow_hash_v11(cn_hash_context_t *context, const void *data, size_t length, char *hash, size_t iters, uint8_t init_size_blk, uint16_t xx, uint16_t yy);
-void cn_slow_hash_v10(cn_hash_context_t *context, const void *data, size_t length, char *hash, size_t iters, uint8_t init_size_blk, uint16_t xx, uint16_t yy, uint16_t zz, uint16_t ww);
-void cn_slow_hash_v9(cn_hash_context_t *context, const void *data, size_t length, char *hash, size_t iters);
-void cn_slow_hash_v7_8(cn_hash_context_t *context, const void *data, size_t length, char *hash, size_t iters);

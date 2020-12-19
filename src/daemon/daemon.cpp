@@ -34,7 +34,6 @@
 #include "misc_log_ex.h"
 #include "daemon/daemon.h"
 #include "rpc/daemon_handler.h"
-#include "rpc/zmq_server.h"
 
 #include "common/password.h"
 #include "common/util.h"
@@ -101,12 +100,7 @@ t_daemon::t_daemon(
     uint16_t public_rpc_port
   )
   : mp_internals{new t_internals{vm}},
-  public_rpc_port(public_rpc_port)
-{
-  zmq_rpc_bind_port = command_line::get_arg(vm, daemon_args::arg_zmq_rpc_bind_port);
-  zmq_rpc_bind_address = command_line::get_arg(vm, daemon_args::arg_zmq_rpc_bind_ip);
-  zmq_rpc_disabled = command_line::get_arg(vm, daemon_args::arg_zmq_rpc_disabled);
-}
+  public_rpc_port(public_rpc_port) { }
 
 t_daemon::~t_daemon() = default;
 
@@ -157,34 +151,6 @@ bool t_daemon::run(bool interactive)
       rpc_commands->start_handling(std::bind(&daemonize::t_daemon::stop_p2p, this));
     }
 
-    cryptonote::rpc::DaemonHandler rpc_daemon_handler(mp_internals->core.get(), mp_internals->p2p.get());
-    cryptonote::rpc::ZmqServer zmq_server(rpc_daemon_handler);
-
-    if (!zmq_rpc_disabled)
-    {
-      if (!zmq_server.addTCPSocket(zmq_rpc_bind_address, zmq_rpc_bind_port))
-      {
-        LOG_ERROR(std::string("Failed to add TCP Socket (") + zmq_rpc_bind_address
-            + ":" + zmq_rpc_bind_port + ") to ZMQ RPC Server");
-
-        if (rpc_commands)
-          rpc_commands->stop_handling();
-
-        for(auto& rpc : mp_internals->rpcs)
-          rpc->stop();
-
-        return false;
-      }
-
-      MINFO("Starting ZMQ server...");
-      zmq_server.run();
-
-      MINFO(std::string("ZMQ server started at ") + zmq_rpc_bind_address
-            + ":" + zmq_rpc_bind_port + ".");
-    }
-    else
-      MINFO("ZMQ server disabled");
-
     if (public_rpc_port > 0)
     {
       MGINFO("Public RPC port " << public_rpc_port << " will be advertised to other peers over P2P");
@@ -195,9 +161,6 @@ bool t_daemon::run(bool interactive)
 
     if (rpc_commands)
       rpc_commands->stop_handling();
-
-    if (!zmq_rpc_disabled)
-      zmq_server.stop();
 
     for(auto& rpc : mp_internals->rpcs)
       rpc->stop();

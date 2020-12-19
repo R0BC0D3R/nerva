@@ -135,9 +135,6 @@ endif()
 
 if(BUILD_UTILS)
   add_subdirectory(blockchain_utilities)
-  if (CMAKE_BUILD_TYPE STREQUAL Debug)
-    add_subdirectory(debug_utilities)
-  endif()
 endif()
 
 if (BUILD_EXTRAS)

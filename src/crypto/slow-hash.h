@@ -105,67 +105,31 @@ BOOL SetLockPagesPrivilege(HANDLE hProcess, BOOL bEnable)
 
 #define NONCE_POINTER (((const uint8_t *)data) + 35)
 
-#define VARIANT1_1(p)                                          \
-    const uint8_t tmp = ((const uint8_t *)(p))[11];            \
-    static const uint32_t table = 0x75310;                     \
-    const uint8_t index = (((tmp >> 3) & 6) | (tmp & 1)) << 1; \
+#define VARIANT1_1(p)                                                   \
+    const uint8_t tmp = ((const uint8_t *)(p))[11];                     \
+    static const uint32_t table = 0x75310;                              \
+    const uint8_t index = (((tmp >> 3) & 6) | (tmp & 1)) << 1;          \
     ((uint8_t *)(p))[11] = tmp ^ ((table >> index) & 0x30);
 
 #define VARIANT1_2(p) \
     xor64(p, tweak1_2);
 
-#define salt_pad(salt, salt_hash, a, b, c, d)          \
-    extra_hashes[a % 3](salt, 200, salt_hash);         \
-    temp_1 = (uint16_t)(iters ^ (b ^ c));              \
-    offset_1 = temp_1 * ((d % 3) + 1);                 \
-    for (j = 0; j < 32; j++)                           \
-        (salt)[offset_1 + j] ^= (salt_hash)[j];        \
-    x = 0;                                             \
-    offset_1 = (d % 64) + 1;                           \
-    offset_2 = ((temp_1 * offset_1) % 125) + 4;        \
-    for (j = offset_1; j < CN_SCRATCHPAD_MEMORY; j += offset_2)      \
+#define salt_pad(salt, salt_hash, a, b, c, d)                           \
+    extra_hashes[a % 3](salt, 200, salt_hash);                          \
+    temp_1 = (uint16_t)(iters ^ (b ^ c));                               \
+    offset_1 = temp_1 * ((d % 3) + 1);                                  \
+    for (j = 0; j < 32; j++)                                            \
+        (salt)[offset_1 + j] ^= (salt_hash)[j];                         \
+    x = 0;                                                              \
+    offset_1 = (d % 64) + 1;                                            \
+    offset_2 = ((temp_1 * offset_1) % 125) + 4;                         \
+    for (j = offset_1; j < CN_SCRATCHPAD_MEMORY; j += offset_2)         \
         hp_state[j] ^= (salt)[x++];
 
-#define randomize_scratchpad(r, scratchpad)            \
-    for (int i = 0; i < CN_RANDOM_VALUES; i++)         \
-    {                                                  \
-        switch ((r).operators[i])                       \
-        {                                              \
-        case ADD:                                      \
-            scratchpad[(r).indices[i]] += (r).values[i]; \
-            break;                                     \
-        case SUB:                                      \
-            scratchpad[(r).indices[i]] -= (r).values[i]; \
-            break;                                     \
-        case XOR:                                      \
-            scratchpad[(r).indices[i]] ^= (r).values[i]; \
-            break;                                     \
-        case OR:                                       \
-            scratchpad[(r).indices[i]] |= (r).values[i]; \
-            break;                                     \
-        case AND:                                      \
-            scratchpad[(r).indices[i]] &= (r).values[i]; \
-            break;                                     \
-        case COMP:                                     \
-            scratchpad[(r).indices[i]] = ~(r).values[i]; \
-            break;                                     \
-        case EQ:                                       \
-            scratchpad[(r).indices[i]] = (r).values[i];  \
-            break;                                     \
-        }                                              \
-    }
-
-#define randomize_scratchpad_256k(r, salt, scratchpad)     \
-    uint32_t x = 0;                                        \
-    for (uint32_t i = 0; i < CN_SCRATCHPAD_MEMORY; i += 4) \
-        scratchpad[i] ^= salt[x++];                        \
-    randomize_scratchpad(r, scratchpad);
-
-#define randomize_scratchpad_4k(r, salt, scratchpad)         \
-    uint32_t x = 0;                                          \
-    for (uint32_t i = 0; i < CN_SCRATCHPAD_MEMORY; i += 256) \
-        scratchpad[i] ^= salt[x++];                          \
-    randomize_scratchpad(r, scratchpad);
+#define randomize_scratchpad(salt, scratchpad)                          \
+    uint32_t x = 0;                                                     \
+    for (uint32_t i = 0; i < CN_SCRATCHPAD_MEMORY; i += 4)              \
+        scratchpad[i] ^= salt[x++];
 
 
 #if !defined(NO_AES) && (defined(__x86_64__) || (defined(_MSC_VER) && defined(_WIN64)))
@@ -212,24 +176,6 @@ BOOL SetLockPagesPrivilege(HANDLE hProcess, BOOL bEnable)
     j = state_index(a);                      \
     _c = _mm_load_si128(R128(&hp_state[j])); \
     _a = _mm_load_si128(R128(a));
-
-#define post_aes_novariant()                 \
-    _mm_store_si128(R128(c), _c);            \
-    _b = _mm_xor_si128(_b, _c);              \
-    _mm_store_si128(R128(&hp_state[j]), _b); \
-    j = state_index(c);                      \
-    p = U64(&hp_state[j]);                   \
-    b[0] = p[0];                             \
-    b[1] = p[1];                             \
-    __mul();                                 \
-    a[0] += hi;                              \
-    a[1] += lo;                              \
-    p = U64(&hp_state[j]);                   \
-    p[0] = a[0];                             \
-    p[1] = a[1];                             \
-    a[0] ^= b[0];                            \
-    a[1] ^= b[1];                            \
-    _b = _c;
 
 #define post_aes_variant()                   \
     _mm_store_si128(R128(c), _c);            \
@@ -500,23 +446,6 @@ STATIC void xor64(uint8_t *left, const uint8_t *right)
     swap_blocks(c1, c2);                                   \
     xor_blocks(c1, c2);                                    \
     VARIANT1_2(c2 + 8);                                    \
-    copy_block(&hp_state[j], c2);                          \
-    copy_block(b, a);                                      \
-    copy_block(a, c1);
-
-#define aes_sw_novariant()                                 \
-    j = e2i(a, CN_SCRATCHPAD_MEMORY / AES_BLOCK_SIZE) * AES_BLOCK_SIZE;  \
-    copy_block(c1, &hp_state[j]);                          \
-    aesb_single_round(c1, c1, a);                          \
-    copy_block(&hp_state[j], c1);                          \
-    xor_blocks(&hp_state[j], b);                           \
-    j = e2i(c1, CN_SCRATCHPAD_MEMORY / AES_BLOCK_SIZE) * AES_BLOCK_SIZE; \
-    copy_block(c2, &hp_state[j]);                          \
-    mul(c1, c2, d);                                        \
-    swap_blocks(a, c1);                                    \
-    sum_half_blocks(c1, d);                                \
-    swap_blocks(c1, c2);                                   \
-    xor_blocks(c1, c2);                                    \
     copy_block(&hp_state[j], c2);                          \
     copy_block(b, a);                                      \
     copy_block(a, c1);

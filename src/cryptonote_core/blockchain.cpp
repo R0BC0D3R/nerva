@@ -2690,29 +2690,9 @@ bool Blockchain::check_tx_outputs(const transaction& tx, tx_verification_context
     }
   }
 
-  if (hf_version < BULLETPROOF_SIMPLE_FORK_HEIGHT) {
-    // pre-v8, disallow bulletproofs
-    const bool bulletproof = rct::is_rct_bulletproof(tx.rct_signatures.type);
-    if (bulletproof || !tx.rct_signatures.p.bulletproofs.empty())
-    {
-      MERROR_VER("Bulletproofs are not allowed before v" << BULLETPROOF_SIMPLE_FORK_HEIGHT);
-      tvc.m_invalid_output = true;
-      return false;
-    }
-  } else if (hf_version >= BULLETPROOF_FULL_FORK_HEIGHT) {
-    // post-bulletproofs, forbid borromean range proofs
-    const bool borromean = rct::is_rct_borromean(tx.rct_signatures.type);
-    if (borromean)
-    {
-      MERROR_VER("Borromean range proofs are not allowed on or after v" << BULLETPROOF_FULL_FORK_HEIGHT);
-      tvc.m_invalid_output = true;
-      return false;
-    }
-  }
-
-  if (hf_version < BULLETPROOF_FULL_FORK_HEIGHT && tx.rct_signatures.type == rct::RCTTypeBulletproof2)
+  if (tx.rct_signatures.type != rct::RCTTypeBulletproof2)
   {
-    MERROR_VER("Full Bulletproofs are not allowed before v" << BULLETPROOF_FULL_FORK_HEIGHT);
+    MERROR_VER("Not a bulletproof transaction");
     tvc.m_invalid_output = true;
     return false;
   }
@@ -3039,21 +3019,6 @@ bool Blockchain::check_tx_inputs(transaction& tx, tx_verification_context &tvc, 
     return false;
   }
 
-  // for bulletproofs, check they're only multi-output after v8
-  if (rct::is_rct_bulletproof(rv.type))
-  {
-    if (hf_version < BULLETPROOF_SIMPLE_FORK_HEIGHT)
-    {
-      for (const rct::Bulletproof &proof: rv.p.bulletproofs)
-      {
-        if (proof.V.size() > 1)
-        {
-          MERROR_VER("Multi output bulletproofs are invalid before v" << BULLETPROOF_SIMPLE_FORK_HEIGHT);
-          return false;
-        }
-      }
-    }
-  }
   return true;
 }
 

@@ -629,7 +629,7 @@ namespace cryptonote
     {
       crypto::hash h;
       blobdata blob = get_block_hashing_blob(bl);
-      crypto::cn_slow_hash(hash_context, blob.data(), blob.size(), h, 0, 0x80001);
+      crypto::cn_slow_hash(hash_context, blob.data(), blob.size(), h);
 
       if(check_hash(h, 1))
         break;
@@ -654,27 +654,13 @@ namespace cryptonote
   //---------------------------------------------------------------
   bool get_block_longhash(crypto::cn_hash_context_t *context, BlockchainDB &db, const uint8_t major_version, const blobdata &blob, crypto::hash &res, const uint64_t height)
   {
-    if (major_version < 7)
+    if (major_version < 2)
     {
-      const int variant = major_version >= 5 ? 1 : 0;
-      const size_t base_iters = major_version >= 6 ? 0x40000 : 0x80000;
-      crypto::cn_slow_hash(context, blob.data(), blob.size(), res, variant, base_iters + ((height + 1) % 1024));
+      crypto::cn_slow_hash(context, blob.data(), blob.size(), res);
       return true;
     }
 
-    switch (major_version)
-    {
-      case 7:
-        return get_block_longhash_v7_8(context, db, blob, res, height, 1);
-      case 8:
-        return get_block_longhash_v7_8(context, db, blob, res, height, 256);
-      case 9:
-        return get_block_longhash_v9(context, db, blob, res, height);
-      case 10:
-        return get_block_longhash_v10(context, db, blob, res, height);
-      default:
-        return get_block_longhash_v11(context, db, blob, res, height);
-    }
+    return get_block_longhash_v11(context, db, blob, res, height);
   }
   //---------------------------------------------------------------
   crypto::hash get_block_longhash(crypto::cn_hash_context_t *context, Blockchain *bc, const block& b, const uint64_t height)
@@ -690,12 +676,6 @@ namespace cryptonote
     // 256 ancestors.
     assert(height > 257);
     uint64_t stable_height = height - 256;
-
-    if (context->cached_height != height)
-    {
-      db.get_cna_v2_data(&context->random_values, stable_height, CN_SCRATCHPAD_MEMORY);
-      context->cached_height = height;
-    }
 
     // Make the hashing context unique per nonce by seeding it with a hash
     // of the hashing blob for a given nonce.
@@ -723,82 +703,4 @@ namespace cryptonote
 
     return true;
   }
-
-  bool get_block_longhash_v10(crypto::cn_hash_context_t *context, BlockchainDB &db, const blobdata &blob, crypto::hash& res, uint64_t height)
-  {
-    const uint64_t ht = height - 256;
-
-    if (context->cached_height != height)
-    {
-      db.get_cna_v2_data(&context->random_values, ht, CN_SCRATCHPAD_MEMORY);
-      context->cached_height = height;
-    }
-
-    block b;
-    std::stringstream ss;
-    ss << blob;
-    binary_archive<false> ba(ss);
-    bool r = ::serialization::serialize(ba, b);
-
-    uint32_t seed = b.nonce ^ height;
-    crypto::hash h;
-    get_blob_hash(blob, h);
-    for (int i = 0; i < 32; i += 4)
-      seed ^= *(uint32_t*)&h.data[i];
-
-    db.get_cna_v4_data(context->salt, ht, seed);
-
-    angrywasp::mersenne_twister mt(seed);
-
-    uint8_t init_blk_sizes[3];
-    for (size_t i = 0; i < 3; i++)
-      init_blk_sizes[i] = (2 << (mt.generate_uint() % 3));
-    const uint8_t init_blk_size = init_blk_sizes[seed % 3];
-
-    uint16_t xx = (uint16_t)((seed % mt.next(2, 4)) + mt.next(2, 4));
-    uint16_t yy = (uint16_t)((seed % mt.next(2, 4)) + mt.next(2, 4));
-    uint16_t zz = (uint16_t)((seed % mt.next(2, 4)) + mt.next(2, 4));
-    uint16_t ww = (uint16_t)(seed % mt.next(1, 10000));
-
-    crypto::cn_slow_hash_v10(context, blob.data(), blob.size(), res, ((height + 1) % 64), init_blk_size, xx, yy, zz, ww);
-
-    return true;
-  }
-
-  bool get_block_longhash_v9(crypto::cn_hash_context_t *context, BlockchainDB &db, const blobdata &blob, crypto::hash& res, uint64_t height)
-  {
-    const uint64_t ht = height - 256;
-
-    if (context->cached_height != height)
-    {
-      db.get_cna_v2_data(&context->random_values, ht, CN_SCRATCHPAD_MEMORY - 1);
-      context->cached_height = height;
-    }
-
-    block b;
-    std::stringstream ss;
-    ss << blob;
-    binary_archive<false> ba(ss);
-    bool r = ::serialization::serialize(ba, b);
-
-    db.get_cna_v3_data(context->salt, ht, b.nonce ^ (uint32_t)ht);
-
-    crypto::cn_slow_hash_v9(context, blob.data(), blob.size(), res, 0x40000 + ((height + 1) % 64));
-
-    return true;
-  }
-
-  bool get_block_longhash_v7_8(crypto::cn_hash_context_t *context, BlockchainDB &db, const blobdata &blob, crypto::hash& res, uint64_t height, uint64_t data_offset)
-  {
-    if (context->cached_height != height)
-    {
-      db.get_cna_v2_data(&context->random_values, height - data_offset, CN_SCRATCHPAD_MEMORY - 1);
-      context->cached_height = height;
-    }
-
-    crypto::cn_slow_hash_v7_8(context, blob.data(), blob.size(), res, 0x40000 + ((height + 1) % 64));
-
-    return true;
-  }
-
 }
