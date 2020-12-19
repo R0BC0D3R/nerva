@@ -127,8 +127,8 @@ namespace cryptonote
     out.target = tk;
     tx.vout.push_back(out);
 	
-    tx.version = hard_fork_version >= V2_TX_FORK_HEIGHT ? TRANSACTION_VERSION_V2 : TRANSACTION_VERSION_V1;
-    int unlock_window = hard_fork_version >= 6 ? CRYPTONOTE_MINED_MONEY_UNLOCK_WINDOW_V6 : CRYPTONOTE_MINED_MONEY_UNLOCK_WINDOW;
+    tx.version = TRANSACTION_VERSION_V2;
+    int unlock_window = CRYPTONOTE_MINED_MONEY_UNLOCK_WINDOW_V6;
     tx.unlock_time = height + unlock_window;
     tx.vin.push_back(in);
 
@@ -172,10 +172,10 @@ namespace cryptonote
     out.target = tk;
     tx.vout.push_back(out);
 
-    tx.version = TRANSACTION_VERSION_V1;
+    tx.version = TRANSACTION_VERSION_V2;
 
     //lock
-    tx.unlock_time = CRYPTONOTE_MINED_MONEY_UNLOCK_WINDOW;
+    tx.unlock_time = CRYPTONOTE_MINED_MONEY_UNLOCK_WINDOW_V6;
     tx.vin.push_back(in);
     tx.invalidate_hashes();
     return true;

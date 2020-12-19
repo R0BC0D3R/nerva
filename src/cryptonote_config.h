@@ -43,12 +43,9 @@
 #define CRYPTONOTE_MAX_TX_PER_BLOCK                                     0x10000000
 #define CRYPTONOTE_MAX_TX_SIZE                                          1000000000
 #define CRYPTONOTE_PUBLIC_ADDRESS_TEXTBLOB_VER                          0
-#define CRYPTONOTE_MINED_MONEY_UNLOCK_WINDOW                            10
 #define CRYPTONOTE_MINED_MONEY_UNLOCK_WINDOW_V6                         20
-#define TRANSACTION_VERSION_V1                                          1
 #define TRANSACTION_VERSION_V2                                          2
 #define TRANSACTION_VERSION_MAX                                         TRANSACTION_VERSION_V2
-#define V2_TX_FORK_HEIGHT                                               12
 #define CRYPTONOTE_BLOCK_FUTURE_TIME_LIMIT                              60 * 60 * 2
 #define CRYPTONOTE_DEFAULT_TX_SPENDABLE_AGE                             10
 
@@ -56,15 +53,11 @@
 #define BULLETPROOF_SIMPLE_FORK_HEIGHT                                  8
 #define BULLETPROOF_FULL_FORK_HEIGHT                                    11
 
-#define BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW                               60
-
-#define CRYPTONOTE_BLOCK_FUTURE_TIME_LIMIT_V2                           60 * 24
 #define BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW_V2                            12
 
 #define CRYPTONOTE_BLOCK_FUTURE_TIME_LIMIT_V6                           60 * 5
 
 #define MONEY_SUPPLY                                                    ((uint64_t)(-1))
-#define EMISSION_SPEED_FACTOR_PER_MINUTE                                (18)
 #define FINAL_SUBSIDY_PER_MINUTE                                        ((uint64_t)300000000000)
 
 #define CRYPTONOTE_REWARD_BLOCKS_WINDOW                                 100
@@ -81,18 +74,8 @@
 #define DYNAMIC_FEE_PER_KB_BASE_BLOCK_REWARD                            ((uint64_t)10000000000000)
 
 #define DIFFICULTY_TARGET                                               60
-#define DIFFICULTY_WINDOW                                               720
-#define DIFFICULTY_LAG                                                  15
-#define DIFFICULTY_CUT                                                  60
-#define DIFFICULTY_BLOCKS_COUNT                                         DIFFICULTY_WINDOW + DIFFICULTY_LAG
 
 #define DIFFICULTY_BLOCKS_ESTIMATE_TIMESPAN                             DIFFICULTY_TARGET
-#define DIFFICULTY_WINDOW_V2                                            17
-#define DIFFICULTY_CUT_V2                                               6
-#define DIFFICULTY_BLOCKS_COUNT_V2                                      DIFFICULTY_WINDOW_V2 + DIFFICULTY_CUT_V2 * 2
-
-#define DIFFICULTY_WINDOW_V3                                            60
-#define DIFFICULTY_BLOCKS_COUNT_V3                                      DIFFICULTY_WINDOW_V3
 
 #define DIFFICULTY_WINDOW_V6                                            60
 #define DIFFICULTY_BLOCKS_COUNT_V6                                      DIFFICULTY_WINDOW_V6 + 1
@@ -195,22 +178,12 @@ namespace config
 
     uint32_t const GENESIS_NONCE = 10000;
 
-    std::string const HF_MIN_VERSION = "0.1.7.0";
-    std::string const MIN_VERSION    = "0.1.6.4";
+    std::string const HF_MIN_VERSION = "0.2.0.0";
+    std::string const MIN_VERSION    = "0.2.0.0";
 
     static const hard_fork hard_forks[] = {
         { 1,      1},
-        { 2,      2},
-        { 3,      3},
-        { 4,      4},
-        { 5,      5},
-        { 6,  44500},
-        { 7, 173500},
-        { 8, 180000},
-        { 9, 240500},
-        {10, 341000},
-        {11, 500000},
-        {12, 930000}
+        { 2,      300}
     };
 
     namespace testnet
@@ -220,22 +193,12 @@ namespace config
         uint16_t const ZMQ_RPC_DEFAULT_PORT = 18567;
         boost::uuids::uuid const NETWORK_ID = {{0x13, 0x22, 0xF0, 0x55, 0x42, 0x18, 0x40, 0x33, 0x16, 0x88, 0x01, 0x92, 0xAA, 0xBC, 0xFF, 0x13}};
 
-        std::string const HF_MIN_VERSION = "0.1.7.0";
-        std::string const MIN_VERSION    = "0.1.6.4";
+        std::string const HF_MIN_VERSION = "0.2.0.0";
+        std::string const MIN_VERSION    = "0.2.0.0";
 
         static const hard_fork hard_forks[] = {
             { 1,   1},
-            { 2,   2},
-            { 3,   3},
-            { 4,   4},
-            { 5,   5},
-            { 6,   6},
-            { 7, 550},
-            { 8, 560},
-            { 9, 570},
-            {10, 580},
-            {11, 590},
-            {12, 2000}
+            { 2,   300}
         };
     }
 
@@ -248,17 +211,7 @@ namespace config
         
         static const hard_fork hard_forks[] = {
             { 1,   1},
-            { 2,   2},
-            { 3,   3},
-            { 4,   4},
-            { 5,   5},
-            { 6,   6},
-            { 7, 550},
-            { 8, 560},
-            { 9, 570},
-            {10, 580},
-            {11, 590},
-            {12, 700}
+            { 2,   300}
         };
     }
 }

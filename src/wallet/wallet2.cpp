@@ -9826,8 +9826,7 @@ void wallet2::get_hard_fork_info(uint8_t version, uint64_t &earliest_height)
 //----------------------------------------------------------------------------------------------------
 uint8_t wallet2::get_current_tx_version()
 {
-  uint8_t hf = get_current_hard_fork();
-  return (hf >= V2_TX_FORK_HEIGHT) ? TRANSACTION_VERSION_V2 : TRANSACTION_VERSION_V1;
+  return TRANSACTION_VERSION_V2;
 }
 
 bool wallet2::use_fork_rules(uint8_t version, int64_t early_blocks)

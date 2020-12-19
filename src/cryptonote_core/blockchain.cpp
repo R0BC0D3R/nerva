@@ -863,17 +863,7 @@ uint64_t Blockchain::get_difficulty_for_next_block()
   uint64_t height;
   top_hash = get_tail_id(height); // get it again now that we have the lock
   ++height; // top block height to blockchain height
-  size_t difficulty_blocks_count;
-  uint8_t version = get_current_hard_fork_version();
-  if (version == 1) {
-    difficulty_blocks_count = DIFFICULTY_BLOCKS_COUNT;
-  } else if (version == 2) {
-    difficulty_blocks_count = DIFFICULTY_BLOCKS_COUNT_V2;
-  } else if (version < 6) {
-    difficulty_blocks_count = DIFFICULTY_BLOCKS_COUNT_V3;
-  } else {
-    difficulty_blocks_count = DIFFICULTY_BLOCKS_COUNT_V6;
-  }
+  size_t difficulty_blocks_count = DIFFICULTY_BLOCKS_COUNT_V6;
 
   // ND: Speedup
   // 1. Keep a list of the last 735 (or less) blocks that is used to compute difficulty,
@@ -919,18 +909,7 @@ uint64_t Blockchain::get_difficulty_for_next_block()
     m_difficulties = difficulties;
   }
   size_t target = DIFFICULTY_TARGET;
-  uint64_t diff;
-  if (version == 1) {
-    diff = next_difficulty(timestamps, difficulties, target);
-  } else if (version == 2) {
-    diff = next_difficulty_v2(timestamps, difficulties, target);
-  } else if (version == 3) {
-    diff = next_difficulty_v3(timestamps, difficulties, target, false);
-  } else if (version < 6) {
-    diff = next_difficulty_v3(timestamps, difficulties, target, true);
-  } else {
-    diff = next_difficulty_v6(timestamps, difficulties, target);
-  }
+  uint64_t diff = next_difficulty_v6(timestamps, difficulties, target);
 
   CRITICAL_REGION_LOCAL1(m_difficulty_lock);
   m_difficulty_for_next_block_top_hash = top_hash;
@@ -1111,15 +1090,7 @@ uint64_t Blockchain::get_next_difficulty_for_alternative_chain(const std::list<b
   std::vector<difficulty_type_128> cumulative_difficulties;
   size_t difficulty_blocks_count;
   uint8_t version = get_current_hard_fork_version();
-  if (version == 1) {
-    difficulty_blocks_count = DIFFICULTY_BLOCKS_COUNT;
-  } else if (version == 2) {
-    difficulty_blocks_count = DIFFICULTY_BLOCKS_COUNT_V2;
-  } else if (version < 6) {
-    difficulty_blocks_count = DIFFICULTY_BLOCKS_COUNT_V3;
-  } else {
-    difficulty_blocks_count = DIFFICULTY_BLOCKS_COUNT_V6;
-  }
+  difficulty_blocks_count = DIFFICULTY_BLOCKS_COUNT_V6;
 
   // if the alt chain isn't long enough to calculate the difficulty target
   // based on its blocks alone, need to get more blocks from the main chain
@@ -1174,18 +1145,7 @@ uint64_t Blockchain::get_next_difficulty_for_alternative_chain(const std::list<b
   // FIXME: This will fail if fork activation heights are subject to voting
   size_t target = DIFFICULTY_TARGET;
 
-  // calculate the difficulty target for the block and return it
-  if (version == 1) {
-    return next_difficulty(timestamps, cumulative_difficulties, target);
-  } else if (version == 2) {
-    return next_difficulty_v2(timestamps, cumulative_difficulties, target);
-  } else if (version == 3) {
-    return next_difficulty_v3(timestamps, cumulative_difficulties, target, false);
-  } else if (version < 6) {
-    return next_difficulty_v3(timestamps, cumulative_difficulties, target, true);
-  } else {
-    return next_difficulty_v6(timestamps, cumulative_difficulties, target);
-  }
+  return next_difficulty_v6(timestamps, cumulative_difficulties, target);
 }
 //------------------------------------------------------------------
 // This function does a sanity check on basic things that all miner
@@ -1204,7 +1164,7 @@ bool Blockchain::prevalidate_miner_transaction(const block& b, uint64_t height)
     return false;
   }
   MDEBUG("Miner tx hash: " << get_transaction_hash(b.miner_tx));
-  int unlock_window = b.major_version >= 6 ? CRYPTONOTE_MINED_MONEY_UNLOCK_WINDOW_V6 : CRYPTONOTE_MINED_MONEY_UNLOCK_WINDOW;
+  int unlock_window = CRYPTONOTE_MINED_MONEY_UNLOCK_WINDOW_V6;
   CHECK_AND_ASSERT_MES(b.miner_tx.unlock_time == height + unlock_window, false, "coinbase transaction has the wrong unlock time=" << b.miner_tx.unlock_time << ", expected " << height + unlock_window);
 
   //check outs overflow
@@ -1573,7 +1533,7 @@ bool Blockchain::complete_timestamps_vector(uint64_t start_top_height, std::vect
 {
   LOG_PRINT_L3("Blockchain::" << __func__);
 
-  size_t blockchain_timestamp_check_window = get_current_hard_fork_version() < 2 ? BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW : BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW_V2;
+  size_t blockchain_timestamp_check_window = BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW_V2;
   if(timestamps.size() >= blockchain_timestamp_check_window)
     return true;
 
@@ -3316,11 +3276,10 @@ bool Blockchain::check_block_timestamp(std::vector<uint64_t>& timestamps, const 
   LOG_PRINT_L3("Blockchain::" << __func__);
   median_ts = epee::misc_utils::median(timestamps);
 
-  uint8_t hf_version = get_current_hard_fork_version();
-  size_t blockchain_timestamp_check_window = hf_version < 2 ? BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW : BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW_V2;
+  size_t blockchain_timestamp_check_window = BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW_V2;
 
   uint64_t top_block_timestamp = timestamps.empty() ? b.timestamp : timestamps.back();
-  if (hf_version > 5 && b.timestamp < top_block_timestamp - CRYPTONOTE_BLOCK_FUTURE_TIME_LIMIT_V6)
+  if (b.timestamp < top_block_timestamp - CRYPTONOTE_BLOCK_FUTURE_TIME_LIMIT_V6)
   {
     MERROR_VER("Timestamp " << b.timestamp << " of block id: " << get_block_hash(b) << ", is less than top block timestamp - FTL = " << top_block_timestamp - CRYPTONOTE_BLOCK_FUTURE_TIME_LIMIT_V6);
     return false;
@@ -3348,14 +3307,7 @@ bool Blockchain::check_block_timestamp(const block& b, uint64_t& median_ts) cons
   LOG_PRINT_L3("Blockchain::" << __func__);
   const uint8_t hf_version = get_current_hard_fork_version();
 
-  uint64_t cryptonote_block_future_time_limit;
-  if (hf_version < 2) {
-    cryptonote_block_future_time_limit = CRYPTONOTE_BLOCK_FUTURE_TIME_LIMIT;
-  } else if (hf_version < 6) {
-    cryptonote_block_future_time_limit = CRYPTONOTE_BLOCK_FUTURE_TIME_LIMIT_V2;
-  } else {
-    cryptonote_block_future_time_limit = CRYPTONOTE_BLOCK_FUTURE_TIME_LIMIT_V6;
-  }
+  uint64_t cryptonote_block_future_time_limit = CRYPTONOTE_BLOCK_FUTURE_TIME_LIMIT_V6;
 
   if(b.timestamp > get_adjusted_time() + cryptonote_block_future_time_limit)
   {
@@ -3363,7 +3315,7 @@ bool Blockchain::check_block_timestamp(const block& b, uint64_t& median_ts) cons
     return false;
   }
 
-  size_t blockchain_timestamp_check_window = hf_version < 2 ? BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW : BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW_V2;
+  size_t blockchain_timestamp_check_window = BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW_V2;
   const auto h = m_db->height();
   // if not enough blocks, no proper median yet, return true
   if(h < blockchain_timestamp_check_window)
