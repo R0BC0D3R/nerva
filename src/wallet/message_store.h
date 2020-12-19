@@ -40,7 +40,6 @@
 #include "cryptonote_basic/cryptonote_boost_serialization.h"
 #include "cryptonote_basic/account_boost_serialization.h"
 #include "cryptonote_basic/cryptonote_basic.h"
-#include "common/i18n.h"
 #include "common/command_line.h"
 #include "wipeable_string.h"
 #include "message_transporter.h"
@@ -300,7 +299,7 @@ namespace mms
     static const char* message_state_to_string(message_state state);
     std::string signer_to_string(const authorized_signer &signer, uint32_t max_width);
     
-    static const char *tr(const char *str) { return i18n_translate(str, "tools::mms"); }
+    static const char *tr(const char *str) { return str; }
     static void init_options(boost::program_options::options_description& desc_params);
 
   private:

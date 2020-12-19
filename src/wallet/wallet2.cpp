@@ -61,7 +61,6 @@ using namespace epee;
 #include "serialization/string.h"
 #include "cryptonote_basic/blobdatatype.h"
 #include "mnemonics/electrum-words.h"
-#include "common/i18n.h"
 #include "common/util.h"
 #include "common/apply_permutation.h"
 #include "rapidjson/document.h"
@@ -942,7 +941,7 @@ namespace tools
 const size_t MAX_SPLIT_ATTEMPTS = 30;
 
 constexpr const std::chrono::seconds wallet2::rpc_timeout;
-const char* wallet2::tr(const char* str) { return i18n_translate(str, "tools::wallet2"); }
+const char* wallet2::tr(const char* str) { return str; }
 
 gamma_picker::gamma_picker(const std::vector<uint64_t> &rct_offsets, double shape, double scale):
     rct_offsets(rct_offsets)

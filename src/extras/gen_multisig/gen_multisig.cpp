@@ -40,7 +40,6 @@
 #include <boost/format.hpp>
 #include "include_base_utils.h"
 #include "crypto/crypto.h"  // for crypto::secret_key definition
-#include "common/i18n.h"
 #include "common/command_line.h"
 #include "common/util.h"
 #include "common/scoped_message_writer.h"
@@ -58,11 +57,7 @@ namespace po = boost::program_options;
 
 namespace genms
 {
-  const char* tr(const char* str)
-  {
-    return i18n_translate(str, "tools::gen_multisig");
-  }
-
+  const char* tr(const char* str) { return str; }
 }
 
 namespace

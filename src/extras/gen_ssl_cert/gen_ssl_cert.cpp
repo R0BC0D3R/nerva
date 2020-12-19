@@ -36,7 +36,6 @@
 #include "net/net_ssl.h"
 #include "crypto/crypto.h"
 #include "common/util.h"
-#include "common/i18n.h"
 #include "common/command_line.h"
 #include "common/scoped_message_writer.h"
 #include "common/password.h"
@@ -47,22 +46,18 @@ namespace po = boost::program_options;
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "gen_ssl_cert"
 
-namespace gencert
+namespace 
 {
-  const char* tr(const char* str)
-  {
-    return i18n_translate(str, "tools::gen_ssl_cert");
-  }
-
+  const char* tr(const char* str) { return str; }
 }
 
 namespace
 {
-  const command_line::arg_descriptor<std::string> arg_certificate_filename = {"certificate-filename", gencert::tr("Filename to save the certificate"), ""};
-  const command_line::arg_descriptor<std::string> arg_private_key_filename = {"private-key-filename", gencert::tr("Filename to save the private key"), ""};
-  const command_line::arg_descriptor<std::string> arg_passphrase = {"passphrase", gencert::tr("Passphrase with which to encrypt the private key"), ""};
-  const command_line::arg_descriptor<std::string> arg_passphrase_file = {"passphrase-file", gencert::tr("File containing the passphrase with which to encrypt the private key"), ""};
-  const command_line::arg_descriptor<bool> arg_prompt_for_passphrase = {"prompt-for-passphrase", gencert::tr("Prompt for a passphrase with which to encrypt the private key"), false};
+  const command_line::arg_descriptor<std::string> arg_certificate_filename = {"certificate-filename", tr("Filename to save the certificate"), ""};
+  const command_line::arg_descriptor<std::string> arg_private_key_filename = {"private-key-filename", tr("Filename to save the private key"), ""};
+  const command_line::arg_descriptor<std::string> arg_passphrase = {"passphrase", tr("Passphrase with which to encrypt the private key"), ""};
+  const command_line::arg_descriptor<std::string> arg_passphrase_file = {"passphrase-file", tr("File containing the passphrase with which to encrypt the private key"), ""};
+  const command_line::arg_descriptor<bool> arg_prompt_for_passphrase = {"prompt-for-passphrase", tr("Prompt for a passphrase with which to encrypt the private key"), false};
 }
 
 // adapted from openssl's apps/x509.c
@@ -134,13 +129,13 @@ int main(int argc, char* argv[])
   const std::string certificate_filename = command_line::get_arg(vm, arg_certificate_filename);
   if (certificate_filename.empty())
   {
-    tools::fail_msg_writer() << gencert::tr("Argument is needed: ") << "--" << arg_certificate_filename.name;
+    tools::fail_msg_writer() << tr("Argument is needed: ") << "--" << arg_certificate_filename.name;
     return 1;
   }
   const std::string private_key_filename = command_line::get_arg(vm, arg_private_key_filename);
   if (private_key_filename.empty())
   {
-    tools::fail_msg_writer() << gencert::tr("Argument is needed: ") << "--" << arg_private_key_filename.name;
+    tools::fail_msg_writer() << tr("Argument is needed: ") << "--" << arg_private_key_filename.name;
     return 1;
   }
 
@@ -150,7 +145,7 @@ int main(int argc, char* argv[])
     auto pwd_container = tools::password_container::prompt(true, "Enter passphrase for the new SSL private key");
     if (!pwd_container)
     {
-      tools::fail_msg_writer() << gencert::tr("Failed to read passphrase");
+      tools::fail_msg_writer() << tr("Failed to read passphrase");
       return 1;
     }
     private_key_passphrase = pwd_container->password();
@@ -185,7 +180,7 @@ int main(int argc, char* argv[])
   r = epee::net_utils::create_rsa_ssl_certificate(pkey, cert);
   if (!r)
   {
-    tools::fail_msg_writer() << gencert::tr("Failed to create certificate");
+    tools::fail_msg_writer() << tr("Failed to create certificate");
     return 1;
   }
 
@@ -195,7 +190,7 @@ int main(int argc, char* argv[])
   if (!r)
   {
     BIO_free(bio_cert);
-    tools::fail_msg_writer() << gencert::tr("Failed to write certificate: ") << ERR_reason_error_string(ERR_get_error());
+    tools::fail_msg_writer() << tr("Failed to write certificate: ") << ERR_reason_error_string(ERR_get_error());
     return 1;
   }
   BUF_MEM *buf = NULL;
@@ -203,7 +198,7 @@ int main(int argc, char* argv[])
   if (!buf || !buf->data || !buf->length)
   {
     BIO_free(bio_cert);
-    tools::fail_msg_writer() << gencert::tr("Failed to write certificate: ") << ERR_reason_error_string(ERR_get_error());
+    tools::fail_msg_writer() << tr("Failed to write certificate: ") << ERR_reason_error_string(ERR_get_error());
     return 1;
   }
   const std::string certificate(std::string(buf->data, buf->length));
@@ -215,7 +210,7 @@ int main(int argc, char* argv[])
   if (!r)
   {
     BIO_free(bio_pkey);
-    tools::fail_msg_writer() << gencert::tr("Failed to write private key: ") << ERR_reason_error_string(ERR_get_error());
+    tools::fail_msg_writer() << tr("Failed to write private key: ") << ERR_reason_error_string(ERR_get_error());
     return 1;
   }
   buf = NULL;
@@ -223,7 +218,7 @@ int main(int argc, char* argv[])
   if (!buf || !buf->data || !buf->length)
   {
     BIO_free(bio_pkey);
-    tools::fail_msg_writer() << gencert::tr("Failed to write private key: ") << ERR_reason_error_string(ERR_get_error());
+    tools::fail_msg_writer() << tr("Failed to write private key: ") << ERR_reason_error_string(ERR_get_error());
     return 1;
   }
   const std::string private_key(std::string(buf->data, buf->length));
@@ -234,13 +229,13 @@ int main(int argc, char* argv[])
   r = epee::file_io_utils::save_string_to_file(certificate_filename, certificate);
   if (!r)
   {
-    tools::fail_msg_writer() << gencert::tr("Failed to save certificate file");
+    tools::fail_msg_writer() << tr("Failed to save certificate file");
     return 1;
   }
   r = epee::file_io_utils::save_string_to_file(private_key_filename, private_key);
   if (!r)
   {
-    tools::fail_msg_writer() << gencert::tr("Failed to save private key file");
+    tools::fail_msg_writer() << tr("Failed to save private key file");
     return 1;
   }
 

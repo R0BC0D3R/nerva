@@ -33,7 +33,6 @@
 #include <boost/asio/ip/address.hpp>
 #include <boost/bind.hpp>
 #include "common/command_line.h"
-#include "common/i18n.h"
 #include "hex.h"
 #include "net/local_ip.h"
 
@@ -109,7 +108,7 @@ namespace cryptonote
      , rpc_ssl_allow_any_cert({"rpc-ssl-allow-any-cert", rpc_args::tr("Allow any peer certificate"), false})
   {}
 
-  const char* rpc_args::tr(const char* str) { return i18n_translate(str, "cryptonote::rpc_args"); }
+  const char* rpc_args::tr(const char* str) { return str; }
 
   void rpc_args::init_options(boost::program_options::options_description& desc, const bool any_cert_option, const bool basic_auth_option)
   {

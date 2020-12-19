@@ -48,7 +48,6 @@
 #include <boost/range/adaptor/transformed.hpp>
 #include "include_base_utils.h"
 #include "console_handler.h"
-#include "common/i18n.h"
 #include "common/command_line.h"
 #include "common/util.h"
 #include "common/dns_utils.h"
@@ -129,6 +128,11 @@ typedef cryptonote::simple_wallet sw;
 #define REFRESH_PERIOD 90 // seconds
 
 static std::string get_human_readable_timespan(std::chrono::seconds seconds);
+
+namespace
+{
+  const char* tr(const char* str) { return str; }
+}
 
 namespace
 {
