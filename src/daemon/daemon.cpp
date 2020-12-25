@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2019, The Monero Project
+// Copyright (c) 2014-2020, The Monero Project
 // 
 // All rights reserved.
 //
@@ -34,14 +34,16 @@
 #include "misc_log_ex.h"
 #include "daemon/daemon.h"
 #include "rpc/daemon_handler.h"
+#include "rpc/zmq_pub.h"
+#include "rpc/zmq_server.h"
 
 #include "common/password.h"
 #include "common/util.h"
+#include "cryptonote_basic/events.h"
 #include "daemon/core.h"
 #include "daemon/p2p.h"
 #include "daemon/protocol.h"
 #include "daemon/rpc.h"
-#include "daemon/command_server.h"
 #include "daemon/command_server.h"
 #include "daemon/command_line_args.h"
 #include "net/net_ssl.h"
@@ -77,13 +79,14 @@ public:
 
     const auto restricted = command_line::get_arg(vm, cryptonote::core_rpc_server::arg_restricted_rpc);
     const auto main_rpc_port = command_line::get_arg(vm, cryptonote::core_rpc_server::arg_rpc_bind_port);
-    rpcs.emplace_back(new t_rpc{vm, core, p2p, restricted, main_rpc_port, "core"});
+    const auto restricted_rpc_port_arg = cryptonote::core_rpc_server::arg_rpc_restricted_bind_port;
+    const bool has_restricted_rpc_port_arg = !command_line::is_arg_defaulted(vm, restricted_rpc_port_arg);
+    rpcs.emplace_back(new t_rpc{vm, core, p2p, restricted, main_rpc_port, "core", !has_restricted_rpc_port_arg});
 
-    auto restricted_rpc_port_arg = cryptonote::core_rpc_server::arg_rpc_restricted_bind_port;
-    if(!command_line::is_arg_defaulted(vm, restricted_rpc_port_arg))
+    if(has_restricted_rpc_port_arg)
     {
       auto restricted_rpc_port = command_line::get_arg(vm, restricted_rpc_port_arg);
-      rpcs.emplace_back(new t_rpc{vm, core, p2p, true, restricted_rpc_port, "restricted"});
+      rpcs.emplace_back(new t_rpc{vm, core, p2p, true, restricted_rpc_port, "restricted", true});
     }
   }
 };
@@ -100,7 +103,9 @@ t_daemon::t_daemon(
     uint16_t public_rpc_port
   )
   : mp_internals{new t_internals{vm}},
-  public_rpc_port(public_rpc_port) { }
+  public_rpc_port(public_rpc_port)
+{
+}
 
 t_daemon::~t_daemon() = default;
 
@@ -133,7 +138,19 @@ bool t_daemon::run(bool interactive)
   {
     throw std::runtime_error{"Can't run stopped daemon"};
   }
-  tools::signal_handler::install(std::bind(&daemonize::t_daemon::stop_p2p, this));
+
+  std::atomic<bool> stop(false), shutdown(false);
+  boost::thread stop_thread = boost::thread([&stop, &shutdown, this] {
+    while (!stop)
+      epee::misc_utils::sleep_no_w(100);
+    if (shutdown)
+      this->stop_p2p();
+  });
+  epee::misc_utils::auto_scope_leave_caller scope_exit_handler = epee::misc_utils::create_scope_leave_handler([&](){
+    stop = true;
+    stop_thread.join();
+  });
+  tools::signal_handler::install([&stop, &shutdown](int){ stop = shutdown = true; });
 
   try
   {

@@ -254,4 +254,5 @@ bool mtrace(const char *category, const char *format, ...) ATTRIBUTE_PRINTF;
 }
 
 #endif
+
 #endif //_MISC_LOG_EX_H_

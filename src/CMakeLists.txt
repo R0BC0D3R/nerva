@@ -1,4 +1,5 @@
-# Copyright (c) 2014-2019, The Monero Project
+# Copyright (c) 2014-2020, The Monero Project
+# Copyright (c) 2018-2020, The NERVA Project
 #
 # All rights reserved.
 #
@@ -113,12 +114,10 @@ add_subdirectory(cryptonote_core)
 add_subdirectory(lmdb)
 add_subdirectory(multisig)
 add_subdirectory(net)
-if(NOT IOS)
-  add_subdirectory(blockchain_db)
-endif()
+add_subdirectory(blockchain_db)
 add_subdirectory(mnemonics)
+add_subdirectory(rpc)
 if(NOT IOS)
-  add_subdirectory(rpc)
   add_subdirectory(serialization)
 endif()
 add_subdirectory(wallet)

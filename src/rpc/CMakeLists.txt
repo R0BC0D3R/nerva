@@ -1,4 +1,4 @@
-# Copyright (c) 2014-2019, The Monero Project
+# Copyright (c) 2014-2020, The Monero Project
 #
 # All rights reserved.
 #
@@ -32,6 +32,7 @@ set(rpc_base_sources
 
 set(rpc_sources
   bootstrap_daemon.cpp
+  bootstrap_node_selector.cpp
   core_rpc_server.cpp
   instanciations)
 

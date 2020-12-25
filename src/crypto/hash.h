@@ -1,5 +1,5 @@
 // Copyright (c) 2018-2019, The NERVA Project
-// Copyright (c) 2014-2019, The Monero Project
+// Copyright (c) 2014-2020, The Monero Project
 // 
 // All rights reserved.
 // 
@@ -73,10 +73,6 @@ namespace crypto {
 
   inline void cn_slow_hash_v11(cn_hash_context_t *context, const void *data, size_t length, hash &hash, size_t iters, uint8_t init_size_blk, uint16_t xx, uint16_t yy) {
     cn_slow_hash_v11(context, data, length, reinterpret_cast<char *>(&hash), iters, init_size_blk, xx, yy);
-  }
-
-  inline void cn_slow_hash(cn_hash_context_t *context, const void *data, std::size_t length, hash &hash) {
-    cn_slow_hash(context, data, length, reinterpret_cast<char *>(&hash), 0);
   }
 
   inline void tree_hash(const hash *hashes, std::size_t count, hash &root_hash) {

@@ -1,5 +1,5 @@
 // Copyright (c) 2019, The NERVA Project
-// Copyright (c) 2014-2019, The Monero Project
+// Copyright (c) 2014-2020, The Monero Project
 // 
 // All rights reserved.
 // 
@@ -50,6 +50,8 @@
 #include "warnings.h"
 #include "crypto.h"
 #include "hash.h"
+
+#include "cryptonote_config.h"
 
 namespace {
   static void local_abort(const char *msg)
@@ -307,6 +309,10 @@ namespace crypto {
     ec_point D;
     ec_point X;
     ec_point Y;
+    hash sep; // domain separation
+    ec_point R;
+    ec_point A;
+    ec_point B;
   };
 
   void crypto_ops::generate_signature(const hash &prefix_hash, const public_key &pub, const secret_key &sec, signature &sig) {
@@ -335,6 +341,7 @@ namespace crypto {
     sc_mulsub(&sig.r, &sig.c, &unwrap(sec), &k);
     if (!sc_isnonzero((const unsigned char*)sig.r.data))
       goto try_again;
+    memwipe(&k, sizeof(k));
   }
 
   bool crypto_ops::check_signature(const hash &prefix_hash, const public_key &pub, const signature &sig) {
@@ -402,9 +409,19 @@ namespace crypto {
     ec_scalar k;
     random_scalar(k);
     
+    // if B is not present
+    static const ec_point zero = {{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }};
+    
     s_comm_2 buf;
     buf.msg = prefix_hash;
     buf.D = D;
+    buf.R = R;
+    buf.A = A;
+    if (B)
+        buf.B = *B;
+    else
+        buf.B = zero;
+    cn_fast_hash(config::HASH_KEY_TXPROOF_V2, sizeof(config::HASH_KEY_TXPROOF_V2)-1, buf.sep);
 
     if (B)
     {
@@ -431,6 +448,8 @@ namespace crypto {
 
     // sig.r = k - sig.c*r
     sc_mulsub(&sig.r, &sig.c, &unwrap(r), &k);
+
+    memwipe(&k, sizeof(k));
   }
 
   bool crypto_ops::check_tx_proof(const hash &prefix_hash, const public_key &R, const public_key &A, const boost::optional<public_key> &B, const public_key &D, const signature &sig) {
@@ -506,12 +525,26 @@ namespace crypto {
     ge_p1p1_to_p2(&Y_p2, &Y_p1p1);
 
     // compute c2 = Hs(Msg || D || X || Y)
+    // for v1, c2 = Hs(Msg || D || X || Y)
+    // for v2, c2 = Hs(Msg || D || X || Y || sep || R || A || B)
+
+    // if B is not present
+    static const ec_point zero = {{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }};
+
     s_comm_2 buf;
     buf.msg = prefix_hash;
     buf.D = D;
+    buf.R = R;
+    buf.A = A;
+    if (B)
+        buf.B = *B;
+    else
+        buf.B = zero;
+    cn_fast_hash(config::HASH_KEY_TXPROOF_V2, sizeof(config::HASH_KEY_TXPROOF_V2)-1, buf.sep);
     ge_tobytes(&buf.X, &X_p2);
     ge_tobytes(&buf.Y, &Y_p2);
     ec_scalar c2;
+
     hash_to_scalar(&buf, sizeof(s_comm_2), c2);
 
     // test if c2 == sig.c
@@ -601,6 +634,7 @@ POP_WARNINGS
         random_scalar(sig[i].c);
         random_scalar(sig[i].r);
         if (ge_frombytes_vartime(&tmp3, &*pubs[i]) != 0) {
+          memwipe(&k, sizeof(k));
           local_abort("invalid pubkey");
         }
         ge_double_scalarmult_base_vartime(&tmp2, &sig[i].c, &tmp3, &sig[i].r);
@@ -614,6 +648,8 @@ POP_WARNINGS
     hash_to_scalar(buf.get(), rs_comm_size(pubs_count), h);
     sc_sub(&sig[sec_index].c, &h, &sum);
     sc_mulsub(&sig[sec_index].r, &sig[sec_index].c, &unwrap(sec), &k);
+
+    memwipe(&k, sizeof(k));
   }
 
   bool crypto_ops::check_ring_signature(const hash &prefix_hash, const key_image &image,

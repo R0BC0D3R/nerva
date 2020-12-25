@@ -178,17 +178,10 @@ void keccak_update(KECCAK_CTX * ctx, const uint8_t *in, size_t inlen){
         inlen -= left;
     }
 
-    const bool is_aligned = IS_ALIGNED_64(in);
     while (inlen >= KECCAK_BLOCKLEN) {
-        const uint64_t* aligned_message_block;
-        if (is_aligned) {
-            aligned_message_block = (uint64_t*)in;
-        } else {
             memcpy(ctx->message, in, KECCAK_BLOCKLEN);
-            aligned_message_block = ctx->message;
-        }
 
-        KECCAK_PROCESS_BLOCK(ctx->hash, aligned_message_block);
+        KECCAK_PROCESS_BLOCK(ctx->hash, ctx->message);
         in  += KECCAK_BLOCKLEN;
         inlen -= KECCAK_BLOCKLEN;
     }

@@ -1,4 +1,4 @@
-# Copyright (c) 2014-2019, The Monero Project
+# Copyright (c) 2014-2020, The Monero Project
 # Copyright (c) 2018-2019, The NERVA Project
 #
 # All rights reserved.
@@ -90,6 +90,7 @@ set(common_private_headers
   aligned.h
   timings.h
   combinator.h
+  utf8.h
   xnv_https.h
   dns_config.h)
 

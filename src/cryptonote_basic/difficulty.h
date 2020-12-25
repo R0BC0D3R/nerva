@@ -1,5 +1,5 @@
 // Copyright (c) 2017-2018, The Masari Project
-// Copyright (c) 2014-2019, The Monero Project
+// Copyright (c) 2014-2020, The Monero Project
 // 
 // All rights reserved.
 // 
@@ -38,9 +38,9 @@
 
 namespace cryptonote
 {
-    typedef boost::multiprecision::uint128_t difficulty_type_128;
+    typedef boost::multiprecision::uint128_t difficulty_type;
 
-    std::string hex(difficulty_type_128 v);
+    std::string hex(difficulty_type v);
 
     bool check_hash(const crypto::hash &hash, uint64_t difficulty);
 

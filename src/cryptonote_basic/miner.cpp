@@ -1,5 +1,5 @@
 // Copyright (c) 2018-2019, The NERVA Project
-// Copyright (c) 2014-2019, The Monero Project
+// Copyright (c) 2014-2020, The Monero Project
 //
 // All rights reserved.
 //
@@ -138,7 +138,7 @@ namespace cryptonote
     catch (...) { /* ignore */ }
   }
   //-----------------------------------------------------------------------------------------------------
-  bool miner::set_block_template(const block& bl, const uint64_t& di, uint64_t height, uint64_t block_reward)
+  bool miner::set_block_template(const block& bl, const difficulty_type& di, uint64_t height, uint64_t block_reward)
   {
     CRITICAL_REGION_LOCAL(m_template_lock);
     m_template = bl;
@@ -161,7 +161,7 @@ namespace cryptonote
   bool miner::request_block_template()
   {
     block bl;
-    uint64_t di = AUTO_VAL_INIT(di);
+    difficulty_type di = AUTO_VAL_INIT(di);
     uint64_t height = AUTO_VAL_INIT(height);
     uint64_t expected_reward; //only used for RPC calls - could possibly be useful here too?
 
@@ -591,7 +591,7 @@ namespace cryptonote
     MGINFO("Miner thread was started ["<< th_local_index << "]");
     uint32_t nonce = m_starter_nonce + th_local_index;
     uint64_t height = 0;
-    uint64_t local_diff = 0;
+    difficulty_type local_diff = 0;
     uint32_t local_template_ver = 0;
     crypto::cn_hash_context_t *hash_context = crypto::cn_hash_context_create();
     if (hash_context == NULL)

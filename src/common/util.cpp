@@ -1,5 +1,5 @@
 // Copyright (c) 2019, The NERVA Project
-// Copyright (c) 2014-2019, The Monero Project
+// Copyright (c) 2014-2020, The Monero Project
 // 
 // All rights reserved.
 // 
@@ -1089,16 +1089,33 @@ std::string get_nix_version_display_string()
   {
     if (seconds < 60)
       return std::to_string(seconds) + " seconds";
+    std::stringstream ss;
+    ss << std::fixed << std::setprecision(1);
     if (seconds < 3600)
-      return std::to_string((uint64_t)(seconds / 60)) + " minutes";
+    {
+      ss << seconds / 60.f;
+      return ss.str() + " minutes";
+    }
     if (seconds < 3600 * 24)
-      return std::to_string((uint64_t)(seconds / 3600)) + " hours";
-    if (seconds < 3600 * 24 * 30.5)
-      return std::to_string((uint64_t)(seconds / (3600 * 24))) + " days";
-    if (seconds < 3600 * 24 * 365.25)
-      return std::to_string((uint64_t)(seconds / (3600 * 24 * 30.5))) + " months";
-    if (seconds < 3600 * 24 * 365.25 * 100)
-      return std::to_string((uint64_t)(seconds / (3600 * 24 * 30.5 * 365.25))) + " years";
+    {
+      ss << seconds / 3600.f;
+      return ss.str() + " hours";
+    }
+    if (seconds < 3600 * 24 * 30.5f)
+    {
+      ss << seconds / (3600 * 24.f);
+      return ss.str() + " days";
+    }
+    if (seconds < 3600 * 24 * 365.25f)
+    {
+      ss << seconds / (3600 * 24 * 30.5f);
+      return ss.str() + " months";
+    }
+    if (seconds < 3600 * 24 * 365.25f * 100)
+    {
+      ss << seconds / (3600 * 24 * 365.25f);
+      return ss.str() + " years";
+    }
     return "a long time";
   }
 
@@ -1115,7 +1132,7 @@ std::string get_nix_version_display_string()
     static constexpr const byte_map sizes[] =
     {
         {"%.0f B", 1024},
-        {"%.2f KB", 1024 * 1024},
+        {"%.2f kB", 1024 * 1024},
         {"%.2f MB", std::uint64_t(1024) * 1024 * 1024},
         {"%.2f GB", std::uint64_t(1024) * 1024 * 1024 * 1024},
         {"%.2f TB", std::uint64_t(1024) * 1024 * 1024 * 1024 * 1024}
@@ -1254,7 +1271,7 @@ std::string get_nix_version_display_string()
     return get_string_prefix_by_width(s, 999999999).second;
   };
 
-  std::vector<std::pair<std::string, size_t>> split_string_by_width(const std::string &s, size_t columns)
+  std::vector<std::pair<std::string, size_t>> split_line_by_width(const std::string &s, size_t columns)
   {
     std::vector<std::string> words;
     std::vector<std::pair<std::string, size_t>> lines;
@@ -1294,4 +1311,17 @@ std::string get_nix_version_display_string()
     return lines;
   }
 
+  std::vector<std::pair<std::string, size_t>> split_string_by_width(const std::string &s, size_t columns)
+  {
+    std::vector<std::string> lines;
+    std::vector<std::pair<std::string, size_t>> all_lines;
+    boost::split(lines, s, boost::is_any_of("\n"), boost::token_compress_on);
+    for (const auto &e: lines)
+    {
+      std::vector<std::pair<std::string, size_t>> new_lines = split_line_by_width(e, columns);
+      for (auto &l: new_lines)
+        all_lines.push_back(std::move(l));
+    }
+    return all_lines;
+  }
 }

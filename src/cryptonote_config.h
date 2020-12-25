@@ -1,5 +1,5 @@
 // Copyright (c) 2018-2019, The NERVA Project
-// Copyright (c) 2014-2019, The Monero Project
+// Copyright (c) 2014-2020, The Monero Project
 //
 // All rights reserved.
 // 
@@ -37,123 +37,119 @@
 #include <boost/uuid/uuid.hpp>
 #include "misc_log_ex.h"
 
-#define CRYPTONOTE_DNS_TIMEOUT_MS                                       20000
+#define CRYPTONOTE_DNS_TIMEOUT_MS                           20000
 
-#define CRYPTONOTE_MAX_BLOCK_NUMBER                                     500000000
-#define CRYPTONOTE_MAX_TX_PER_BLOCK                                     0x10000000
-#define CRYPTONOTE_MAX_TX_SIZE                                          1000000000
-#define CRYPTONOTE_PUBLIC_ADDRESS_TEXTBLOB_VER                          0
-#define CRYPTONOTE_MINED_MONEY_UNLOCK_WINDOW_V6                         20
-#define TRANSACTION_VERSION_V2                                          2
-#define TRANSACTION_VERSION_MAX                                         TRANSACTION_VERSION_V2
-#define CRYPTONOTE_BLOCK_FUTURE_TIME_LIMIT                              60 * 60 * 2
-#define CRYPTONOTE_DEFAULT_TX_SPENDABLE_AGE                             20
+#define CRYPTONOTE_MAX_BLOCK_NUMBER                         500000000
+#define CRYPTONOTE_MAX_TX_PER_BLOCK                         0x10000000
+#define CRYPTONOTE_MAX_TX_SIZE                              1000000000
+#define CRYPTONOTE_PUBLIC_ADDRESS_TEXTBLOB_VER              0
+#define CRYPTONOTE_MINED_MONEY_UNLOCK_WINDOW_V6             20
+#define TRANSACTION_VERSION                                 1
+#define TRANSACTION_VERSION_MAX                             TRANSACTION_VERSION
+#define CRYPTONOTE_DEFAULT_TX_SPENDABLE_AGE                 20
 
-#define BULLETPROOF_MAX_OUTPUTS                                         16
-#define BULLETPROOF_FULL_FORK_HEIGHT                                    1
+#define BULLETPROOF_MAX_OUTPUTS                             16
 
-#define BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW_V2                            12
+#define BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW_V2                12
 
-#define CRYPTONOTE_BLOCK_FUTURE_TIME_LIMIT_V6                           60 * 5
+#define CRYPTONOTE_BLOCK_FUTURE_TIME_LIMIT                  60 * 5
 
-#define MONEY_SUPPLY                                                    ((uint64_t)(-1))
-#define FINAL_SUBSIDY_PER_MINUTE                                        ((uint64_t)300000000000)
+#define FINAL_SUBSIDY_PER_MINUTE                            ((uint64_t)300000000000)
 
-#define CRYPTONOTE_REWARD_BLOCKS_WINDOW                                 100
-#define CRYPTONOTE_BLOCK_GRANTED_FULL_REWARD_ZONE                       300000
-#define CRYPTONOTE_COINBASE_BLOB_RESERVED_SIZE                          600
-#define CRYPTONOTE_DISPLAY_DECIMAL_POINT                                12
-#define COIN                                                            ((uint64_t)1000000000000)
+#define CRYPTONOTE_REWARD_BLOCKS_WINDOW                     100
+#define CRYPTONOTE_BLOCK_GRANTED_FULL_REWARD_ZONE           300000
+#define CRYPTONOTE_COINBASE_BLOB_RESERVED_SIZE              600
+#define CRYPTONOTE_DISPLAY_DECIMAL_POINT                    12
+#define COIN                                                ((uint64_t)1000000000000)
 
-#define CRYPTONOTE_LONG_TERM_BLOCK_WEIGHT_WINDOW_SIZE                   50000
+#define CRYPTONOTE_LONG_TERM_BLOCK_WEIGHT_WINDOW_SIZE       50000
 
-#define DEFAULT_MIXIN                                                   4
-#define DEFAULT_RINGSIZE                                                DEFAULT_MIXIN + 1
-#define DYNAMIC_FEE_PER_KB_BASE_FEE                                     ((uint64_t)400000000)
-#define DYNAMIC_FEE_PER_KB_BASE_BLOCK_REWARD                            ((uint64_t)10000000000000)
+#define DEFAULT_MIXIN                                       4
+#define DEFAULT_RINGSIZE                                    DEFAULT_MIXIN + 1
+#define DYNAMIC_FEE_PER_KB_BASE_FEE                         ((uint64_t)400000000)
+#define DYNAMIC_FEE_PER_KB_BASE_BLOCK_REWARD                ((uint64_t)10000000000000)
 
-#define DIFFICULTY_TARGET                                               60
+#define DIFFICULTY_TARGET                                   60
 
-#define DIFFICULTY_BLOCKS_ESTIMATE_TIMESPAN                             DIFFICULTY_TARGET
+#define DIFFICULTY_BLOCKS_ESTIMATE_TIMESPAN                 DIFFICULTY_TARGET
 
-#define DIFFICULTY_WINDOW_V6                                            60
-#define DIFFICULTY_BLOCKS_COUNT_V6                                      DIFFICULTY_WINDOW_V6 + 1
+#define DIFFICULTY_WINDOW_V6                                60
+#define DIFFICULTY_BLOCKS_COUNT_V6                          DIFFICULTY_WINDOW_V6 + 1
 
-#define CRYPTONOTE_LOCKED_TX_ALLOWED_DELTA_SECONDS_V1                   DIFFICULTY_TARGET *CRYPTONOTE_LOCKED_TX_ALLOWED_DELTA_BLOCKS
-#define CRYPTONOTE_LOCKED_TX_ALLOWED_DELTA_BLOCKS                       1
+#define CRYPTONOTE_LOCKED_TX_ALLOWED_DELTA_SECONDS_V1       DIFFICULTY_TARGET *CRYPTONOTE_LOCKED_TX_ALLOWED_DELTA_BLOCKS
+#define CRYPTONOTE_LOCKED_TX_ALLOWED_DELTA_BLOCKS           1
 
-#define BLOCKS_IDS_SYNCHRONIZING_DEFAULT_COUNT                          10000
-#define BLOCKS_SYNCHRONIZING_DEFAULT_COUNT                              20
-#define BLOCKS_SYNCHRONIZING_MAX_COUNT                                  2048
+#define BLOCKS_IDS_SYNCHRONIZING_DEFAULT_COUNT              10000
+#define BLOCKS_SYNCHRONIZING_DEFAULT_COUNT                  20
+#define BLOCKS_SYNCHRONIZING_MAX_COUNT                      2048
 
-#define CRYPTONOTE_MEMPOOL_TX_LIVETIME                                  (86400 * 3)
-#define CRYPTONOTE_MEMPOOL_TX_FROM_ALT_BLOCK_LIVETIME                   604800
+#define CRYPTONOTE_MEMPOOL_TX_LIVETIME                      (86400 * 3)
+#define CRYPTONOTE_MEMPOOL_TX_FROM_ALT_BLOCK_LIVETIME       604800
 
-#define COMMAND_RPC_GET_BLOCKS_FAST_MAX_COUNT                           1000
+#define COMMAND_RPC_GET_BLOCKS_FAST_MAX_COUNT               1000
 
-#define P2P_LOCAL_WHITE_PEERLIST_LIMIT                                  1000
-#define P2P_LOCAL_GRAY_PEERLIST_LIMIT                                   5000
+#define P2P_LOCAL_WHITE_PEERLIST_LIMIT                      1000
+#define P2P_LOCAL_GRAY_PEERLIST_LIMIT                       5000
 
-#define P2P_DEFAULT_CONNECTIONS_COUNT                                   8
-#define P2P_DEFAULT_HANDSHAKE_INTERVAL                                  60
-#define P2P_DEFAULT_PACKET_MAX_SIZE                                     50000000
-#define P2P_DEFAULT_PEERS_IN_HANDSHAKE                                  250
-#define P2P_DEFAULT_CONNECTION_TIMEOUT                                  5000
-#define P2P_DEFAULT_PING_CONNECTION_TIMEOUT                             2000
-#define P2P_DEFAULT_INVOKE_TIMEOUT                                      60 * 2 * 1000
-#define P2P_DEFAULT_HANDSHAKE_INVOKE_TIMEOUT                            5000
-#define P2P_DEFAULT_WHITELIST_CONNECTIONS_PERCENT                       70
-#define P2P_DEFAULT_ANCHOR_CONNECTIONS_COUNT                            2
+#define P2P_DEFAULT_CONNECTIONS_COUNT                       8
+#define P2P_DEFAULT_HANDSHAKE_INTERVAL                      60
+#define P2P_DEFAULT_PACKET_MAX_SIZE                         50000000
+#define P2P_DEFAULT_PEERS_IN_HANDSHAKE                      250
+#define P2P_DEFAULT_CONNECTION_TIMEOUT                      5000
+#define P2P_DEFAULT_PING_CONNECTION_TIMEOUT                 2000
+#define P2P_DEFAULT_INVOKE_TIMEOUT                          60 * 2 * 1000
+#define P2P_DEFAULT_HANDSHAKE_INVOKE_TIMEOUT                5000
+#define P2P_DEFAULT_WHITELIST_CONNECTIONS_PERCENT           70
+#define P2P_DEFAULT_ANCHOR_CONNECTIONS_COUNT                2
 
-#define P2P_FAILED_ADDR_FORGET_SECONDS                                  (60 * 60)
-#define P2P_IP_BLOCKTIME_MAINNET                                        (60 * 60 * 24)
-#define P2P_IP_BLOCKTIME_TESTNET                                        (60 * 5)
-#define P2P_IP_FAILS_BEFORE_BLOCK                                       10
-#define P2P_IDLE_CONNECTION_KILL_INTERVAL                               (5 * 60)
-#define P2P_DEFAULT_SOCKS_CONNECT_TIMEOUT                               45
-#define P2P_DEFAULT_SYNC_SEARCH_CONNECTIONS_COUNT                       2
-#define P2P_DEFAULT_LIMIT_RATE_UP                                       2048
-#define P2P_DEFAULT_LIMIT_RATE_DOWN                                     8192
+#define P2P_FAILED_ADDR_FORGET_SECONDS                      (60 * 60)
+#define P2P_IP_BLOCKTIME_MAINNET                            (60 * 60 * 24)
+#define P2P_IP_BLOCKTIME_TESTNET                            (60 * 5)
+#define P2P_IP_FAILS_BEFORE_BLOCK                           10
+#define P2P_IDLE_CONNECTION_KILL_INTERVAL                   (5 * 60)
+#define P2P_DEFAULT_SOCKS_CONNECT_TIMEOUT                   45
+#define P2P_DEFAULT_SYNC_SEARCH_CONNECTIONS_COUNT           2
+#define P2P_DEFAULT_LIMIT_RATE_UP                           2048
+#define P2P_DEFAULT_LIMIT_RATE_DOWN                         8192
 
-#define P2P_SUPPORT_FLAG_FLUFFY_BLOCKS                                  0x01
-#define P2P_SUPPORT_FLAGS                                               P2P_SUPPORT_FLAG_FLUFFY_BLOCKS
+#define P2P_SUPPORT_FLAG_FLUFFY_BLOCKS                      0x01
+#define P2P_SUPPORT_FLAGS                                   P2P_SUPPORT_FLAG_FLUFFY_BLOCKS
 
-#define RPC_IP_FAILS_BEFORE_BLOCK                                       3
+#define RPC_IP_FAILS_BEFORE_BLOCK                           3
 
-#define CRYPTONOTE_PRUNING_STRIPE_SIZE                                  4096
-#define CRYPTONOTE_PRUNING_LOG_STRIPES                                  3
-#define CRYPTONOTE_PRUNING_TIP_BLOCKS                                   5500
+#define CRYPTONOTE_PRUNING_STRIPE_SIZE                      4096
+#define CRYPTONOTE_PRUNING_LOG_STRIPES                      3
+#define CRYPTONOTE_PRUNING_TIP_BLOCKS                       5500
 
-//#define ALLOW_DEBUG_COMMANDS
+#define CRYPTONOTE_NAME                                     "nerva"
+#define CRYPTONOTE_POOLDATA_FILENAME                        "poolstate.bin"
+#define CRYPTONOTE_BLOCKCHAINDATA_FILENAME                  "data.mdb"
+#define CRYPTONOTE_BLOCKCHAINDATA_LOCK_FILENAME             "lock.mdb"
+#define P2P_NET_DATA_FILENAME                               "p2pstate.nerva.v11.bin"
+#define MINER_CONFIG_FILE_NAME                              "miner_conf.json"
 
-#define CRYPTONOTE_NAME                                                 "nerva"
-#define CRYPTONOTE_POOLDATA_FILENAME                                    "poolstate.bin"
-#define CRYPTONOTE_BLOCKCHAINDATA_FILENAME                              "data.mdb"
-#define CRYPTONOTE_BLOCKCHAINDATA_LOCK_FILENAME                         "lock.mdb"
-#define P2P_NET_DATA_FILENAME                                           "p2pstate.nerva.v11.bin"
-#define MINER_CONFIG_FILE_NAME                                          "miner_conf.json"
+#define THREAD_STACK_SIZE                                   5 * 1024 * 1024
 
-#define THREAD_STACK_SIZE                                               5 * 1024 * 1024
+#define PER_KB_FEE_QUANTIZATION_DECIMALS                    8
 
-#define PER_KB_FEE_QUANTIZATION_DECIMALS                                8
+#define HASH_OF_HASHES_STEP                                 256
 
-#define HASH_OF_HASHES_STEP                                             256
+#define DEFAULT_TXPOOL_MAX_WEIGHT                           648000000ull
 
-#define DEFAULT_TXPOOL_MAX_WEIGHT                                       648000000ull
+#define CRYPTONOTE_SHORT_TERM_BLOCK_WEIGHT_SURGE_FACTOR     50
 
-#define HF_VERSION_LONG_TERM_BLOCK_WEIGHT                               2
-#define CRYPTONOTE_SHORT_TERM_BLOCK_WEIGHT_SURGE_FACTOR                 50
+#define CRYPTONOTE_NOISE_MIN_EPOCH                          5
+#define CRYPTONOTE_NOISE_EPOCH_RANGE                        30
+#define CRYPTONOTE_NOISE_MIN_DELAY                          10
+#define CRYPTONOTE_NOISE_DELAY_RANGE                        5
+#define CRYPTONOTE_NOISE_BYTES                              3*1024
+#define CRYPTONOTE_NOISE_CHANNELS                           2 
 
-#define CRYPTONOTE_NOISE_MIN_EPOCH                                      5
-#define CRYPTONOTE_NOISE_EPOCH_RANGE                                    30
-#define CRYPTONOTE_NOISE_MIN_DELAY                                      10
-#define CRYPTONOTE_NOISE_DELAY_RANGE                                    5
-#define CRYPTONOTE_NOISE_BYTES                                          3*1024
-#define CRYPTONOTE_NOISE_CHANNELS                                       2 
+#define CRYPTONOTE_MAX_FRAGMENTS                            20
 
-#define CRYPTONOTE_MAX_FRAGMENTS                                        20
+#define DONATION_ADDR                                       "NV1r8P6THPASAQX77re6hXTMJ1ykXXvtYXFXgMv4vFAQNYo3YatUvZ8LFNRu4dPQBjTwqJbMvqoeiipywmREPHpD2AgWnmG7Q"
 
-#define DONATION_ADDR "NV1r8P6THPASAQX77re6hXTMJ1ykXXvtYXFXgMv4vFAQNYo3YatUvZ8LFNRu4dPQBjTwqJbMvqoeiipywmREPHpD2AgWnmG7Q"
+#define PREMINE_AMOUNT                                      180000000000000000U
 
 struct hard_fork
 {
@@ -165,7 +161,6 @@ namespace config
 {
     uint64_t const DEFAULT_DUST_THRESHOLD = 0;
     std::string const P2P_REMOTE_DEBUG_TRUSTED_PUB_KEY = "0000000000000000000000000000000000000000000000000000000000000000";
-
     uint64_t const CRYPTONOTE_PUBLIC_ADDRESS_BASE58_PREFIX = 0x3800;
     uint64_t const CRYPTONOTE_PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX = 0x7081;
     uint64_t const CRYPTONOTE_PUBLIC_SUBADDRESS_BASE58_PREFIX = 0x1080;
@@ -175,6 +170,22 @@ namespace config
     std::string const GENESIS_TX = "010a01ff0001ffffffffffff0f029b2e4c0281c0b02e7c53291a94d1d0cbff8883f8024f5142ee494ffbbd0880712101abf318a3dc8d66a0263839cffce83daa85963a27635a608a2ba9973055bcc8e400";
 
     uint32_t const GENESIS_NONCE = 10000;
+
+    // Hash domain separators
+    const char HASH_KEY_BULLETPROOF_EXPONENT[] = "bulletproof";
+    const char HASH_KEY_RINGDB[] = "ringdsb";
+    const char HASH_KEY_SUBADDRESS[] = "SubAddr";
+    const unsigned char HASH_KEY_ENCRYPTED_PAYMENT_ID = 0x8d;
+    const unsigned char HASH_KEY_WALLET = 0x8c;
+    const unsigned char HASH_KEY_WALLET_CACHE = 0x8d;
+    const unsigned char HASH_KEY_RPC_PAYMENT_NONCE = 0x58;
+    const unsigned char HASH_KEY_MEMORY = 'k';
+    const unsigned char HASH_KEY_MULTISIG[] = {'M', 'u', 'l', 't' , 'i', 's', 'i', 'g', 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+    const unsigned char HASH_KEY_TXPROOF_V2[] = "TXPROOF_V2";
+    const unsigned char HASH_KEY_CLSAG_ROUND[] = "CLSAG_round";
+    const unsigned char HASH_KEY_CLSAG_AGG_0[] = "CLSAG_agg_0";
+    const unsigned char HASH_KEY_CLSAG_AGG_1[] = "CLSAG_agg_1";
+    const char HASH_KEY_MESSAGE_SIGNING[] = "MoneroMessageSignature";
 
     std::string const HF_MIN_VERSION = "0.2.0.0";
     std::string const MIN_VERSION    = "0.2.0.0";

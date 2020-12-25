@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2019, The Monero Project
+// Copyright (c) 2014-2020, The Monero Project
 // 
 // All rights reserved.
 // 
@@ -37,7 +37,7 @@
 #include <sstream>
 #include <atomic>
 #include "serialization/variant.h"
-#include "serialization/vector.h"
+#include "serialization/containers.h"
 #include "serialization/binary_archive.h"
 #include "serialization/json_archive.h"
 #include "serialization/debug_archive.h"
@@ -243,8 +243,7 @@ namespace cryptonote
       if (std::is_same<Archive<W>, binary_archive<W>>())
         prefix_size = getpos(ar) - start_pos;
 
-      if (version >= 1)
-      {
+
         ar.tag("rct_signatures");
         if (!vin.empty())
         {
@@ -266,7 +265,7 @@ namespace cryptonote
             ar.end_object();
           }
         }
-      }
+
       if (!typename Archive<W>::is_saving())
         pruned = false;
     END_SERIALIZE()
@@ -276,8 +275,7 @@ namespace cryptonote
     {
       FIELDS(*static_cast<transaction_prefix *>(this))
 
-      if (version >= 1)
-      {
+
         ar.tag("rct_signatures");
         if (!vin.empty())
         {
@@ -286,7 +284,7 @@ namespace cryptonote
           if (!r || !ar.stream().good()) return false;
           ar.end_object();
         }
-      }
+      
       if (!typename Archive<W>::is_saving())
         pruned = true;
       return ar.stream().good();

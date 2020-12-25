@@ -79,7 +79,8 @@
         "string": "cpp",
         "shared_mutex": "cpp",
         "variant": "cpp",
-        "bit": "cpp"
+        "bit": "cpp",
+        "any": "cpp"
     },
     "C_Cpp.dimInactiveRegions": true,
     "C_Cpp.intelliSenseEngine": "Default",
@@ -93,5 +94,7 @@
         "MSVSCODE": "1"
     },
     "cmake.configureOnOpen": true,
-    
+    "formatFiles.extensionsToInclude": "cpp,h,c",
+    "editor.tabSize": 4,
+    "editor.detectIndentation": false
 }

@@ -209,7 +209,7 @@ namespace net_utils
 			{
 				CHECK_AND_ASSERT_MES(m_config.m_phandler, false, "m_config.m_phandler is NULL!!!!");
 
-				const auto auth_response = m_auth->get_response(query_info);
+				const auto auth_response = m_auth.get_response(query_info);
 				if (auth_response)
 				{
 					response = std::move(*auth_response);
@@ -227,7 +227,7 @@ namespace net_utils
 
 			virtual bool thread_init()
 			{
-				return m_config.m_phandler->init_server_thread();;
+				return m_config.m_phandler->init_server_thread();
 			}
 	
 			virtual bool thread_deinit()
@@ -244,7 +244,7 @@ namespace net_utils
 		private:
 			//simple_http_connection_handler::config_type m_stub_config;
 			config_type& m_config;
-			http_server_auth* m_auth;
+			http_server_auth m_auth;
 		};
 	}
 }

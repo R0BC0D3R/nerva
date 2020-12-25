@@ -1,5 +1,5 @@
 // Copyright (c) 2018-2020, The NERVA Project
-// Copyright (c) 2014-2019, The Monero Project
+// Copyright (c) 2014-2020, The Monero Project
 // 
 // All rights reserved.
 // 
@@ -79,14 +79,14 @@ enum {
   HASH_DATA_AREA = 136
 };
 
+void cn_fast_hash(const void *data, size_t length, char *hash);
+
 void hash_extra_blake(const void *data, size_t length, char *hash);
 void hash_extra_groestl(const void *data, size_t length, char *hash);
 void hash_extra_jh(const void *data, size_t length, char *hash);
 void hash_extra_skein(const void *data, size_t length, char *hash);
 
 void tree_hash(const char (*hashes)[HASH_SIZE], size_t count, char *root_hash);
-
-void cn_fast_hash(const void *data, size_t length, char *hash);
 
 #define CN_SCRATCHPAD_MEMORY 1048576
 #define CN_SALT_MEMORY 262144
@@ -106,5 +106,4 @@ typedef struct cn_hash_context
 cn_hash_context_t *cn_hash_context_create(void);
 void cn_hash_context_free(cn_hash_context_t *context);
 
-void cn_slow_hash(cn_hash_context_t *context, const void *data, size_t length, char *hash, int prehashed);
 void cn_slow_hash_v11(cn_hash_context_t *context, const void *data, size_t length, char *hash, size_t iters, uint8_t init_size_blk, uint16_t xx, uint16_t yy);
