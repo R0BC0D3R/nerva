@@ -30,22 +30,21 @@
 // Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
 #include <boost/algorithm/string.hpp>
+#include <boost/uuid/nil_generator.hpp>
 
-#include "include_base_utils.h"
 #include "string_tools.h"
 using namespace epee;
 
 #include <unordered_set>
 #include "cryptonote_core.h"
-#include "common/command_line.h"
 #include "common/util.h"
 #include "common/updates.h"
 #include "common/threadpool.h"
 #include "common/command_line.h"
+#include "cryptonote_basic/events.h"
 #include "warnings.h"
 #include "crypto/crypto.h"
 #include "cryptonote_config.h"
-#include "cryptonote_tx_utils.h"
 #include "misc_language.h"
 #include "file_io_utils.h"
 #include <csignal>
@@ -825,26 +824,15 @@ namespace cryptonote
             }
 
             const rct::rctSig &rv = tx_info[n].tx->rct_signatures;
-            switch (rv.type)
+            if (!is_canonical_bulletproof_layout(rv.p.bulletproofs))
             {
-            case rct::RCTTypeCLSAG:
-                if (!is_canonical_bulletproof_layout(rv.p.bulletproofs))
-                {
-                    MERROR_VER("Bulletproof does not have canonical form");
-                    set_semantics_failed(tx_info[n].tx_hash);
-                    tx_info[n].tvc.m_verifivation_failed = true;
-                    tx_info[n].result = false;
-                    break;
-                }
-                rvv.push_back(&rv); // delayed batch verification
-                break;
-            default:
-                MERROR_VER("Unknown rct type: " << rv.type);
+                MERROR_VER("Bulletproof does not have canonical form");
                 set_semantics_failed(tx_info[n].tx_hash);
                 tx_info[n].tvc.m_verifivation_failed = true;
                 tx_info[n].result = false;
-                break;
             }
+            else
+                rvv.push_back(&rv); // delayed batch verification
         }
         if (!rvv.empty() && !rct::verRctSemanticsSimple(rvv))
         {
@@ -855,8 +843,7 @@ namespace cryptonote
             {
                 if (!tx_info[n].result)
                     continue;
-                if (tx_info[n].tx->rct_signatures.type != rct::RCTTypeCLSAG)
-                    continue;
+
                 if (assumed_bad || !rct::verRctSemanticsSimple(tx_info[n].tx->rct_signatures))
                 {
                     set_semantics_failed(tx_info[n].tx_hash);
@@ -984,9 +971,6 @@ namespace cryptonote
             else
                 results[i].res = false;
         }
-
-        if (valid_events && m_zmq_pub && matches_category(tx_relay, relay_category::legacy))
-            m_zmq_pub(std::move(results));
 
         return ok;
         CATCH_ENTRY_L0("core::handle_incoming_txs()", false);
@@ -1174,8 +1158,6 @@ namespace cryptonote
     //-----------------------------------------------------------------------------------------------
     bool core::check_tx_inputs_ring_members_diff(const transaction &tx) const
     {
-        const uint8_t version = m_blockchain_storage.get_current_hard_fork_version();
-
         for (const auto &in : tx.vin)
         {
             CHECKED_GET_SPECIFIC_VARIANT(in, const txin_to_key, tokey_in, false);
@@ -1226,8 +1208,7 @@ namespace cryptonote
             return true;
         }
 
-        uint8_t version = m_blockchain_storage.get_current_hard_fork_version();
-        return m_mempool.add_tx(tx, tx_hash, blob, tx_weight, tvc, tx_relay, relayed, version);
+        return m_mempool.add_tx(tx, tx_hash, blob, tx_weight, tvc, tx_relay, relayed);
     }
     //-----------------------------------------------------------------------------------------------
     bool core::relay_txpool_transactions()
@@ -1288,14 +1269,14 @@ namespace cryptonote
         m_mempool.set_relayed(epee::to_span(tx_hashes), tx_relay);
     }
     //-----------------------------------------------------------------------------------------------
-    bool core::get_block_template(block &b, const account_public_address &adr, uint64_t &diffic, uint64_t &height, uint64_t &expected_reward, const blobdata &ex_nonce)
+    bool core::get_block_template(block &b, const account_public_address &adr, difficulty_type &diffic, uint64_t &height, uint64_t &expected_reward, const blobdata &ex_nonce)
     {
-        return m_blockchain_storage.create_block_template(b, adr, diffic, height, expected_reward, ex_nonce, seed_height, seed_hash);
+        return m_blockchain_storage.create_block_template(b, adr, diffic, height, expected_reward, ex_nonce);
     }
     //-----------------------------------------------------------------------------------------------
-    bool core::get_block_template(block &b, const crypto::hash *prev_block, const account_public_address &adr, difficulty_type &diffic, uint64_t &height, uint64_t &expected_reward, const blobdata &ex_nonce, uint64_t &seed_height, crypto::hash &seed_hash)
+    bool core::get_block_template(block &b, const crypto::hash *prev_block, const account_public_address &adr, difficulty_type &diffic, uint64_t &height, uint64_t &expected_reward, const blobdata &ex_nonce)
     {
-        return m_blockchain_storage.create_block_template(b, prev_block, adr, diffic, height, expected_reward, ex_nonce, seed_height, seed_hash);
+        return m_blockchain_storage.create_block_template(b, prev_block, adr, diffic, height, expected_reward, ex_nonce);
     }
     //-----------------------------------------------------------------------------------------------
     bool core::find_blockchain_supplement(const std::list<crypto::hash> &qblock_ids, bool clip_pruned, NOTIFY_RESPONSE_CHAIN_ENTRY::request &resp) const

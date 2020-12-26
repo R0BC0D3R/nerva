@@ -114,4 +114,5 @@ typedef struct cn_hash_context
 cn_hash_context_t *cn_hash_context_create(void);
 void cn_hash_context_free(cn_hash_context_t *context);
 
+void cn_slow_hash(cn_hash_context_t *context, const void *data, size_t length, char *hash, int prehashed);
 void cn_slow_hash_v11(cn_hash_context_t *context, const void *data, size_t length, char *hash, size_t iters, uint8_t init_size_blk, uint16_t xx, uint16_t yy);

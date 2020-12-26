@@ -1978,7 +1978,7 @@ namespace cryptonote
         typedef epee::misc_utils::struct_init<response_t> response;
     };
 
-    struct COMMAND_RPC_GET_PER_KB_FEE_ESTIMATE
+    struct COMMAND_RPC_GET_BASE_FEE_ESTIMATE
     {
         struct request_t : public rpc_request_base
         {
@@ -2298,9 +2298,11 @@ namespace cryptonote
         struct request_t
         {
             bool bad_txs;
+            bool bad_blocks;
 
             BEGIN_KV_SERIALIZE_MAP()
             KV_SERIALIZE_OPT(bad_txs, false)
+            KV_SERIALIZE_OPT(bad_blocks, false)
             END_KV_SERIALIZE_MAP()
         };
         typedef epee::misc_utils::struct_init<request_t> request;

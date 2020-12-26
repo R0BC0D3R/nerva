@@ -1,4 +1,4 @@
-// Copyright (c) 2018, The Monero Project
+// Copyright (c) 2014-2020, The Monero Project
 //
 // All rights reserved.
 //
@@ -25,40 +25,29 @@
 // INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//
+// Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
 #pragma once
 
-#include <boost/utility/string_ref.hpp>
-#include <cstdint>
-
-namespace epee
+namespace cryptonote
 {
-    namespace net_utils
-    {
-        enum class address_type : std::uint8_t
-        {
-            // Do not change values, this will break serialization
-            invalid = 0,
-            ipv4 = 1,
-            ipv6 = 2,
-            i2p = 3,
-            tor = 4
-        };
-
-        enum class zone : std::uint8_t
-        {
-            invalid = 0,
-            public_ = 1, // public is keyword
-            i2p = 2,     // order from here changes priority of selection for origin TXes
-            tor = 3
-        };
-
-        // implementations in src/net_utils_base.cpp
-
-        //! \return String name of zone or "invalid" on error.
-        const char *zone_to_string(zone value) noexcept;
-
-        //! \return `zone` enum of `value` or `zone::invalid` on error.
-        zone zone_from_string(boost::string_ref value) noexcept;
-    } // namespace net_utils
-} // namespace epee
+    // This class is meant to create a batch when none currently exists.
+    // If a batch exists, it can't be from another thread, since we can
+    // only be called with the txpool lock taken, and it is held during
+    // the whole prepare/handle/cleanup incoming block sequence.
+    class LockedTXN {
+    public:
+      LockedTXN(BlockchainDB &db): m_db(db), m_batch(false), m_active(false) {
+        m_batch = m_db.batch_start();
+        m_active = true;
+      }
+      void commit() { try { if (m_batch && m_active) { m_db.batch_stop(); m_active = false; } } catch (const std::exception &e) { MWARNING("LockedTXN::commit filtering exception: " << e.what()); } }
+      void abort() { try { if (m_batch && m_active) { m_db.batch_abort(); m_active = false; } } catch (const std::exception &e) { MWARNING("LockedTXN::abort filtering exception: " << e.what()); } }
+      ~LockedTXN() { abort(); }
+    private:
+      BlockchainDB &m_db;
+      bool m_batch;
+      bool m_active;
+    };
+}

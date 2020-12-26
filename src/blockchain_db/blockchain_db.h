@@ -106,6 +106,8 @@ namespace cryptonote
 
     extern const command_line::arg_descriptor<std::string> arg_db_sync_mode;
     extern const command_line::arg_descriptor<bool, false> arg_db_salvage;
+    extern const command_line::arg_descriptor<uint32_t> arg_db_readers;
+    extern const command_line::arg_descriptor<uint32_t> arg_pop_blocks;
 
     enum class relay_category : uint8_t
     {
@@ -1029,20 +1031,6 @@ namespace cryptonote
    * @param new_cumulative_difficulties new cumulative difficulties to be stored
    */
         virtual void correct_block_cumulative_difficulties(const uint64_t &start_height, const std::vector<difficulty_type> &new_cumulative_difficulties) = 0;
-
-        /**
-   * @brief fetch a block's already generated coins
-   *
-   * The subclass should return the total coins generated as of the block
-   * with the given height.
-   *
-   * If the block does not exist, the subclass should throw BLOCK_DNE
-   *
-   * @param height the height requested
-   *
-   * @return the already generated coins
-   */
-        virtual uint64_t get_block_already_generated_coins(const uint64_t &height) const = 0;
 
         /**
    * @brief fetch a block's long term weight

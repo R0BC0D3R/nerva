@@ -214,30 +214,8 @@ namespace rct
     size_t n_bulletproof_amounts(const std::vector<Bulletproof> &proofs);
     size_t n_bulletproof_max_amounts(const std::vector<Bulletproof> &proofs);
 
-    //A container to hold all signatures necessary for RingCT
-    // rangeSigs holds all the rangeproof data of a transaction
-    // MG holds the MLSAG signature of a transaction
-    // mixRing holds all the public keypairs (P, C) for a transaction
-    // ecdhInfo holds an encoded mask / amount to be passed to each receiver
-    // outPk contains public keypairs which are destinations (P, C),
-    //  P = address, C = commitment to amount
-    enum
-    {
-        RCTTypeNull = 0,
-        RCTTypeCLSAG = 1,
-    };
-    enum RangeProofType
-    {
-        RangeProofPaddedBulletproof
-    };
-    struct RCTConfig
-    {
-        RangeProofType range_proof_type_make_error;
-        int make_error;
-    };
     struct rctSigBase
     {
-        uint8_t type;
         key message;
         ctkeyM mixRing; //the set of all pubkeys / copy
         //pairs that you mix with
@@ -249,11 +227,6 @@ namespace rct
         template <bool W, template <bool> class Archive>
         bool serialize_rctsig_base(Archive<W> &ar, size_t inputs, size_t outputs)
         {
-            FIELD(type)
-            if (type == RCTTypeNull)
-                return ar.stream().good();
-            if (type != RCTTypeCLSAG)
-                return false;
             VARINT_FIELD(txnFee)
 
             ar.tag("ecdhInfo");
@@ -291,7 +264,6 @@ namespace rct
         }
 
         BEGIN_SERIALIZE_OBJECT()
-        FIELD(type)
         FIELD(message)
         FIELD(mixRing)
         FIELD(pseudoOuts)
@@ -308,17 +280,13 @@ namespace rct
 
         // when changing this function, update cryptonote::get_pruned_transaction_weight
         template <bool W, template <bool> class Archive>
-        bool serialize_rctsig_prunable(Archive<W> &ar, uint8_t type, size_t inputs, size_t outputs, size_t mixin)
+        bool serialize_rctsig_prunable(Archive<W> &ar, size_t inputs, size_t outputs, size_t mixin)
         {
             if (inputs >= 0xffffffff)
                 return false;
             if (outputs >= 0xffffffff)
                 return false;
             if (mixin >= 0xffffffff)
-                return false;
-            if (type == RCTTypeNull)
-                return ar.stream().good();
-            if (type != RCTTypeCLSAG)
                 return false;
 
             uint32_t nbp = bulletproofs.size();
@@ -393,9 +361,7 @@ namespace rct
         }
 
         BEGIN_SERIALIZE_OBJECT()
-        FIELD(rangeSigs)
         FIELD(bulletproofs)
-        FIELD(MGs)
         FIELD(CLSAGs)
         FIELD(pseudoOuts)
         END_SERIALIZE()
@@ -520,9 +486,6 @@ namespace rct
     void b2h(key &amountdh, bits amountb2);
     //int[64] to uint long long
     xmr_amount b2d(bits amountb);
-
-    bool is_rct_simple(int type);
-    bool is_rct_bulletproof(int type);
 
     static inline const rct::key &pk2rct(const crypto::public_key &pk) { return (const rct::key &)pk; }
     static inline const rct::key &sk2rct(const crypto::secret_key &sk) { return (const rct::key &)sk; }

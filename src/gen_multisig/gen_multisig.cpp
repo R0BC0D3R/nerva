@@ -60,7 +60,7 @@ namespace genms
 {
     const char *tr(const char *str)
     {
-        return i18n_translate(str, "tools::gen_multisig");
+        return str;
     }
 
 } // namespace genms

@@ -56,6 +56,10 @@ namespace cryptonote
     using std::uint64_t;
     using std::vector;
 
+    const difficulty_type max64bit(std::numeric_limits<std::uint64_t>::max());
+    const boost::multiprecision::uint256_t max128bit(std::numeric_limits<boost::multiprecision::uint128_t>::max());
+    const boost::multiprecision::uint512_t max256bit(std::numeric_limits<boost::multiprecision::uint256_t>::max());
+
 #if defined(__x86_64__)
     static inline void mul(uint64_t a, uint64_t b, uint64_t &low, uint64_t &high)
     {
@@ -114,26 +118,44 @@ namespace cryptonote
         return a + b < a || (c && a + b == (uint64_t)-1);
     }
 
-    bool check_hash(const crypto::hash &hash, uint64_t difficulty)
+    bool check_hash_64(const crypto::hash &hash, uint64_t difficulty)
     {
         uint64_t low, high, top, cur;
         // First check the highest word, this will most likely fail for a random hash.
-        mul(swap64le(((const uint64_t *)&hash)[3]), difficulty, top, high);
-        if (high != 0)
-        {
-            return false;
+        mul(swap64le(((const uint64_t *) &hash)[3]), difficulty, top, high);
+        if (high != 0) {
+        return false;
         }
-        mul(swap64le(((const uint64_t *)&hash)[0]), difficulty, low, cur);
-        mul(swap64le(((const uint64_t *)&hash)[1]), difficulty, low, high);
+        mul(swap64le(((const uint64_t *) &hash)[0]), difficulty, low, cur);
+        mul(swap64le(((const uint64_t *) &hash)[1]), difficulty, low, high);
         bool carry = cadd(cur, low);
         cur = high;
-        mul(swap64le(((const uint64_t *)&hash)[2]), difficulty, low, high);
+        mul(swap64le(((const uint64_t *) &hash)[2]), difficulty, low, high);
         carry = cadc(cur, low, carry);
         carry = cadc(high, top, carry);
         return !carry;
     }
 
-    std::string hex(difficulty_type_128 v)
+    bool check_hash_128(const crypto::hash &hash, difficulty_type difficulty)
+    {
+        boost::multiprecision::uint512_t hashVal = 0;
+        for(int i = 0; i < 4; i++)
+        {
+            hashVal <<= 64;
+            hashVal |= swap64le(((const uint64_t *) &hash)[3 - i]);
+        }
+        return hashVal * difficulty <= max256bit;
+    }
+
+    bool check_hash(const crypto::hash &hash, difficulty_type difficulty)
+    {
+        if (difficulty <= max64bit) // if can convert to small difficulty - do it
+            return check_hash_64(hash, difficulty.convert_to<std::uint64_t>());
+        else
+            return check_hash_128(hash, difficulty);
+    }
+
+    std::string hex(difficulty_type v)
     {
         static const char chars[] = "0123456789abcdef";
         std::string s;
@@ -172,12 +194,12 @@ namespace cryptonote
     // be reduced from 60*60*2 to 500 seconds to prevent timestamp manipulation from miner's with
     //  > 50% hash power.  If this is too small, it can be increased to 1000 at a cost in protection.
 
-    uint64_t next_difficulty_v6(std::vector<std::uint64_t> timestamps, std::vector<difficulty_type_128> cumulative_difficulties, size_t target_seconds)
+    difficulty_type next_difficulty(std::vector<std::uint64_t> timestamps, std::vector<difficulty_type> cumulative_difficulties, size_t target_seconds)
     {
 
         const int64_t T = static_cast<int64_t>(target_seconds);
         size_t N = DIFFICULTY_WINDOW_V6;
-        int64_t FTL = static_cast<int64_t>(CRYPTONOTE_BLOCK_FUTURE_TIME_LIMIT_V6);
+        int64_t FTL = static_cast<int64_t>(CRYPTONOTE_BLOCK_FUTURE_TIME_LIMIT);
 
         // Return a difficulty of 1 for first 3 blocks if it's the start of the chain.
         if (timestamps.size() < 4)

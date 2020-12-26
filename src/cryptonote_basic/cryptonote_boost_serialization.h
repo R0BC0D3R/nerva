@@ -166,8 +166,7 @@ namespace boost
             a &x.vout;
             a &x.extra;
             a &(rct::rctSigBase &)x.rct_signatures;
-            if (x.rct_signatures.type != rct::RCTTypeNull)
-                a &x.rct_signatures.p;
+            a &x.rct_signatures.p;
         }
 
         template <class Archive>
@@ -197,13 +196,6 @@ namespace boost
         }
 
         template <class Archive>
-        inline void serialize(Archive &a, rct::rangeSig &x, const boost::serialization::version_type ver)
-        {
-            a &x.asig;
-            a &x.Ci;
-        }
-
-        template <class Archive>
         inline void serialize(Archive &a, rct::Bulletproof &x, const boost::serialization::version_type ver)
         {
             a &x.V;
@@ -218,22 +210,6 @@ namespace boost
             a &x.a;
             a &x.b;
             a &x.t;
-        }
-
-        template <class Archive>
-        inline void serialize(Archive &a, rct::boroSig &x, const boost::serialization::version_type ver)
-        {
-            a &x.s0;
-            a &x.s1;
-            a &x.ee;
-        }
-
-        template <class Archive>
-        inline void serialize(Archive &a, rct::mgSig &x, const boost::serialization::version_type ver)
-        {
-            a &x.ss;
-            a &x.cc;
-            // a & x.II; // not serialized, we can recover it from the tx vin
         }
 
         template <class Archive>
@@ -293,15 +269,8 @@ namespace boost
         template <class Archive>
         inline void serialize(Archive &a, rct::rctSigBase &x, const boost::serialization::version_type ver)
         {
-            a &x.type;
-            if (x.type == rct::RCTTypeNull)
-                return;
-            if (x.type != rct::RCTTypeCLSAG)
-                throw boost::archive::archive_exception(boost::archive::archive_exception::other_exception, "Unsupported rct type");
-            // a & x.message; message is not serialized, as it can be reconstructed from the tx data
-            // a & x.mixRing; mixRing is not serialized, as it can be reconstructed from the offsets
-            if (x.type == rct::RCTTypeSimple) // moved to prunable with bulletproofs
-                a &x.pseudoOuts;
+            //if (x.type == rct::RCTTypeSimple)
+            a &x.pseudoOuts;
             a &x.ecdhInfo;
             serializeOutPk(a, x.outPk, ver);
             a &x.txnFee;
@@ -310,41 +279,21 @@ namespace boost
         template <class Archive>
         inline void serialize(Archive &a, rct::rctSigPrunable &x, const boost::serialization::version_type ver)
         {
-            a &x.rangeSigs;
-            if (x.rangeSigs.empty())
-                a &x.bulletproofs;
-            a &x.MGs;
+            a &x.bulletproofs;
             a &x.CLSAGs;
-            if (x.rangeSigs.empty())
-                a &x.pseudoOuts;
+            a &x.pseudoOuts;
         }
 
         template <class Archive>
         inline void serialize(Archive &a, rct::rctSig &x, const boost::serialization::version_type ver)
         {
-            a &x.type;
-            if (x.type == rct::RCTTypeNull)
-                return;
-            if (x.type != rct::RCTTypeCLSAG)
-                throw boost::archive::archive_exception(boost::archive::archive_exception::other_exception, "Unsupported rct type");
             a &x.ecdhInfo;
             serializeOutPk(a, x.outPk, ver);
             a &x.txnFee;
             //--------------
-            a &x.p.rangeSigs;
-            if (x.p.rangeSigs.empty())
-                a &x.p.bulletproofs;
-            a &x.p.MGs;
+            a &x.p.bulletproofs;
             a &x.p.CLSAGs;
-            if (x.type == rct::RCTTypeCLSAG)
-                a &x.p.pseudoOuts;
-        }
-
-        template <class Archive>
-        inline void serialize(Archive &a, rct::RCTConfig &x, const boost::serialization::version_type ver)
-        {
-            a &x.range_proof_type;
-            a &x.is_v2;
+            a &x.p.pseudoOuts;
         }
 
         template <class Archive>

@@ -63,14 +63,8 @@ namespace cryptonote
         void Message::toJson(rapidjson::Writer<epee::byte_stream> &dest) const
         {
             dest.StartObject();
-            INSERT_INTO_JSON_OBJECT(dest, rpc_version, DAEMON_RPC_VERSION_ZMQ);
             doToJson(dest);
             dest.EndObject();
-        }
-
-        void Message::fromJson(const rapidjson::Value &val)
-        {
-            GET_FROM_JSON_OBJECT(val, rpc_version, rpc_version);
         }
 
         FullMessage::FullMessage(std::string &&json_string, bool request)

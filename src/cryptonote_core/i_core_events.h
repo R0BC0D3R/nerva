@@ -1,4 +1,4 @@
-// Copyright (c) 2018, The Monero Project
+// Copyright (c) 2019-2020, The Monero Project
 //
 // All rights reserved.
 //
@@ -28,37 +28,18 @@
 
 #pragma once
 
-#include <boost/utility/string_ref.hpp>
-#include <cstdint>
+#include "cryptonote_basic/blobdatatype.h"
+#include "cryptonote_protocol/enums.h"
+#include "span.h"
 
-namespace epee
+namespace cryptonote
 {
-    namespace net_utils
-    {
-        enum class address_type : std::uint8_t
-        {
-            // Do not change values, this will break serialization
-            invalid = 0,
-            ipv4 = 1,
-            ipv6 = 2,
-            i2p = 3,
-            tor = 4
-        };
+  struct i_core_events
+  {
+    virtual ~i_core_events() noexcept
+    {}
 
-        enum class zone : std::uint8_t
-        {
-            invalid = 0,
-            public_ = 1, // public is keyword
-            i2p = 2,     // order from here changes priority of selection for origin TXes
-            tor = 3
-        };
-
-        // implementations in src/net_utils_base.cpp
-
-        //! \return String name of zone or "invalid" on error.
-        const char *zone_to_string(zone value) noexcept;
-
-        //! \return `zone` enum of `value` or `zone::invalid` on error.
-        zone zone_from_string(boost::string_ref value) noexcept;
-    } // namespace net_utils
-} // namespace epee
+    virtual uint64_t get_target_blockchain_height() const = 0;
+    virtual void on_transactions_relayed(epee::span<const cryptonote::blobdata> tx_blobs, relay_method tx_relay) = 0;
+  };
+}

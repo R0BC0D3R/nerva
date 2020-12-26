@@ -64,6 +64,8 @@ using namespace epee;
 
 #define OUTPUT_HISTOGRAM_RECENT_CUTOFF_RESTRICTION (3 * 86400) // 3 days max, the wallet requests 1.8 days
 
+#define RESTRICTED_BLOCK_COUNT 1000
+
 #define RPC_TRACKER(rpc) \
     PERF_TIMER(rpc);     \
     RPCTracker tracker(#rpc, PERF_TIMER_NAME(rpc))
@@ -802,17 +804,7 @@ namespace cryptonote
 
                         try
                         {
-                            switch (tx.rct_signatures.type)
-                            {
-                            case rct::RCTTypeBP:
-                                tx_amount = rct::decodeRctSimple(tx.rct_signatures, rct::sk2rct(scalar1), i, mask, hwdev);
-                                break;
-                            default:
-                            {
-                                res.status = "Failed. Unknown RCT type";
-                                return false;
-                            }
-                            }
+                            tx_amount = rct::decodeRctSimple(tx.rct_signatures, rct::sk2rct(scalar1), i, mask, hwdev);
                         }
                         catch (const std::exception &e)
                         {

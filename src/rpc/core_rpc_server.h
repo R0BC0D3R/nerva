@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2019, The NERVA Project
+// Copyright (c) 2018-2020, The NERVA Project
 // Copyright (c) 2014-2020, The Monero Project
 //
 // All rights reserved.
@@ -160,7 +160,7 @@ namespace cryptonote
         MAP_JON_RPC_WE("get_output_histogram", on_get_output_histogram, COMMAND_RPC_GET_OUTPUT_HISTOGRAM)
         MAP_JON_RPC_WE("get_version", on_get_version, COMMAND_RPC_GET_VERSION)
         MAP_JON_RPC_WE_IF("get_coinbase_tx_sum", on_get_coinbase_tx_sum, COMMAND_RPC_GET_COINBASE_TX_SUM, !m_restricted)
-        MAP_JON_RPC_WE("get_fee_estimate", on_get_per_kb_fee_estimate, COMMAND_RPC_GET_PER_KB_FEE_ESTIMATE)
+        MAP_JON_RPC_WE("get_fee_estimate",       on_get_base_fee_estimate,      COMMAND_RPC_GET_BASE_FEE_ESTIMATE)
         MAP_JON_RPC_WE_IF("get_alternate_chains", on_get_alternate_chains, COMMAND_RPC_GET_ALTERNATE_CHAINS, !m_restricted)
         MAP_JON_RPC_WE_IF("relay_tx", on_relay_tx, COMMAND_RPC_RELAY_TX, !m_restricted)
         MAP_JON_RPC_WE_IF("sync_info", on_sync_info, COMMAND_RPC_SYNC_INFO, !m_restricted)
@@ -232,7 +232,7 @@ namespace cryptonote
         bool on_get_output_histogram(const COMMAND_RPC_GET_OUTPUT_HISTOGRAM::request &req, COMMAND_RPC_GET_OUTPUT_HISTOGRAM::response &res, epee::json_rpc::error &error_resp, const connection_context *ctx = NULL);
         bool on_get_version(const COMMAND_RPC_GET_VERSION::request &req, COMMAND_RPC_GET_VERSION::response &res, epee::json_rpc::error &error_resp, const connection_context *ctx = NULL);
         bool on_get_coinbase_tx_sum(const COMMAND_RPC_GET_COINBASE_TX_SUM::request &req, COMMAND_RPC_GET_COINBASE_TX_SUM::response &res, epee::json_rpc::error &error_resp, const connection_context *ctx = NULL);
-        bool on_get_per_kb_fee_estimate(const COMMAND_RPC_GET_PER_KB_FEE_ESTIMATE::request &req, COMMAND_RPC_GET_PER_KB_FEE_ESTIMATE::response &res, epee::json_rpc::error &error_resp, const connection_context *ctx = NULL);
+    bool on_get_base_fee_estimate(const COMMAND_RPC_GET_BASE_FEE_ESTIMATE::request& req, COMMAND_RPC_GET_BASE_FEE_ESTIMATE::response& res, epee::json_rpc::error& error_resp, const connection_context *ctx = NULL);
         bool on_get_alternate_chains(const COMMAND_RPC_GET_ALTERNATE_CHAINS::request &req, COMMAND_RPC_GET_ALTERNATE_CHAINS::response &res, epee::json_rpc::error &error_resp, const connection_context *ctx = NULL);
         bool on_relay_tx(const COMMAND_RPC_RELAY_TX::request &req, COMMAND_RPC_RELAY_TX::response &res, epee::json_rpc::error &error_resp, const connection_context *ctx = NULL);
         bool on_sync_info(const COMMAND_RPC_SYNC_INFO::request &req, COMMAND_RPC_SYNC_INFO::response &res, epee::json_rpc::error &error_resp, const connection_context *ctx = NULL);
@@ -254,18 +254,13 @@ namespace cryptonote
         //utils
         uint64_t get_block_reward(const block &blk);
         bool fill_block_header_response(const block &blk, bool orphan_status, uint64_t height, const crypto::hash &hash, block_header_response &response);
-        boost::optional<std::string> get_random_public_node();
+    std::map<std::string, bool> get_public_nodes();
         bool set_bootstrap_daemon(const std::string &address, const std::string &username_password);
         bool set_bootstrap_daemon(const std::string &address, const boost::optional<epee::net_utils::http::login> &credentials);
-        enum invoke_http_mode
-        {
-            JON,
-            BIN,
-            JON_RPC
-        };
+    enum invoke_http_mode { JON, BIN, JON_RPC };
         template <typename COMMAND_TYPE>
         bool use_bootstrap_daemon_if_necessary(const invoke_http_mode &mode, const std::string &command_name, const typename COMMAND_TYPE::request &req, typename COMMAND_TYPE::response &res, bool &r);
-        bool get_block_template(const account_public_address &address, const crypto::hash *prev_block, const cryptonote::blobdata &extra_nonce, size_t &reserved_offset, uint64_t &difficulty, uint64_t &height, uint64_t &expected_reward, block &b, epee::json_rpc::error &error_resp);
+    bool get_block_template(const account_public_address &address, const crypto::hash *prev_block, const cryptonote::blobdata &extra_nonce, size_t &reserved_offset, cryptonote::difficulty_type &difficulty, uint64_t &height, uint64_t &expected_reward, block &b, epee::json_rpc::error &error_resp);
 
         core &m_core;
         nodetool::node_server<cryptonote::t_cryptonote_protocol_handler<cryptonote::core>> &m_p2p;

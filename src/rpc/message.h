@@ -55,7 +55,7 @@ namespace cryptonote
             static const char *STATUS_BAD_REQUEST;
             static const char *STATUS_BAD_JSON;
 
-            Message() : status(STATUS_OK), rpc_version(0) {}
+            Message() : status(STATUS_OK) {}
 
             virtual ~Message() {}
 
@@ -65,7 +65,6 @@ namespace cryptonote
 
             std::string status;
             std::string error_details;
-            uint32_t rpc_version;
         };
 
         class FullMessage

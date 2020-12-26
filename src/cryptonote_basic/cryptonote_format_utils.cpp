@@ -187,31 +187,27 @@ namespace cryptonote
 
             if (!base_only)
             {
-                const bool bulletproof = rct::is_rct_bulletproof(rv.type);
-                if (bulletproof)
+                if (rv.p.bulletproofs.size() != 1)
                 {
-                    if (rv.p.bulletproofs.size() != 1)
-                    {
-                        LOG_PRINT_L1("Failed to parse transaction from blob, bad bulletproofs size in tx " << get_transaction_hash(tx));
-                        return false;
-                    }
-                    if (rv.p.bulletproofs[0].L.size() < 6)
-                    {
-                        LOG_PRINT_L1("Failed to parse transaction from blob, bad bulletproofs L size in tx " << get_transaction_hash(tx));
-                        return false;
-                    }
-                    const size_t max_outputs = 1 << (rv.p.bulletproofs[0].L.size() - 6);
-                    if (max_outputs < tx.vout.size())
-                    {
-                        LOG_PRINT_L1("Failed to parse transaction from blob, bad bulletproofs max outputs in tx " << get_transaction_hash(tx));
-                        return false;
-                    }
-                    const size_t n_amounts = tx.vout.size();
-                    CHECK_AND_ASSERT_MES(n_amounts == rv.outPk.size(), false, "Internal error filling out V");
-                    rv.p.bulletproofs[0].V.resize(n_amounts);
-                    for (size_t i = 0; i < n_amounts; ++i)
-                        rv.p.bulletproofs[0].V[i] = rct::scalarmultKey(rv.outPk[i].mask, rct::INV_EIGHT);
+                    LOG_PRINT_L1("Failed to parse transaction from blob, bad bulletproofs size in tx " << get_transaction_hash(tx));
+                    return false;
                 }
+                if (rv.p.bulletproofs[0].L.size() < 6)
+                {
+                    LOG_PRINT_L1("Failed to parse transaction from blob, bad bulletproofs L size in tx " << get_transaction_hash(tx));
+                    return false;
+                }
+                const size_t max_outputs = 1 << (rv.p.bulletproofs[0].L.size() - 6);
+                if (max_outputs < tx.vout.size())
+                {
+                    LOG_PRINT_L1("Failed to parse transaction from blob, bad bulletproofs max outputs in tx " << get_transaction_hash(tx));
+                    return false;
+                }
+                const size_t n_amounts = tx.vout.size();
+                CHECK_AND_ASSERT_MES(n_amounts == rv.outPk.size(), false, "Internal error filling out V");
+                rv.p.bulletproofs[0].V.resize(n_amounts);
+                for (size_t i = 0; i < n_amounts; ++i)
+                    rv.p.bulletproofs[0].V[i] = rct::scalarmultKey(rv.outPk[i].mask, rct::INV_EIGHT);
             }
         }
         return true;
@@ -430,8 +426,6 @@ namespace cryptonote
     {
         CHECK_AND_ASSERT_MES(!tx.pruned, std::numeric_limits<uint64_t>::max(), "get_transaction_weight does not support pruned txes");
         const rct::rctSig &rv = tx.rct_signatures;
-        if (!rct::is_rct_bulletproof(rv.type))
-            return blob_size;
         const size_t n_padded_outputs = rct::n_bulletproof_max_amounts(rv.p.bulletproofs);
         uint64_t bp_clawback = get_transaction_weight_clawback(tx, n_padded_outputs);
         CHECK_AND_ASSERT_THROW_MES_L1(bp_clawback <= std::numeric_limits<uint64_t>::max() - blob_size, "Weight overflow");
@@ -441,8 +435,6 @@ namespace cryptonote
     uint64_t get_pruned_transaction_weight(const transaction &tx)
     {
         CHECK_AND_ASSERT_MES(tx.pruned, std::numeric_limits<uint64_t>::max(), "get_pruned_transaction_weight does not support non pruned txes");
-        CHECK_AND_ASSERT_MES(tx.rct_signatures.type >= rct::RCTTypeBulletproof2 || tx.rct_signatures.type == rct::RCTTypeCLSAG,
-                             std::numeric_limits<uint64_t>::max(), "get_pruned_transaction_weight does not support older range proof types");
         CHECK_AND_ASSERT_MES(!tx.vin.empty(), std::numeric_limits<uint64_t>::max(), "empty vin");
         CHECK_AND_ASSERT_MES(tx.vin[0].type() == typeid(cryptonote::txin_to_key), std::numeric_limits<uint64_t>::max(), "empty vin");
 
@@ -465,10 +457,7 @@ namespace cryptonote
 
         // calculate deterministic MLSAG data size
         const size_t ring_size = boost::get<cryptonote::txin_to_key>(tx.vin[0]).key_offsets.size();
-        if (tx.rct_signatures.type == rct::RCTTypeCLSAG)
-            extra = tx.vin.size() * (ring_size + 2) * 32;
-        else
-            extra = tx.vin.size() * (ring_size * (1 + 1) * 32 + 32 /* cc */);
+        extra = tx.vin.size() * (ring_size + 2) * 32;
         weight += extra;
 
         // calculate deterministic pseudoOuts size
@@ -1084,7 +1073,7 @@ namespace cryptonote
             const size_t inputs = t.vin.size();
             const size_t outputs = t.vout.size();
             const size_t mixin = t.vin.empty() ? 0 : t.vin[0].type() == typeid(txin_to_key) ? boost::get<txin_to_key>(t.vin[0]).key_offsets.size() - 1 : 0;
-            bool r = tt.rct_signatures.p.serialize_rctsig_prunable(ba, t.rct_signatures.type, inputs, outputs, mixin);
+            bool r = tt.rct_signatures.p.serialize_rctsig_prunable(ba, inputs, outputs, mixin);
             CHECK_AND_ASSERT_MES(r, false, "Failed to serialize rct signatures prunable");
             cryptonote::get_blob_hash(ss.str(), res);
         }
@@ -1134,11 +1123,7 @@ namespace cryptonote
             cryptonote::get_blob_hash(ss.str(), hashes[1]);
         }
 
-        // prunable rct
-        if (t.rct_signatures.type == rct::RCTTypeNull)
-            hashes[2] = crypto::null_hash;
-        else
-            hashes[2] = pruned_data_hash;
+        hashes[2] = pruned_data_hash;
 
         // the tx hash is the hash of the 3 hashes
         crypto::hash res = cn_fast_hash(hashes, sizeof(hashes));
@@ -1164,16 +1149,8 @@ namespace cryptonote
         CHECK_AND_ASSERT_MES(prefix_size <= unprunable_size && unprunable_size <= blob.size(), false, "Inconsistent transaction prefix, unprunable and blob sizes");
         cryptonote::get_blob_hash(blobdata_ref(blob.data() + prefix_size, unprunable_size - prefix_size), hashes[1]);
 
-        // prunable rct
-        if (t.rct_signatures.type == rct::RCTTypeNull)
-        {
-            hashes[2] = crypto::null_hash;
-        }
-        else
-        {
-            cryptonote::blobdata_ref blobref(blob);
-            CHECK_AND_ASSERT_MES(calculate_transaction_prunable_hash(t, &blobref, hashes[2]), false, "Failed to get tx prunable hash");
-        }
+        cryptonote::blobdata_ref blobref(blob);
+        CHECK_AND_ASSERT_MES(calculate_transaction_prunable_hash(t, &blobref, hashes[2]), false, "Failed to get tx prunable hash");
 
         // the tx hash is the hash of the 3 hashes
         res = cn_fast_hash(hashes, sizeof(hashes));

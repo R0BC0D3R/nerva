@@ -26,6 +26,13 @@
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#ifndef _WIN32
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/mman.h>
+#include <fcntl.h>
+#endif
+
 #include "db_lmdb.h"
 
 #include <boost/filesystem.hpp>
@@ -703,7 +710,7 @@ namespace cryptonote
         return threshold_size;
     }
 
-    void BlockchainLMDB::add_block(const block &blk, size_t block_weight, uint64_t long_term_block_weight, const difficulty_type_128 &cumulative_difficulty,
+    void BlockchainLMDB::add_block(const block &blk, size_t block_weight, uint64_t long_term_block_weight, const difficulty_type &cumulative_difficulty,
                                    uint64_t num_rct_outs, const crypto::hash &blk_hash)
     {
         LOG_PRINT_L3("BlockchainLMDB::" << __func__);
@@ -816,7 +823,7 @@ namespace cryptonote
             throw1(DB_ERROR(lmdb_error("Failed to add removal of block info to db transaction: ", result).c_str()));
     }
 
-    uint64_t BlockchainLMDB::add_transaction_data(const crypto::hash &blk_hash, const std::pair<transaction, blobdata> &txp, const crypto::hash &tx_hash, const crypto::hash &tx_prunable_hash)
+uint64_t BlockchainLMDB::add_transaction_data(const crypto::hash& blk_hash, const std::pair<transaction, blobdata_ref>& txp, const crypto::hash& tx_hash, const crypto::hash& tx_prunable_hash)
     {
         LOG_PRINT_L3("BlockchainLMDB::" << __func__);
         check_open();
@@ -4112,7 +4119,7 @@ namespace cryptonote
         memset(&m_tinfo->m_ti_rflags, 0, sizeof(m_tinfo->m_ti_rflags));
     }
 
-    uint64_t BlockchainLMDB::add_block(const std::pair<block, blobdata> &blk, size_t block_weight, uint64_t long_term_block_weight, const difficulty_type_128 &cumulative_difficulty,
+    uint64_t BlockchainLMDB::add_block(const std::pair<block, blobdata> &blk, size_t block_weight, uint64_t long_term_block_weight, const difficulty_type &cumulative_difficulty,
                                        const std::vector<std::pair<transaction, blobdata>> &txs)
     {
         LOG_PRINT_L3("BlockchainLMDB::" << __func__);

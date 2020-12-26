@@ -1843,19 +1843,19 @@ namespace hw
             return mask;
         }
 
-        bool device_ledger::ecdhEncode(rct::ecdhTuple &unmasked, const rct::key &AKout, bool short_amount)
+        bool device_ledger::ecdhEncode(rct::ecdhTuple &unmasked, const rct::key &AKout)
         {
             AUTO_LOCK_CMD();
 
 #ifdef DEBUG_HWDEVICE
             const rct::key AKout_x = hw::ledger::decrypt(AKout);
             rct::ecdhTuple unmasked_x = unmasked;
-            this->controle_device->ecdhEncode(unmasked_x, AKout_x, short_amount);
+            this->controle_device->ecdhEncode(unmasked_x, AKout_x);
 #endif
 
             int offset = set_command_header(INS_BLIND);
             //options
-            this->buffer_send[offset] = short_amount ? 0x02 : 0x00;
+            this->buffer_send[offset] = 0x02;
             offset += 1;
             // AKout
             this->send_secret(AKout.bytes, offset);
@@ -1884,19 +1884,19 @@ namespace hw
             return true;
         }
 
-        bool device_ledger::ecdhDecode(rct::ecdhTuple &masked, const rct::key &AKout, bool short_amount)
+        bool device_ledger::ecdhDecode(rct::ecdhTuple &masked, const rct::key &AKout)
         {
             AUTO_LOCK_CMD();
 
 #ifdef DEBUG_HWDEVICE
             const rct::key AKout_x = hw::ledger::decrypt(AKout);
             rct::ecdhTuple masked_x = masked;
-            this->controle_device->ecdhDecode(masked_x, AKout_x, short_amount);
+            this->controle_device->ecdhDecode(masked_x, AKout_x);
 #endif
 
             int offset = set_command_header(INS_UNBLIND);
             //options
-            this->buffer_send[offset] = short_amount ? 0x02 : 0x00;
+            this->buffer_send[offset] = 0x02;
             offset += 1;
             // AKout
             this->send_secret(AKout.bytes, offset);
@@ -1976,36 +1976,11 @@ namespace hw
             // check fee user input
             CHECK_AND_ASSERT_THROW_MES(this->exchange_wait_on_input() == 0, "Fee denied on device.");
 
-            //pseudoOuts
-            if (type == rct::RCTTypeSimple)
-            {
-                for (i = 0; i < inputs_size; i++)
-                {
-                    offset = set_command_header(INS_VALIDATE, 0x01, i + 2);
-                    //options
-                    this->buffer_send[offset] = (i == inputs_size - 1) ? 0x00 : 0x80;
-                    offset += 1;
-                    //pseudoOut
-                    memmove(this->buffer_send + offset, data + data_offset, 32);
-                    offset += 32;
-                    data_offset += 32;
-
-                    this->buffer_send[4] = offset - 5;
-                    this->length_send = offset;
-                    this->exchange();
-                }
-            }
-
             // ======  Aout, Bout, AKout, C, v, k ======
             kv_offset = data_offset;
-            if (type == rct::RCTTypeBulletproof2 || type == rct::RCTTypeCLSAG)
-            {
-                C_offset = kv_offset + (8) * outputs_size;
-            }
-            else
-            {
-                C_offset = kv_offset + (32 + 32) * outputs_size;
-            }
+
+            C_offset = kv_offset + (8) * outputs_size;
+
             for (i = 0; i < outputs_size; i++)
             {
                 ABPkeys outKeys;
@@ -2020,7 +1995,7 @@ namespace hw
                 offset = set_command_header(INS_VALIDATE, 0x02, i + 1);
                 //options
                 this->buffer_send[offset] = (i == outputs_size - 1) ? 0x00 : 0x80;
-                this->buffer_send[offset] |= (type == rct::RCTTypeBulletproof2 || type == rct::RCTTypeCLSAG) ? 0x02 : 0x00;
+                this->buffer_send[offset] |= 0x02;
                 offset += 1;
                 //is_subaddress
                 this->buffer_send[offset] = outKeys.is_subaddress;
@@ -2041,28 +2016,15 @@ namespace hw
                 memmove(this->buffer_send + offset, data + C_offset, 32);
                 offset += 32;
                 C_offset += 32;
-                if (type == rct::RCTTypeBulletproof2 || type == rct::RCTTypeCLSAG)
-                {
-                    //k
-                    memset(this->buffer_send + offset, 0, 32);
-                    offset += 32;
-                    //v
-                    memset(this->buffer_send + offset, 0, 32);
-                    memmove(this->buffer_send + offset, data + kv_offset, 8);
-                    offset += 32;
-                    kv_offset += 8;
-                }
-                else
-                {
-                    //k
-                    memmove(this->buffer_send + offset, data + kv_offset, 32);
-                    offset += 32;
-                    kv_offset += 32;
-                    //v
-                    memmove(this->buffer_send + offset, data + kv_offset, 32);
-                    offset += 32;
-                    kv_offset += 32;
-                }
+
+                 //k
+                memset(this->buffer_send + offset, 0, 32);
+                offset += 32;
+                //v
+                memset(this->buffer_send + offset, 0, 32);
+                memmove(this->buffer_send + offset, data + kv_offset, 8);
+                offset += 32;
+                kv_offset += 8;
 
                 this->buffer_send[4] = offset - 5;
                 this->length_send = offset;

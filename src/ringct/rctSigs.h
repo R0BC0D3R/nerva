@@ -71,19 +71,6 @@ namespace rct
     clsag proveRctCLSAGSimple(const key &, const ctkeyV &, const ctkey &, const key &, const key &, const multisig_kLRki *, key *, key *, unsigned int, hw::device &);
     bool verRctCLSAGSimple(const key &, const clsag &, const ctkeyV &, const key &);
 
-    //Ring-ct MG sigs
-    //Prove:
-    //   c.f. https://eprint.iacr.org/2015/1098 section 4. definition 10.
-    //   This does the MG sig on the "dest" part of the given key matrix, and
-    //   the last row is the sum of input commitments from that column - sum output commitments
-    //   this shows that sum inputs = sum outputs
-    //Ver:
-    //   verifies the above sig is created corretly
-    mgSig proveRctMG(const ctkeyM &pubs, const ctkeyV &inSk, const keyV &outMasks, const ctkeyV &outPk, const multisig_kLRki *kLRki, key *mscout, unsigned int index, const key &txnFee, const key &message, hw::device &hwdev);
-    mgSig proveRctMGSimple(const key &message, const ctkeyV &pubs, const ctkey &inSk, const key &a, const key &Cout, const multisig_kLRki *kLRki, key *mscout, unsigned int index, hw::device &hwdev);
-    bool verRctMG(const mgSig &mg, const ctkeyM &pubs, const ctkeyV &outPk, const key &txnFee, const key &message);
-    bool verRctMGSimple(const key &message, const mgSig &mg, const ctkeyV &pubs, const key &C);
-
     //These functions get keys from blockchain
     //replace these when connecting blockchain
     //getKeyFromBlockchain grabs a key from the blockchain at "reference_index" to mix with
@@ -92,8 +79,8 @@ namespace rct
     void getKeyFromBlockchain(ctkey &a, size_t reference_index);
     std::tuple<ctkeyM, xmr_amount> populateFromBlockchain(ctkeyV inPk, int mixin);
 
-    rctSig genRctSimple(const key &message, const ctkeyV &inSk, const ctkeyV &inPk, const keyV &destinations, const std::vector<xmr_amount> &inamounts, const std::vector<xmr_amount> &outamounts, const keyV &amount_keys, const std::vector<multisig_kLRki> *kLRki, multisig_out *msout, xmr_amount txnFee, unsigned int mixin, const RCTConfig &rct_config, hw::device &hwdev);
-    rctSig genRctSimple(const key &message, const ctkeyV &inSk, const keyV &destinations, const std::vector<xmr_amount> &inamounts, const std::vector<xmr_amount> &outamounts, xmr_amount txnFee, const ctkeyM &mixRing, const keyV &amount_keys, const std::vector<multisig_kLRki> *kLRki, multisig_out *msout, const std::vector<unsigned int> &index, ctkeyV &outSk, const RCTConfig &rct_config, hw::device &hwdev);
+    rctSig genRctSimple(const key &message, const ctkeyV &inSk, const ctkeyV &inPk, const keyV &destinations, const std::vector<xmr_amount> &inamounts, const std::vector<xmr_amount> &outamounts, const keyV &amount_keys, const std::vector<multisig_kLRki> *kLRki, multisig_out *msout, xmr_amount txnFee, unsigned int mixin, hw::device &hwdev);
+    rctSig genRctSimple(const key &message, const ctkeyV &inSk, const keyV &destinations, const std::vector<xmr_amount> &inamounts, const std::vector<xmr_amount> &outamounts, xmr_amount txnFee, const ctkeyM &mixRing, const keyV &amount_keys, const std::vector<multisig_kLRki> *kLRki, multisig_out *msout, const std::vector<unsigned int> &index, ctkeyV &outSk, hw::device &hwdev);
     bool verRctSemanticsSimple(const rctSig &rv);
     bool verRctSemanticsSimple(const std::vector<const rctSig *> &rv);
     bool verRctNonSemanticsSimple(const rctSig &rv);

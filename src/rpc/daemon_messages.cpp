@@ -528,24 +528,6 @@ namespace cryptonote
             GET_FROM_JSON_OBJECT(val, keys, keys);
         }
 
-        void GetRPCVersion::Request::doToJson(rapidjson::Writer<epee::byte_stream> &dest) const
-        {
-        }
-
-        void GetRPCVersion::Request::fromJson(const rapidjson::Value &val)
-        {
-        }
-
-        void GetRPCVersion::Response::doToJson(rapidjson::Writer<epee::byte_stream> &dest) const
-        {
-            INSERT_INTO_JSON_OBJECT(dest, version, version);
-        }
-
-        void GetRPCVersion::Response::fromJson(const rapidjson::Value &val)
-        {
-            GET_FROM_JSON_OBJECT(val, version, version);
-        }
-
         void GetFeeEstimate::Request::doToJson(rapidjson::Writer<epee::byte_stream> &dest) const
         {
             INSERT_INTO_JSON_OBJECT(dest, num_grace_blocks, num_grace_blocks);

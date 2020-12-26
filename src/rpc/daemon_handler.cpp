@@ -93,7 +93,6 @@ namespace cryptonote
                     {u8"get_output_histogram", handle_message<GetOutputHistogram>},
                     {u8"get_output_keys", handle_message<GetOutputKeys>},
                     {u8"get_peer_list", handle_message<GetPeerList>},
-                    {u8"get_rpc_version", handle_message<GetRPCVersion>},
                     {u8"get_transaction_pool", handle_message<GetTransactionPool>},
                     {u8"get_transactions", handle_message<GetTransactions>},
                     {u8"get_tx_global_output_indices", handle_message<GetTxGlobalOutputIndices>},

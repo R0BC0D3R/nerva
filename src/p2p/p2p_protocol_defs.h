@@ -40,6 +40,7 @@
 #include "misc_language.h"
 #include "string_tools.h"
 #include "time_helper.h"
+#include "serialization/serialization.h"
 #include "cryptonote_config.h"
 
 namespace nodetool

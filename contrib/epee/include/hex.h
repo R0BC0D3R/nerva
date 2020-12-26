@@ -39,61 +39,63 @@
 
 namespace epee
 {
-  struct to_hex
-  {
-    //! \return A std::string containing hex of `src`.
-    static std::string string(const span<const std::uint8_t> src);
-    //! \return A epee::wipeable_string containing hex of `src`.
-    static epee::wipeable_string wipeable_string(const span<const std::uint8_t> src);
-    template<typename T> static epee::wipeable_string wipeable_string(const T &pod) { return wipeable_string(span<const uint8_t>((const uint8_t*)&pod, sizeof(pod))); }
-
-    //! \return An array containing hex of `src`.
-    template<std::size_t N>
-    static std::array<char, N * 2> array(const std::array<std::uint8_t, N>& src) noexcept
+    struct to_hex
     {
-      std::array<char, N * 2> out;
-      static_assert(N <= 128, "keep the stack size down");
-      buffer_unchecked(out.data(), {src.data(), src.size()});
-      return out;
-    }
+        //! \return A std::string containing hex of `src`.
+        static std::string string(const span<const std::uint8_t> src);
+        //! \return A epee::wipeable_string containing hex of `src`.
+        static epee::wipeable_string wipeable_string(const span<const std::uint8_t> src);
+        template <typename T>
+        static epee::wipeable_string wipeable_string(const T &pod) { return wipeable_string(span<const uint8_t>((const uint8_t *)&pod, sizeof(pod))); }
 
-    //! \return An array containing hex of `src`.
-    template<typename T>
-    static std::array<char, sizeof(T) * 2> array(const T& src) noexcept
+        //! \return An array containing hex of `src`.
+        template <std::size_t N>
+        static std::array<char, N * 2> array(const std::array<std::uint8_t, N> &src) noexcept
+        {
+            std::array<char, N * 2> out;
+            static_assert(N <= 128, "keep the stack size down");
+            buffer_unchecked(out.data(), {src.data(), src.size()});
+            return out;
+        }
+
+        //! \return An array containing hex of `src`.
+        template <typename T>
+        static std::array<char, sizeof(T) * 2> array(const T &src) noexcept
+        {
+            std::array<char, sizeof(T) * 2> out;
+            static_assert(sizeof(T) <= 128, "keep the stack size down");
+            buffer_unchecked(out.data(), as_byte_span(src));
+            return out;
+        }
+
+        //! Append `src` as hex to `out`.
+        static void buffer(std::ostream &out, const span<const std::uint8_t> src);
+
+        //! Append `< + src + >` as hex to `out`.
+        static void formatted(std::ostream &out, const span<const std::uint8_t> src);
+
+    private:
+        template <typename T>
+        T static convert(const span<const std::uint8_t> src);
+
+        //! Write `src` bytes as hex to `out`. `out` must be twice the length
+        static void buffer_unchecked(char *out, const span<const std::uint8_t> src) noexcept;
+    };
+
+    //! Convert hex in UTF8 encoding to binary
+    struct from_hex
     {
-      std::array<char, sizeof(T) * 2> out;
-      static_assert(sizeof(T) <= 128, "keep the stack size down");
-      buffer_unchecked(out.data(), as_byte_span(src));
-      return out;
-    }
+        static bool to_string(std::string &out, boost::string_ref src);
 
-    //! Append `src` as hex to `out`.
-    static void buffer(std::ostream& out, const span<const std::uint8_t> src);
+        static bool to_buffer(span<std::uint8_t> out, boost::string_ref src) noexcept;
 
-    //! Append `< + src + >` as hex to `out`.
-    static void formatted(std::ostream& out, const span<const std::uint8_t> src);
+    private:
+        static bool to_buffer_unchecked(std::uint8_t *out, boost::string_ref src) noexcept;
+    };
 
-  private:
-    template<typename T> T static convert(const span<const std::uint8_t> src);
-
-    //! Write `src` bytes as hex to `out`. `out` must be twice the length
-    static void buffer_unchecked(char* out, const span<const std::uint8_t> src) noexcept;
-  };
-
-  //! Convert hex in UTF8 encoding to binary
-  struct from_hex
-  {
-    static bool to_string(std::string& out, boost::string_ref src);
-
-    static bool to_buffer(span<std::uint8_t> out, boost::string_ref src) noexcept;
-
-  private:
-    static bool to_buffer_unchecked(std::uint8_t* out, boost::string_ref src) noexcept;
-  };
-
-  //! Convert hex in current C locale encoding to binary
-  struct from_hex_locale
-  {
-      static std::vector<uint8_t> to_vector(boost::string_ref src);
-  };
-}
+    //! Convert hex in current C locale encoding to binary
+    struct from_hex_locale
+    {
+        static std::vector<uint8_t> to_vector(boost::string_ref src);
+    };
+} // namespace epee

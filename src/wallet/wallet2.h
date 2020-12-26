@@ -63,7 +63,6 @@
 #include "common/password.h"
 #include "node_rpc_proxy.h"
 #include "message_store.h"
-#include "wallet_light_rpc.h"
 
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "wallet.wallet2"
@@ -518,7 +517,6 @@ namespace tools
             std::vector<size_t> selected_transfers;
             std::vector<uint8_t> extra;
             uint64_t unlock_time;
-            rct::RCTConfig rct_config;
             std::vector<cryptonote::tx_destination_entry> dests; // original setup, does not include change
             uint32_t subaddr_account;                            // subaddress account of your wallet to be used in this transfer
             std::set<uint32_t> subaddr_indices;                  // set of address indices used as inputs in this transfer
@@ -530,7 +528,6 @@ namespace tools
             FIELD(selected_transfers)
             FIELD(extra)
             FIELD(unlock_time)
-            FIELD(rct_config)
             FIELD(dests)
             FIELD(subaddr_account)
             FIELD(subaddr_indices)
@@ -909,14 +906,6 @@ namespace tools
         bool get_seed(epee::wipeable_string &electrum_words, const epee::wipeable_string &passphrase = epee::wipeable_string()) const;
 
         /*!
-    * \brief Checks if light wallet. A light wallet sends view key to a server where the blockchain is scanned.
-    */
-        bool light_wallet() const { return m_light_wallet; }
-        void set_light_wallet(bool light_wallet) { m_light_wallet = light_wallet; }
-        uint64_t get_light_wallet_scanned_block_height() const { return m_light_wallet_scanned_block_height; }
-        uint64_t get_light_wallet_blockchain_height() const { return m_light_wallet_blockchain_height; }
-
-        /*!
      * \brief Gets the seed language
      */
         const std::string &get_seed_language() const;
@@ -981,7 +970,7 @@ namespace tools
                                uint64_t unlock_time, uint64_t fee, const std::vector<uint8_t> &extra, T destination_split_strategy, const tx_dust_policy &dust_policy, cryptonote::transaction &tx, pending_tx &ptx);
         void transfer_selected_rct(std::vector<cryptonote::tx_destination_entry> dsts, const std::vector<size_t> &selected_transfers, size_t fake_outputs_count,
                                    std::vector<std::vector<tools::wallet2::get_outs_entry>> &outs,
-                                   uint64_t unlock_time, uint64_t fee, const std::vector<uint8_t> &extra, cryptonote::transaction &tx, pending_tx &ptx, const rct::RCTConfig &rct_config);
+                                   uint64_t unlock_time, uint64_t fee, const std::vector<uint8_t> &extra, cryptonote::transaction &tx, pending_tx &ptx);
 
         void commit_tx(pending_tx &ptx_vector);
         void commit_tx(std::vector<pending_tx> &ptx_vector);
@@ -1029,7 +1018,7 @@ namespace tools
         void get_unconfirmed_payments_out(std::list<std::pair<crypto::hash, wallet2::unconfirmed_transfer_details>> &unconfirmed_payments, const boost::optional<uint32_t> &subaddr_account = boost::none, const std::set<uint32_t> &subaddr_indices = {}) const;
         void get_unconfirmed_payments(std::list<std::pair<crypto::hash, wallet2::pool_payment_details>> &unconfirmed_payments, const boost::optional<uint32_t> &subaddr_account = boost::none, const std::set<uint32_t> &subaddr_indices = {}) const;
 
-        uint64_t get_blockchain_current_height() const { return m_light_wallet_blockchain_height ? m_light_wallet_blockchain_height : m_blockchain.size(); }
+        uint64_t get_blockchain_current_height() const { return m_blockchain.size(); }
         void rescan_spent();
         void rescan_blockchain(bool hard, bool refresh = true, bool keep_key_images = false);
         bool is_transfer_unlocked(const transfer_details &td);
@@ -1100,7 +1089,6 @@ namespace tools
         FIELD(m_tx_device)
         FIELD(m_device_last_key_image_sync)
         FIELD(m_cold_key_images)
-        FIELD(m_rpc_client_secret_key)
         END_SERIALIZE()
 
         /*!
@@ -1208,7 +1196,6 @@ namespace tools
 
         uint8_t get_current_hard_fork();
         void get_hard_fork_info(uint8_t version, uint64_t &earliest_height);
-        bool use_fork_rules(uint8_t version, int64_t early_blocks = 0);
         int get_fee_algorithm();
 
         std::string get_wallet_file() const;
@@ -1268,8 +1255,6 @@ namespace tools
         struct message_signature_result_t
         {
             bool valid;
-            unsigned version;
-            bool old;
             message_signature_type_t type;
         };
         message_signature_result_t verify(const std::string &data, const cryptonote::account_public_address &address, const std::string &signature) const;
@@ -1340,39 +1325,6 @@ namespace tools
 
         bool is_unattended() const { return m_unattended; }
 
-        // Light wallet specific functions
-        // fetch unspent outs from lw node and store in m_transfers
-        void light_wallet_get_unspent_outs();
-        // fetch txs and store in m_payments
-        void light_wallet_get_address_txs();
-        // get_address_info
-        bool light_wallet_get_address_info(tools::COMMAND_RPC_GET_ADDRESS_INFO::response &response);
-        // Login. new_address is true if address hasn't been used on lw node before.
-        bool light_wallet_login(bool &new_address);
-        // Send an import request to lw node. returns info about import fee, address and payment_id
-        bool light_wallet_import_wallet_request(tools::COMMAND_RPC_IMPORT_WALLET_REQUEST::response &response);
-        // get random outputs from light wallet server
-        void light_wallet_get_outs(std::vector<std::vector<get_outs_entry>> &outs, const std::vector<size_t> &selected_transfers, size_t fake_outputs_count);
-        // Parse rct string
-        bool light_wallet_parse_rct_str(const std::string &rct_string, const crypto::public_key &tx_pub_key, uint64_t internal_output_index, rct::key &decrypted_mask, rct::key &rct_commit, bool decrypt) const;
-        // check if key image is ours
-        bool light_wallet_key_image_is_ours(const crypto::key_image &key_image, const crypto::public_key &tx_public_key, uint64_t out_index);
-
-        /*
-     * "attributes" are a mechanism to store an arbitrary number of string values
-     * on the level of the wallet as a whole, identified by keys. Their introduction,
-     * technically the unordered map m_attributes stored as part of a wallet file,
-     * led to a new wallet file version, but now new singular pieces of info may be added
-     * without the need for a new version.
-     *
-     * The first and so far only value stored as such an attribute is the description.
-     * It's stored under the standard key ATTRIBUTE_DESCRIPTION (see method set_description).
-     *
-     * The mechanism is open to all clients and allows them to use it for storing basically any
-     * single string values in a wallet. To avoid the problem that different clients possibly
-     * overwrite or misunderstand each other's attributes, a two-part key scheme is
-     * proposed: <client name>.<value name>
-     */
         const char *const ATTRIBUTE_DESCRIPTION = "wallet2.description";
         void set_attribute(const std::string &key, const std::string &value);
         bool get_attribute(const std::string &key, std::string &value) const;
@@ -1654,17 +1606,6 @@ namespace tools
         // Aux transaction data from device
         serializable_unordered_map<crypto::hash, std::string> m_tx_device;
 
-        // Light wallet
-        bool m_light_wallet; /* sends view key to daemon for scanning */
-        uint64_t m_light_wallet_scanned_block_height;
-        uint64_t m_light_wallet_blockchain_height;
-        uint64_t m_light_wallet_per_kb_fee = FEE_PER_KB;
-        bool m_light_wallet_connected;
-        uint64_t m_light_wallet_balance;
-        uint64_t m_light_wallet_unlocked_balance;
-        // Light wallet info needed to populate m_payment requires 2 separate api calls (get_address_txs and get_unspent_outs)
-        // We save the info from the first call in m_light_wallet_address_txs for easier lookup.
-        std::unordered_map<crypto::hash, address_tx> m_light_wallet_address_txs;
         // store calculated key image for faster lookup
         serializable_unordered_map<crypto::public_key, serializable_map<uint64_t, crypto::key_image>> m_key_image_cache;
 
@@ -1849,7 +1790,6 @@ namespace boost
             a &x.subaddr_account;
             a &x.subaddr_indices;
             a &x.selected_transfers;
-            a &x.rct_config;
         }
 
         template <class Archive>
@@ -1883,7 +1823,6 @@ namespace boost
 
 namespace tools
 {
-
     namespace detail
     {
         //----------------------------------------------------------------------------------------------------
@@ -1934,7 +1873,6 @@ namespace tools
             std::for_each(src.outputs.begin(), src.outputs.end(), [&](const cryptonote::tx_source_entry::output_entry &s_e) { indexes += boost::to_string(s_e.first) + " "; });
             LOG_PRINT_L0("amount=" << cryptonote::print_money(src.amount) << ", real_output=" << src.real_output << ", real_output_in_tx_index=" << src.real_output_in_tx_index << ", indexes: " << indexes);
         }
-        //----------------------------------------------------------------------------------------------------
     } // namespace detail
-      //----------------------------------------------------------------------------------------------------
 } // namespace tools
+ 

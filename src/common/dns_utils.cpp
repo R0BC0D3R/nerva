@@ -203,7 +203,7 @@ namespace tools
         const char *DNS_PUBLIC = getenv("DNS_PUBLIC");
         if (DNS_PUBLIC)
         {
-            dns_public_addr = tools::dns_utils::parse_dns_public(std::string(DNS_PUBLIC));
+            dns_public_addr = tools::dns_utils::parse_dns_public(DNS_PUBLIC);
             if (dns_public_addr.empty())
                 MERROR("Failed to parse DNS_PUBLIC");
         }

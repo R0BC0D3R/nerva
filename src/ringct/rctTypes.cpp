@@ -31,6 +31,7 @@
 #include "misc_log_ex.h"
 #include "cryptonote_config.h"
 #include "rctTypes.h"
+#include "int-util.h"
 using namespace crypto;
 using namespace std;
 
@@ -216,28 +217,6 @@ namespace rct
             vali = (xmr_amount)(vali * 2 + amountb[j]);
         }
         return vali;
-    }
-
-    bool is_rct_simple(int type)
-    {
-        switch (type)
-        {
-        case RCTTypeCLSAG:
-            return true;
-        default:
-            return false;
-        }
-    }
-
-    bool is_rct_bulletproof(int type)
-    {
-        switch (type)
-        {
-        case RCTTypeCLSAG:
-            return true;
-        default:
-            return false;
-        }
     }
 
     size_t n_bulletproof_amounts(const Bulletproof &proof)

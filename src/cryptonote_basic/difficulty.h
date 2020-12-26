@@ -42,7 +42,9 @@ namespace cryptonote
 
     std::string hex(difficulty_type v);
 
-    bool check_hash(const crypto::hash &hash, uint64_t difficulty);
+    bool check_hash_64(const crypto::hash &hash, uint64_t difficulty);
+    bool check_hash_128(const crypto::hash &hash, difficulty_type difficulty);
+    bool check_hash(const crypto::hash &hash, difficulty_type difficulty);
 
-    uint64_t next_difficulty_v6(std::vector<uint64_t> timestamps, std::vector<difficulty_type_128> cumulative_difficulties, size_t target_seconds);
+    difficulty_type next_difficulty(std::vector<uint64_t> timestamps, std::vector<difficulty_type> cumulative_difficulties, size_t target_seconds);
 } // namespace cryptonote

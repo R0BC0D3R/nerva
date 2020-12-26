@@ -328,7 +328,7 @@ namespace cryptonote
         virtual bool for_all_outputs(uint64_t amount, const std::function<bool(uint64_t height)> &f) const;
         virtual bool for_all_alt_blocks(std::function<bool(const crypto::hash &blkid, const alt_block_data_t &data, const cryptonote::blobdata_ref *blob)> f, bool include_blob = false) const;
 
-        virtual uint64_t add_block(const std::pair<block, blobdata> &blk, size_t block_weight, uint64_t long_term_block_weight, const difficulty_type &cumulative_difficulty, const uint64_t &coins_generated, const std::vector<std::pair<transaction, blobdata>> &txs);
+        virtual uint64_t add_block(const std::pair<block, blobdata> &blk, size_t block_weight, uint64_t long_term_block_weight, const difficulty_type &cumulative_difficulty, const std::vector<std::pair<transaction, blobdata>> &txs);
 
         virtual void set_batch_transactions(bool batch_transactions);
         virtual bool batch_start(uint64_t batch_num_blocks = 0, uint64_t batch_bytes = 0);

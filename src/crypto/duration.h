@@ -1,4 +1,4 @@
-// Copyright (c) 2018, The Monero Project
+// Copyright (c) 2020, The Monero Project
 //
 // All rights reserved.
 //
@@ -28,37 +28,43 @@
 
 #pragma once
 
-#include <boost/utility/string_ref.hpp>
-#include <cstdint>
+#include <chrono>
+#include "crypto/crypto.h"
 
-namespace epee
+namespace crypto
 {
-    namespace net_utils
+  //! Generate poisson distributed values in discrete `D` time units.
+  template<typename D>
+  struct random_poisson_duration
+  {
+    using result_type = D;                 //!< std::chrono::duration time unit precision
+    using rep = typename result_type::rep; //!< Type used to represent duration value
+
+    //! \param average for generated durations
+    explicit random_poisson_duration(result_type average)
+      : dist(average.count() < 0 ? 0 : average.count())
+    {}
+
+    //! Generate a crypto-secure random duration
+    result_type operator()()
     {
-        enum class address_type : std::uint8_t
-        {
-            // Do not change values, this will break serialization
-            invalid = 0,
-            ipv4 = 1,
-            ipv6 = 2,
-            i2p = 3,
-            tor = 4
-        };
+      crypto::random_device rand{};
+      return result_type{dist(rand)};
+    }
 
-        enum class zone : std::uint8_t
-        {
-            invalid = 0,
-            public_ = 1, // public is keyword
-            i2p = 2,     // order from here changes priority of selection for origin TXes
-            tor = 3
-        };
+  private:
+    std::poisson_distribution<rep> dist;
+  };
 
-        // implementations in src/net_utils_base.cpp
+    /* A custom duration is used for subsecond precision because of the
+       variance. If 5000 milliseconds is given, 95% of the values fall between
+       4859ms-5141ms in 1ms increments (not enough time variance). Providing 1/4
+       seconds would yield 95% of the values between 3s-7.25s in 1/4s
+       increments. */
 
-        //! \return String name of zone or "invalid" on error.
-        const char *zone_to_string(zone value) noexcept;
-
-        //! \return `zone` enum of `value` or `zone::invalid` on error.
-        zone zone_from_string(boost::string_ref value) noexcept;
-    } // namespace net_utils
-} // namespace epee
+  //! Generate random durations with 1 second precision
+  using random_poisson_seconds = random_poisson_duration<std::chrono::seconds>;
+  //! Generate random duration with 1/4 second precision
+  using random_poisson_subseconds =
+    random_poisson_duration<std::chrono::duration<std::chrono::milliseconds::rep, std::ratio<1, 4>>>;
+}

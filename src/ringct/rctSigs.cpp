@@ -299,7 +299,7 @@ namespace rct
         std::stringstream ss;
         binary_archive<true> ba(ss);
         CHECK_AND_ASSERT_THROW_MES(!rv.mixRing.empty(), "Empty mixRing");
-        const size_t inputs = is_rct_simple(rv.type) ? rv.mixRing.size() : rv.mixRing[0].size();
+        const size_t inputs = rv.mixRing.size();
         const size_t outputs = rv.ecdhInfo.size();
         key prehash;
         CHECK_AND_ASSERT_THROW_MES(const_cast<rctSig &>(rv).serialize_rctsig_base(ba, inputs, outputs),
@@ -308,111 +308,30 @@ namespace rct
         hashes.push_back(hash2rct(h));
 
         keyV kv;
-        if (rv.type == RCTTypeCLSAG)
+
+        kv.reserve((6 * 2 + 9) * rv.p.bulletproofs.size());
+        for (const auto &p : rv.p.bulletproofs)
         {
-            kv.reserve((6 * 2 + 9) * rv.p.bulletproofs.size());
-            for (const auto &p : rv.p.bulletproofs)
-            {
-                // V are not hashed as they're expanded from outPk.mask
-                // (and thus hashed as part of rctSigBase above)
-                kv.push_back(p.A);
-                kv.push_back(p.S);
-                kv.push_back(p.T1);
-                kv.push_back(p.T2);
-                kv.push_back(p.taux);
-                kv.push_back(p.mu);
-                for (size_t n = 0; n < p.L.size(); ++n)
-                    kv.push_back(p.L[n]);
-                for (size_t n = 0; n < p.R.size(); ++n)
-                    kv.push_back(p.R[n]);
-                kv.push_back(p.a);
-                kv.push_back(p.b);
-                kv.push_back(p.t);
-            }
+            // V are not hashed as they're expanded from outPk.mask
+            // (and thus hashed as part of rctSigBase above)
+            kv.push_back(p.A);
+            kv.push_back(p.S);
+            kv.push_back(p.T1);
+            kv.push_back(p.T2);
+            kv.push_back(p.taux);
+            kv.push_back(p.mu);
+            for (size_t n = 0; n < p.L.size(); ++n)
+                kv.push_back(p.L[n]);
+            for (size_t n = 0; n < p.R.size(); ++n)
+                kv.push_back(p.R[n]);
+            kv.push_back(p.a);
+            kv.push_back(p.b);
+            kv.push_back(p.t);
         }
-        else
-        {
-            kv.reserve((64 * 3 + 1) * rv.p.rangeSigs.size());
-            for (const auto &r : rv.p.rangeSigs)
-            {
-                for (size_t n = 0; n < 64; ++n)
-                    kv.push_back(r.asig.s0[n]);
-                for (size_t n = 0; n < 64; ++n)
-                    kv.push_back(r.asig.s1[n]);
-                kv.push_back(r.asig.ee);
-                for (size_t n = 0; n < 64; ++n)
-                    kv.push_back(r.Ci[n]);
-            }
-        }
+
         hashes.push_back(cn_fast_hash(kv));
         hwdev.mlsag_prehash(ss.str(), inputs, outputs, hashes, rv.outPk, prehash);
         return prehash;
-    }
-
-    //Ring-ct MG sigs
-    //Prove:
-    //   c.f. https://eprint.iacr.org/2015/1098 section 4. definition 10.
-    //   This does the MG sig on the "dest" part of the given key matrix, and
-    //   the last row is the sum of input commitments from that column - sum output commitments
-    //   this shows that sum inputs = sum outputs
-    //Ver:
-    //   verifies the above sig is created corretly
-    mgSig proveRctMG(const key &message, const ctkeyM &pubs, const ctkeyV &inSk, const ctkeyV &outSk, const ctkeyV &outPk, const multisig_kLRki *kLRki, key *mscout, unsigned int index, const key &txnFeeKey, hw::device &hwdev)
-    {
-        //setup vars
-        size_t cols = pubs.size();
-        CHECK_AND_ASSERT_THROW_MES(cols >= 1, "Empty pubs");
-        size_t rows = pubs[0].size();
-        CHECK_AND_ASSERT_THROW_MES(rows >= 1, "Empty pubs");
-        for (size_t i = 1; i < cols; ++i)
-        {
-            CHECK_AND_ASSERT_THROW_MES(pubs[i].size() == rows, "pubs is not rectangular");
-        }
-        CHECK_AND_ASSERT_THROW_MES(inSk.size() == rows, "Bad inSk size");
-        CHECK_AND_ASSERT_THROW_MES(outSk.size() == outPk.size(), "Bad outSk/outPk size");
-        CHECK_AND_ASSERT_THROW_MES((kLRki && mscout) || (!kLRki && !mscout), "Only one of kLRki/mscout is present");
-
-        keyV sk(rows + 1);
-        keyV tmp(rows + 1);
-        size_t i = 0, j = 0;
-        for (i = 0; i < rows + 1; i++)
-        {
-            sc_0(sk[i].bytes);
-            identity(tmp[i]);
-        }
-        keyM M(cols, tmp);
-        //create the matrix to mg sig
-        for (i = 0; i < cols; i++)
-        {
-            M[i][rows] = identity();
-            for (j = 0; j < rows; j++)
-            {
-                M[i][j] = pubs[i][j].dest;
-                addKeys(M[i][rows], M[i][rows], pubs[i][j].mask); //add input commitments in last row
-            }
-        }
-        sc_0(sk[rows].bytes);
-        for (j = 0; j < rows; j++)
-        {
-            sk[j] = copy(inSk[j].dest);
-            sc_add(sk[rows].bytes, sk[rows].bytes, inSk[j].mask.bytes); //add masks in last row
-        }
-        for (i = 0; i < cols; i++)
-        {
-            for (size_t j = 0; j < outPk.size(); j++)
-            {
-                subKeys(M[i][rows], M[i][rows], outPk[j].mask); //subtract output Ci's in last row
-            }
-            //subtract txn fee output in last row
-            subKeys(M[i][rows], M[i][rows], txnFeeKey);
-        }
-        for (size_t j = 0; j < outPk.size(); j++)
-        {
-            sc_sub(sk[rows].bytes, sk[rows].bytes, outSk[j].mask.bytes); //subtract output masks in last row..
-        }
-        mgSig result = MLSAG_Gen(message, M, sk, kLRki, mscout, index, rows, hwdev);
-        memwipe(sk.data(), sk.size() * sizeof(key));
-        return result;
     }
 
     clsag proveRctCLSAGSimple(const key &message, const ctkeyV &pubs, const ctkey &inSk, const key &a, const key &Cout, const multisig_kLRki *kLRki, key *mscout, key *mspout, unsigned int index, hw::device &hwdev)
@@ -611,7 +530,7 @@ namespace rct
         return index;
     }
 
-    rctSig genRctSimple(const key &message, const ctkeyV &inSk, const keyV &destinations, const vector<xmr_amount> &inamounts, const vector<xmr_amount> &outamounts, xmr_amount txnFee, const ctkeyM &mixRing, const keyV &amount_keys, const std::vector<multisig_kLRki> *kLRki, multisig_out *msout, const std::vector<unsigned int> &index, ctkeyV &outSk, const RCTConfig &rct_config, hw::device &hwdev)
+    rctSig genRctSimple(const key &message, const ctkeyV &inSk, const keyV &destinations, const vector<xmr_amount> &inamounts, const vector<xmr_amount> &outamounts, xmr_amount txnFee, const ctkeyM &mixRing, const keyV &amount_keys, const std::vector<multisig_kLRki> *kLRki, multisig_out *msout, const std::vector<unsigned int> &index, ctkeyV &outSk, hw::device &hwdev)
     {
         CHECK_AND_ASSERT_THROW_MES(inamounts.size() > 0, "Empty inamounts");
         CHECK_AND_ASSERT_THROW_MES(inamounts.size() == inSk.size(), "Different number of inamounts/inSk");
@@ -630,71 +549,38 @@ namespace rct
         }
 
         rctSig rv;
-        CHECK_AND_ASSERT_THROW_MES(rv.type == RCTTypeCLSAG, "genRctSimple: Wrong Tx type");
+
         rv.message = message;
         rv.outPk.resize(destinations.size());
-        if (!bulletproof)
-            rv.p.rangeSigs.resize(destinations.size());
         rv.ecdhInfo.resize(destinations.size());
 
         size_t i;
-        keyV masks(destinations.size()); //sk mask..
+        //keyV masks(destinations.size()); //sk mask..
         outSk.resize(destinations.size());
         for (i = 0; i < destinations.size(); i++)
             rv.outPk[i].dest = copy(destinations[i]);
 
         rv.p.bulletproofs.clear();
-        if (bulletproof)
+
+        size_t n_amounts = outamounts.size();
+        size_t amounts_proved = 0;
+
+        rct::keyV C, masks;
+        if (hwdev.get_mode() == hw::device::TRANSACTION_CREATE_FAKE)
         {
-            size_t n_amounts = outamounts.size();
-            size_t amounts_proved = 0;
-            if (rct_config.range_proof_type == RangeProofPaddedBulletproof)
-            {
-                rct::keyV C, masks;
-                if (hwdev.get_mode() == hw::device::TRANSACTION_CREATE_FAKE)
-                {
-                    // use a fake bulletproof for speed
-                    rv.p.bulletproofs.push_back(make_dummy_bulletproof(outamounts, C, masks));
-                }
-                else
-                {
-                    const epee::span<const key> keys{&amount_keys[0], amount_keys.size()};
-                    rv.p.bulletproofs.push_back(proveRangeBulletproof(C, masks, outamounts, keys, hwdev));
-                }
-                for (i = 0; i < outamounts.size(); ++i)
-                {
-                    rv.outPk[i].mask = rct::scalarmult8(C[i]);
-                    outSk[i].mask = masks[i];
-                }
-            }
-            else
-                while (amounts_proved < n_amounts)
-                {
-                    size_t batch_size = 1;
-                    if (rct_config.range_proof_type == RangeProofMultiOutputBulletproof)
-                        while (batch_size * 2 + amounts_proved <= n_amounts && batch_size * 2 <= BULLETPROOF_MAX_OUTPUTS)
-                            batch_size *= 2;
-                    rct::keyV C, masks;
-                    std::vector<uint64_t> batch_amounts(batch_size);
-                    for (i = 0; i < batch_size; ++i)
-                        batch_amounts[i] = outamounts[i + amounts_proved];
-                    if (hwdev.get_mode() == hw::device::TRANSACTION_CREATE_FAKE)
-                    {
-                        // use a fake bulletproof for speed
-                        rv.p.bulletproofs.push_back(make_dummy_bulletproof(batch_amounts, C, masks));
-                    }
-                    else
-                    {
-                        const epee::span<const key> keys{&amount_keys[amounts_proved], batch_size};
-                        rv.p.bulletproofs.push_back(proveRangeBulletproof(C, masks, batch_amounts, keys, hwdev));
-                    }
-                    for (i = 0; i < batch_size; ++i)
-                    {
-                        rv.outPk[i + amounts_proved].mask = rct::scalarmult8(C[i]);
-                        outSk[i + amounts_proved].mask = masks[i];
-                    }
-                    amounts_proved += batch_size;
-                }
+            // use a fake bulletproof for speed
+            rv.p.bulletproofs.push_back(make_dummy_bulletproof(outamounts, C, masks));
+        }
+        else
+        {
+            const epee::span<const key> keys{&amount_keys[0], amount_keys.size()};
+            rv.p.bulletproofs.push_back(proveRangeBulletproof(C, masks, outamounts, keys, hwdev));
+        }
+
+        for (i = 0; i < outamounts.size(); ++i)
+        {
+            rv.outPk[i].mask = rct::scalarmult8(C[i]);
+            outSk[i].mask = masks[i];
         }
 
         key sumout = zero();
@@ -711,7 +597,7 @@ namespace rct
         //set txn fee
         rv.txnFee = txnFee;
         rv.mixRing = mixRing;
-        keyV &pseudoOuts = bulletproof ? rv.p.pseudoOuts : rv.pseudoOuts;
+        keyV &pseudoOuts = rv.p.pseudoOuts;
         pseudoOuts.resize(inamounts.size());
         rv.p.CLSAGs.resize(inamounts.size());
         key sumpouts = zero(); //sum pseudoOut masks
@@ -730,19 +616,15 @@ namespace rct
         if (msout)
         {
             msout->c.resize(inamounts.size());
-            msout->mu_p.resize(rv.type == RCTTypeCLSAG ? inamounts.size() : 0);
+            msout->mu_p.resize(inamounts.size());
         }
         for (i = 0; i < inamounts.size(); i++)
-        {
-            if (rv.type == RCTTypeCLSAG)
-            {
-                rv.p.CLSAGs[i] = proveRctCLSAGSimple(full_message, rv.mixRing[i], inSk[i], a[i], pseudoOuts[i], kLRki ? &(*kLRki)[i] : NULL, msout ? &msout->c[i] : NULL, msout ? &msout->mu_p[i] : NULL, index[i], hwdev);
-            }
-        }
+            rv.p.CLSAGs[i] = proveRctCLSAGSimple(full_message, rv.mixRing[i], inSk[i], a[i], pseudoOuts[i], kLRki ? &(*kLRki)[i] : NULL, msout ? &msout->c[i] : NULL, msout ? &msout->mu_p[i] : NULL, index[i], hwdev);
+
         return rv;
     }
 
-    rctSig genRctSimple(const key &message, const ctkeyV &inSk, const ctkeyV &inPk, const keyV &destinations, const vector<xmr_amount> &inamounts, const vector<xmr_amount> &outamounts, const keyV &amount_keys, const std::vector<multisig_kLRki> *kLRki, multisig_out *msout, xmr_amount txnFee, unsigned int mixin, const RCTConfig &rct_config, hw::device &hwdev)
+    rctSig genRctSimple(const key &message, const ctkeyV &inSk, const ctkeyV &inPk, const keyV &destinations, const vector<xmr_amount> &inamounts, const vector<xmr_amount> &outamounts, const keyV &amount_keys, const std::vector<multisig_kLRki> *kLRki, multisig_out *msout, xmr_amount txnFee, unsigned int mixin, hw::device &hwdev)
     {
         std::vector<unsigned int> index;
         index.resize(inPk.size());
@@ -754,7 +636,7 @@ namespace rct
             mixRing[i].resize(mixin + 1);
             index[i] = populateFromBlockchainSimple(mixRing[i], inPk[i], mixin);
         }
-        return genRctSimple(message, inSk, destinations, inamounts, outamounts, txnFee, mixRing, amount_keys, kLRki, msout, index, outSk, rct_config, hwdev);
+        return genRctSimple(message, inSk, destinations, inamounts, outamounts, txnFee, mixRing, amount_keys, kLRki, msout, index, outSk, hwdev);
     }
 
     bool verRctSemanticsSimple(const std::vector<const rctSig *> &rvv)
@@ -773,33 +655,11 @@ namespace rct
             {
                 CHECK_AND_ASSERT_MES(rvp, false, "rctSig pointer is NULL");
                 const rctSig &rv = *rvp;
-                CHECK_AND_ASSERT_MES(rv.type == RCTTypeCLSAG, false, "verRctSemanticsSimple called on non simple rctSig");
 
-                if (bulletproof)
-                {
-                    CHECK_AND_ASSERT_MES(rv.outPk.size() == n_bulletproof_amounts(rv.p.bulletproofs), false, "Mismatched sizes of outPk and bulletproofs");
-                    if (rv.type == RCTTypeCLSAG)
-                    {
-                        CHECK_AND_ASSERT_MES(rv.p.MGs.empty(), false, "MGs are not empty for CLSAG");
-                        CHECK_AND_ASSERT_MES(rv.p.pseudoOuts.size() == rv.p.CLSAGs.size(), false, "Mismatched sizes of rv.p.pseudoOuts and rv.p.CLSAGs");
-                    }
-                    else
-                    {
-                        CHECK_AND_ASSERT_MES(rv.p.CLSAGs.empty(), false, "CLSAGs are not empty for MLSAG");
-                        CHECK_AND_ASSERT_MES(rv.p.pseudoOuts.size() == rv.p.MGs.size(), false, "Mismatched sizes of rv.p.pseudoOuts and rv.p.MGs");
-                    }
-                    CHECK_AND_ASSERT_MES(rv.pseudoOuts.empty(), false, "rv.pseudoOuts is not empty");
-                }
-                else
-                {
-                    CHECK_AND_ASSERT_MES(rv.outPk.size() == rv.p.rangeSigs.size(), false, "Mismatched sizes of outPk and rv.p.rangeSigs");
-                    CHECK_AND_ASSERT_MES(rv.pseudoOuts.size() == rv.p.MGs.size(), false, "Mismatched sizes of rv.pseudoOuts and rv.p.MGs");
-                    CHECK_AND_ASSERT_MES(rv.p.pseudoOuts.empty(), false, "rv.p.pseudoOuts is not empty");
-                }
+                CHECK_AND_ASSERT_MES(rv.outPk.size() == n_bulletproof_amounts(rv.p.bulletproofs), false, "Mismatched sizes of outPk and bulletproofs");
+                CHECK_AND_ASSERT_MES(rv.p.pseudoOuts.size() == rv.p.CLSAGs.size(), false, "Mismatched sizes of rv.p.pseudoOuts and rv.p.CLSAGs");
+                CHECK_AND_ASSERT_MES(rv.pseudoOuts.empty(), false, "rv.pseudoOuts is not empty");
                 CHECK_AND_ASSERT_MES(rv.outPk.size() == rv.ecdhInfo.size(), false, "Mismatched sizes of outPk and rv.ecdhInfo");
-
-                if (!bulletproof)
-                    max_non_bp_proofs += rv.p.rangeSigs.size();
             }
 
             results.resize(max_non_bp_proofs);
@@ -807,8 +667,7 @@ namespace rct
             {
                 const rctSig &rv = *rvp;
 
-                const bool bulletproof = is_rct_bulletproof(rv.type);
-                const keyV &pseudoOuts = bulletproof ? rv.p.pseudoOuts : rv.pseudoOuts;
+                const keyV &pseudoOuts = rv.p.pseudoOuts;
 
                 rct::keyV masks(rv.outPk.size());
                 for (size_t i = 0; i < rv.outPk.size(); i++)
@@ -876,14 +735,8 @@ namespace rct
         {
             PERF_TIMER(verRctNonSemanticsSimple);
 
-            CHECK_AND_ASSERT_MES(rv.type == RCTTypeCLSAG,
-                                 false, "verRctNonSemanticsSimple called on non simple rctSig");
-            const bool bulletproof = is_rct_bulletproof(rv.type);
             // semantics check is early, and mixRing/MGs aren't resolved yet
-            if (bulletproof)
-                CHECK_AND_ASSERT_MES(rv.p.pseudoOuts.size() == rv.mixRing.size(), false, "Mismatched sizes of rv.p.pseudoOuts and mixRing");
-            else
-                CHECK_AND_ASSERT_MES(rv.pseudoOuts.size() == rv.mixRing.size(), false, "Mismatched sizes of rv.pseudoOuts and mixRing");
+            CHECK_AND_ASSERT_MES(rv.p.pseudoOuts.size() == rv.mixRing.size(), false, "Mismatched sizes of rv.p.pseudoOuts and mixRing");
 
             const size_t threads = std::max(rv.outPk.size(), rv.mixRing.size());
 
@@ -891,7 +744,7 @@ namespace rct
             tools::threadpool &tpool = tools::threadpool::getInstance();
             tools::threadpool::waiter waiter(tpool);
 
-            const keyV &pseudoOuts = bulletproof ? rv.p.pseudoOuts : rv.pseudoOuts;
+            const keyV &pseudoOuts = rv.p.pseudoOuts;
 
             const key message = get_pre_mlsag_hash(rv, hw::get_device("default"));
 
@@ -900,12 +753,7 @@ namespace rct
             for (size_t i = 0; i < rv.mixRing.size(); i++)
             {
                 tpool.submit(&waiter, [&, i] {
-                    if (rv.type == RCTTypeCLSAG)
-                    {
-                        results[i] = verRctCLSAGSimple(message, rv.p.CLSAGs[i], rv.mixRing[i], pseudoOuts[i]);
-                    }
-                    else
-                        results[i] = verRctMGSimple(message, rv.p.MGs[i], rv.mixRing[i], pseudoOuts[i]);
+                    results[i] = verRctCLSAGSimple(message, rv.p.CLSAGs[i], rv.mixRing[i], pseudoOuts[i]);
                 });
             }
             if (!waiter.wait())
@@ -915,7 +763,7 @@ namespace rct
             {
                 if (!results[i])
                 {
-                    LOG_PRINT_L1("verRctMGSimple/verRctCLSAGSimple failed for input " << i);
+                    LOG_PRINT_L1("verRctCLSAGSimple failed for input " << i);
                     return false;
                 }
             }
@@ -937,7 +785,6 @@ namespace rct
 
     xmr_amount decodeRctSimple(const rctSig &rv, const key &sk, unsigned int i, key &mask, hw::device &hwdev)
     {
-        CHECK_AND_ASSERT_MES(rv.type == RCTTypeCLSAG, false, "decodeRct called on non simple rctSig");
         CHECK_AND_ASSERT_THROW_MES(i < rv.ecdhInfo.size(), "Bad index");
         CHECK_AND_ASSERT_THROW_MES(rv.outPk.size() == rv.ecdhInfo.size(), "Mismatched sizes of rv.outPk and rv.ecdhInfo");
 
@@ -970,11 +817,9 @@ namespace rct
 
     bool signMultisigCLSAG(rctSig &rv, const std::vector<unsigned int> &indices, const keyV &k, const multisig_out &msout, const key &secret_key)
     {
-        CHECK_AND_ASSERT_MES(rv.type == RCTTypeCLSAG, false, "unsupported rct type");
         CHECK_AND_ASSERT_MES(indices.size() == k.size(), false, "Mismatched k/indices sizes");
         CHECK_AND_ASSERT_MES(k.size() == rv.p.CLSAGs.size(), false, "Mismatched k/CLSAGs size");
         CHECK_AND_ASSERT_MES(k.size() == msout.c.size(), false, "Mismatched k/msout.c size");
-        CHECK_AND_ASSERT_MES(rv.p.MGs.empty(), false, "MGs not empty for CLSAGs");
         CHECK_AND_ASSERT_MES(msout.c.size() == msout.mu_p.size(), false, "Bad mu_p size");
         for (size_t n = 0; n < indices.size(); ++n)
         {
@@ -995,9 +840,6 @@ namespace rct
 
     bool signMultisig(rctSig &rv, const std::vector<unsigned int> &indices, const keyV &k, const multisig_out &msout, const key &secret_key)
     {
-        if (rv.type == RCTTypeCLSAG)
-            return signMultisigCLSAG(rv, indices, k, msout, secret_key);
-        else
-            return signMultisigMLSAG(rv, indices, k, msout, secret_key);
+        return signMultisigCLSAG(rv, indices, k, msout, secret_key);
     }
 } // namespace rct

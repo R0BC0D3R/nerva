@@ -178,10 +178,10 @@ namespace cryptonote
         out.target = tk;
         tx.vout.push_back(out);
 
-        tx.version = TRANSACTION_VERSION_V2;
+        tx.version = TRANSACTION_VERSION;
 
         //lock
-        tx.unlock_time = CRYPTONOTE_MINED_MONEY_UNLOCK_WINDOW_V6;
+        tx.unlock_time = CRYPTONOTE_MINED_MONEY_UNLOCK_WINDOW;
         tx.vin.push_back(in);
 
         tx.invalidate_hashes();
@@ -210,7 +210,7 @@ namespace cryptonote
         return addr.m_view_public_key;
     }
     //---------------------------------------------------------------
-    bool construct_tx_with_tx_key(const account_keys &sender_account_keys, const std::unordered_map<crypto::public_key, subaddress_index> &subaddresses, std::vector<tx_source_entry> &sources, std::vector<tx_destination_entry> &destinations, const boost::optional<cryptonote::account_public_address> &change_addr, const std::vector<uint8_t> &extra, transaction &tx, uint64_t unlock_time, const crypto::secret_key &tx_key, const std::vector<crypto::secret_key> &additional_tx_keys, const rct::RCTConfig &rct_config, rct::multisig_out *msout, bool shuffle_outs)
+    bool construct_tx_with_tx_key(const account_keys &sender_account_keys, const std::unordered_map<crypto::public_key, subaddress_index> &subaddresses, std::vector<tx_source_entry> &sources, std::vector<tx_destination_entry> &destinations, const boost::optional<cryptonote::account_public_address> &change_addr, const std::vector<uint8_t> &extra, transaction &tx, uint64_t unlock_time, const crypto::secret_key &tx_key, const std::vector<crypto::secret_key> &additional_tx_keys, rct::multisig_out *msout, bool shuffle_outs)
     {
         hw::device &hwdev = sender_account_keys.get_device();
 
@@ -228,7 +228,7 @@ namespace cryptonote
             msout->c.clear();
         }
 
-        tx.version = current_tx_version;
+        tx.version = TRANSACTION_VERSION;
         tx.unlock_time = unlock_time;
 
         tx.extra = extra;
@@ -346,7 +346,7 @@ namespace cryptonote
                 LOG_ERROR("derived public key mismatch with output public key at index " << idx << ", real out " << src_entr.real_output << "! " << ENDL << "derived_key:"
                                                                                          << string_tools::pod_to_hex(in_ephemeral.pub) << ENDL << "real output_public_key:"
                                                                                          << string_tools::pod_to_hex(src_entr.outputs[src_entr.real_output].second.dest));
-                LOG_ERROR("amount " << src_entr.amount << ", rct " << src_entr.rct);
+                LOG_ERROR("amount " << src_entr.amount);
                 LOG_ERROR("tx pubkey " << src_entr.real_out_tx_key << ", real_output_in_tx_index " << src_entr.real_output_in_tx_index);
                 return false;
             }
@@ -476,7 +476,7 @@ namespace cryptonote
         inSk.reserve(sources.size());
         // mixRing indexing is done the other way round for simple
         rct::ctkeyM mixRing(sources.size());
-        rct::keyV destinations;
+        rct::keyV dests;
         std::vector<uint64_t> inamounts, outamounts;
         std::vector<unsigned int> index;
         std::vector<rct::multisig_kLRki> kLRki;
@@ -500,7 +500,7 @@ namespace cryptonote
         }
         for (size_t i = 0; i < tx.vout.size(); ++i)
         {
-            destinations.push_back(rct::pk2rct(boost::get<txout_to_key>(tx.vout[i].target).key));
+            dests.push_back(rct::pk2rct(boost::get<txout_to_key>(tx.vout[i].target).key));
             outamounts.push_back(tx.vout[i].amount);
             amount_out += tx.vout[i].amount;
         }
@@ -521,17 +521,15 @@ namespace cryptonote
 
         // zero out all amounts to mask rct outputs, real amounts are now encrypted
         for (size_t i = 0; i < tx.vin.size(); ++i)
-        {
-            if (sources[i].rct)
-                boost::get<txin_to_key>(tx.vin[i]).amount = 0;
-        }
+            boost::get<txin_to_key>(tx.vin[i]).amount = 0;
+        
         for (size_t i = 0; i < tx.vout.size(); ++i)
             tx.vout[i].amount = 0;
 
         crypto::hash tx_prefix_hash;
         get_transaction_prefix_hash(tx, tx_prefix_hash, hwdev);
         rct::ctkeyV outSk;
-        tx.rct_signatures = rct::genRctSimple(rct::hash2rct(tx_prefix_hash), inSk, destinations, inamounts, outamounts, amount_in - amount_out, mixRing, amount_keys, msout ? &kLRki : NULL, msout, index, outSk, rct_config, hwdev);
+        tx.rct_signatures = rct::genRctSimple(rct::hash2rct(tx_prefix_hash), inSk, dests, inamounts, outamounts, amount_in - amount_out, mixRing, amount_keys, msout ? &kLRki : NULL, msout, index, outSk, hwdev);
         memwipe(inSk.data(), inSk.size() * sizeof(rct::ctkey));
 
         CHECK_AND_ASSERT_MES(tx.vout.size() == outSk.size(), false, "outSk size does not match vout");
@@ -543,7 +541,7 @@ namespace cryptonote
         return true;
     }
     //---------------------------------------------------------------
-    bool construct_tx_and_get_tx_key(const account_keys &sender_account_keys, const std::unordered_map<crypto::public_key, subaddress_index> &subaddresses, std::vector<tx_source_entry> &sources, std::vector<tx_destination_entry> &destinations, const boost::optional<cryptonote::account_public_address> &change_addr, const std::vector<uint8_t> &extra, transaction &tx, uint64_t unlock_time, crypto::secret_key &tx_key, std::vector<crypto::secret_key> &additional_tx_keys, const rct::RCTConfig &rct_config, rct::multisig_out *msout)
+    bool construct_tx_and_get_tx_key(const account_keys &sender_account_keys, const std::unordered_map<crypto::public_key, subaddress_index> &subaddresses, std::vector<tx_source_entry> &sources, std::vector<tx_destination_entry> &destinations, const boost::optional<cryptonote::account_public_address> &change_addr, const std::vector<uint8_t> &extra, transaction &tx, uint64_t unlock_time, crypto::secret_key &tx_key, std::vector<crypto::secret_key> &additional_tx_keys, rct::multisig_out *msout)
     {
         hw::device &hwdev = sender_account_keys.get_device();
         hwdev.open_tx(tx_key);
@@ -562,7 +560,7 @@ namespace cryptonote
                     additional_tx_keys.push_back(keypair::generate(sender_account_keys.get_device()).sec);
             }
 
-            bool r = construct_tx_with_tx_key(sender_account_keys, subaddresses, sources, destinations, change_addr, extra, tx, unlock_time, tx_key, additional_tx_keys, rct_config, msout);
+            bool r = construct_tx_with_tx_key(sender_account_keys, subaddresses, sources, destinations, change_addr, extra, tx, unlock_time, tx_key, additional_tx_keys, msout);
             hwdev.close_tx();
             return r;
         }
@@ -580,7 +578,7 @@ namespace cryptonote
         crypto::secret_key tx_key;
         std::vector<crypto::secret_key> additional_tx_keys;
         std::vector<tx_destination_entry> destinations_copy = destinations;
-        return construct_tx_and_get_tx_key(sender_account_keys, subaddresses, sources, destinations_copy, change_addr, extra, tx, unlock_time, tx_key, additional_tx_keys, false, {rct::RangeProofBorromean, 0}, NULL);
+        return construct_tx_and_get_tx_key(sender_account_keys, subaddresses, sources, destinations_copy, change_addr, extra, tx, unlock_time, tx_key, additional_tx_keys, NULL);
     }
     //---------------------------------------------------------------
     bool generate_genesis_block(

@@ -44,7 +44,7 @@ Public domain.
 
 static const char sigma[] = "expand 32-byte k";
 
-DISABLE_GCC_AND_CLANG_WARNING(strict - aliasing)
+DISABLE_GCC_AND_CLANG_WARNING(strict-aliasing)
 
 static void chacha(unsigned rounds, const void *data, size_t length, const uint8_t *key, const uint8_t *iv, char *cipher)
 {

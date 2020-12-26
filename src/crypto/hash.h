@@ -82,6 +82,11 @@ namespace crypto
         cn_slow_hash_v11(context, data, length, reinterpret_cast<char *>(&hash), iters, init_size_blk, xx, yy);
     }
 
+    inline void cn_slow_hash(cn_hash_context_t *context, const void *data, std::size_t length, hash &hash)
+    {
+        cn_slow_hash(context, data, length, reinterpret_cast<char *>(&hash), 0);
+    }
+
     inline void tree_hash(const hash *hashes, std::size_t count, hash &root_hash)
     {
         tree_hash(reinterpret_cast<const char(*)[HASH_SIZE]>(hashes), count, reinterpret_cast<char *>(&root_hash));

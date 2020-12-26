@@ -256,9 +256,7 @@ void cn_slow_hash_v11(cn_hash_context_t *context, const void *data, size_t lengt
     }
 
     for (i = 0; i < iters; i++)
-    {
         aes_sw_variant();
-    }
 
     finalize_hash();
 }
@@ -286,18 +284,15 @@ void cn_slow_hash(cn_hash_context_t *context, const void *data, size_t length, c
     for (i = 0; i < CN_SCRATCHPAD_MEMORY / init_size_byte; i++)
     {
         for (j = 0; j < INIT_SIZE_BLK; j++)
-        {
             aesb_pseudo_round(&text[AES_BLOCK_SIZE * j], &text[AES_BLOCK_SIZE * j], aes_ctx->key->exp_data);
-        }
+
         memcpy(&hp_state[i * init_size_byte], text, init_size_byte);
     }
 
     xor_u64();
 
     for (i = 0; i < 0x40000; i++)
-    {
         aes_sw_variant();
-    }
 
     finalize_hash();
 }

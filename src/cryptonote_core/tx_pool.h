@@ -67,18 +67,12 @@ namespace cryptonote
         bool operator()(const tx_by_fee_and_receive_time_entry &a, const tx_by_fee_and_receive_time_entry &b) const
         {
             // sort by greatest first, not least
-            if (a.first.first > b.first.first)
-                return true;
-            else if (a.first.first < b.first.first)
-                return false;
-            else if (a.first.second < b.first.second)
-                return true;
-            else if (a.first.second > b.first.second)
-                return false;
-            else if (a.second != b.second)
-                return true;
-            else
-                return false;
+      if (a.first.first > b.first.first) return true;
+      else if (a.first.first < b.first.first) return false;
+      else if (a.first.second < b.first.second) return true;
+      else if (a.first.second > b.first.second) return false;
+      else if (a.second != b.second) return true;
+      else return false;
         }
     };
 
@@ -109,6 +103,7 @@ namespace cryptonote
      */
         tx_memory_pool(Blockchain &bchs);
 
+
         /**
      * @copydoc add_tx(transaction&, tx_verification_context&, bool, bool, uint8_t)
      *
@@ -116,7 +111,7 @@ namespace cryptonote
      * @tx_relay how the transaction was received
      * @param tx_weight the transaction's weight
      */
-        bool add_tx(transaction &tx, const crypto::hash &id, const cryptonote::blobdata &blob, size_t tx_weight, tx_verification_context &tvc, relay_method tx_relay, bool relayed, uint8_t version);
+        bool add_tx(transaction &tx, const crypto::hash &id, const cryptonote::blobdata &blob, size_t tx_weight, tx_verification_context &tvc, relay_method tx_relay, bool relayed);
 
         /**
      * @brief add a transaction to the transaction pool
@@ -130,11 +125,10 @@ namespace cryptonote
      * @param tvc return-by-reference status about the transaction verification
      * @tx_relay how the transaction was received
      * @param relayed was this transaction from the network or a local client?
-     * @param version the version used to create the transaction
      *
      * @return true if the transaction passes validations, otherwise false
      */
-        bool add_tx(transaction &tx, tx_verification_context &tvc, relay_method tx_relay, bool relayed, uint8_t version);
+        bool add_tx(transaction &tx, tx_verification_context &tvc, relay_method tx_relay, bool relayed);
 
         /**
      * @brief takes a transaction with the given hash from the pool
@@ -375,7 +369,7 @@ namespace cryptonote
      *
      * @return the number of transactions removed
      */
-        size_t validate(uint8_t version);
+        size_t validate();
 
         /**
       * @brief return the cookie

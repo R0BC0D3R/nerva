@@ -1,4 +1,4 @@
-// Copyright (c) 2019, The Monero Project
+// Copyright (c) 2019-2020, The Monero Project
 //
 // All rights reserved.
 //
@@ -30,9 +30,9 @@
 
 namespace epee
 {
-  namespace net_utils
-  {
-    struct ssl_authentication_t;
-    class ssl_options_t;
-  }
-}
+    namespace net_utils
+    {
+        struct ssl_authentication_t;
+        class ssl_options_t;
+    } // namespace net_utils
+} // namespace epee

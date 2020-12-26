@@ -36,6 +36,13 @@
 #include "ringct/rctOps.h"
 #include "cryptonote_config.h"
 
+namespace crypto {
+  namespace wallet {
+    using ::crypto::generate_key_derivation;
+    using ::crypto::derive_subaddress_public_key;
+  }
+}
+
 namespace hw
 {
 

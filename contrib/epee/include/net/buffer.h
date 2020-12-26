@@ -1,21 +1,21 @@
 // Copyright (c) 2018, The Monero Project
-// 
+//
 // All rights reserved.
-// 
+//
 // Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
-// 
+//
 // 1. Redistributions of source code must retain the above copyright notice, this list of
 //    conditions and the following disclaimer.
-// 
+//
 // 2. Redistributions in binary form must reproduce the above copyright notice, this list
 //    of conditions and the following disclaimer in the documentation and/or other
 //    materials provided with the distribution.
-// 
+//
 // 3. Neither the name of the copyright holder nor the names of its contributors may be
 //    used to endorse or promote products derived from this software without specific
 //    prior written permission.
-// 
+//
 // THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
 // EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
 // MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
@@ -40,23 +40,42 @@
 
 namespace epee
 {
-namespace net_utils
-{
-class buffer
-{
-public:
-  buffer(size_t reserve = 0): offset(0) { storage.reserve(reserve); }
+    namespace net_utils
+    {
+        class buffer
+        {
+        public:
+            buffer(size_t reserve = 0) : offset(0) { storage.reserve(reserve); }
 
-  void append(const void *data, size_t sz);
-  void erase(size_t sz) { NET_BUFFER_LOG("erasing " << sz << "/" << size()); CHECK_AND_ASSERT_THROW_MES(offset + sz <= storage.size(), "erase: sz too large"); offset += sz; if (offset == storage.size()) { storage.resize(0); offset = 0; } }
-  epee::span<const uint8_t> span(size_t sz) const { CHECK_AND_ASSERT_THROW_MES(sz <= size(), "span is too large"); return epee::span<const uint8_t>(storage.data() + offset, sz); }
-  // carve must keep the data in scope till next call, other API calls (such as append, erase) can invalidate the carved buffer
-  epee::span<const uint8_t> carve(size_t sz) { CHECK_AND_ASSERT_THROW_MES(sz <= size(), "span is too large"); offset += sz; return epee::span<const uint8_t>(storage.data() + offset - sz, sz); }
-  size_t size() const { return storage.size() - offset; }
+            void append(const void *data, size_t sz);
+            void erase(size_t sz)
+            {
+                NET_BUFFER_LOG("erasing " << sz << "/" << size());
+                CHECK_AND_ASSERT_THROW_MES(offset + sz <= storage.size(), "erase: sz too large");
+                offset += sz;
+                if (offset == storage.size())
+                {
+                    storage.resize(0);
+                    offset = 0;
+                }
+            }
+            epee::span<const uint8_t> span(size_t sz) const
+            {
+                CHECK_AND_ASSERT_THROW_MES(sz <= size(), "span is too large");
+                return epee::span<const uint8_t>(storage.data() + offset, sz);
+            }
+            // carve must keep the data in scope till next call, other API calls (such as append, erase) can invalidate the carved buffer
+            epee::span<const uint8_t> carve(size_t sz)
+            {
+                CHECK_AND_ASSERT_THROW_MES(sz <= size(), "span is too large");
+                offset += sz;
+                return epee::span<const uint8_t>(storage.data() + offset - sz, sz);
+            }
+            size_t size() const { return storage.size() - offset; }
 
-private:
-  std::vector<uint8_t> storage;
-  size_t offset;
-};
-}
-}
+        private:
+            std::vector<uint8_t> storage;
+            size_t offset;
+        };
+    } // namespace net_utils
+} // namespace epee
