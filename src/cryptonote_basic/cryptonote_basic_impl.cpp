@@ -46,9 +46,11 @@ using namespace epee;
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "cn"
 
-namespace cryptonote {
+namespace cryptonote
+{
 
-  struct integrated_address {
+    struct integrated_address
+    {
         account_public_address adr;
         crypto::hash8 payment_id;
 
@@ -111,10 +113,7 @@ namespace cryptonote {
     }
     //-----------------------------------------------------------------------
     std::string get_account_address_as_str(
-      network_type nettype
-    , bool subaddress
-    , account_public_address const & adr
-    )
+        network_type nettype, bool subaddress, account_public_address const &adr)
     {
         uint64_t address_prefix = (subaddress ? config::CRYPTONOTE_PUBLIC_SUBADDRESS_BASE58_PREFIX : config::CRYPTONOTE_PUBLIC_ADDRESS_BASE58_PREFIX);
 
@@ -122,16 +121,12 @@ namespace cryptonote {
     }
     //-----------------------------------------------------------------------
     std::string get_account_integrated_address_as_str(
-      network_type nettype
-    , account_public_address const & adr
-    , crypto::hash8 const & payment_id
-    )
+        network_type nettype, account_public_address const &adr, crypto::hash8 const &payment_id)
     {
         uint64_t integrated_address_prefix = config::CRYPTONOTE_PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX;
 
         integrated_address iadr = {
-      adr, payment_id
-    };
+            adr, payment_id};
         return tools::base58::encode_addr(integrated_address_prefix, t_serializable_object_to_blob(iadr));
     }
     //-----------------------------------------------------------------------
@@ -147,10 +142,7 @@ namespace cryptonote {
     }
     //-----------------------------------------------------------------------
     bool get_account_address_from_str(
-      address_parse_info& info
-    , network_type nettype
-    , std::string const & str
-    )
+        address_parse_info &info, network_type nettype, std::string const &str)
     {
         uint64_t address_prefix = config::CRYPTONOTE_PUBLIC_ADDRESS_BASE58_PREFIX;
         uint64_t integrated_address_prefix = config::CRYPTONOTE_PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX;
@@ -181,7 +173,8 @@ namespace cryptonote {
                 info.is_subaddress = true;
                 info.has_payment_id = false;
             }
-      else {
+            else
+            {
                 LOG_PRINT_L1("Wrong address prefix: " << prefix << ", expected " << address_prefix
                                                       << " or " << integrated_address_prefix
                                                       << " or " << subaddress_prefix);
@@ -229,7 +222,6 @@ namespace cryptonote {
 
             public_address_outer_blob blob = *reinterpret_cast<const public_address_outer_blob *>(buff.data());
 
-
             if (blob.m_ver > CRYPTONOTE_PUBLIC_ADDRESS_TEXTBLOB_VER)
             {
                 LOG_PRINT_L1("Unknown version of public address: " << blob.m_ver << ", expected " << CRYPTONOTE_PUBLIC_ADDRESS_TEXTBLOB_VER);
@@ -252,11 +244,7 @@ namespace cryptonote {
     }
     //--------------------------------------------------------------------------------
     bool get_account_address_from_str_or_url(
-      address_parse_info& info
-    , network_type nettype
-    , const std::string& str_or_url
-    , std::function<std::string(const std::string&, const std::vector<std::string>&, bool)> dns_confirm
-    )
+        address_parse_info &info, network_type nettype, const std::string &str_or_url, std::function<std::string(const std::string &, const std::vector<std::string> &, bool)> dns_confirm)
     {
         if (get_account_address_from_str(info, nettype, str_or_url))
             return true;
@@ -266,11 +254,13 @@ namespace cryptonote {
                get_account_address_from_str(info, nettype, address_str);
     }
     //--------------------------------------------------------------------------------
-  bool operator ==(const cryptonote::transaction& a, const cryptonote::transaction& b) {
+    bool operator==(const cryptonote::transaction &a, const cryptonote::transaction &b)
+    {
         return cryptonote::get_transaction_hash(a) == cryptonote::get_transaction_hash(b);
     }
 
-  bool operator ==(const cryptonote::block& a, const cryptonote::block& b) {
+    bool operator==(const cryptonote::block &a, const cryptonote::block &b)
+    {
         return cryptonote::get_block_hash(a) == cryptonote::get_block_hash(b);
     }
 } // namespace cryptonote

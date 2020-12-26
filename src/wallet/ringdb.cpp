@@ -375,7 +375,7 @@ namespace tools
 
         std::string data_plaintext = decrypt(std::string((const char *)data.mv_data, data.mv_size), key_image, chacha_key, 1);
         outs = decompress_ring(data_plaintext, V1TAG);
-        
+
         MDEBUG("Found ring for key image " << key_image << ":");
         MDEBUG("Relative: " << boost::join(outs | boost::adaptors::transformed([](uint64_t out) { return std::to_string(out); }), " "));
         outs = cryptonote::relative_output_offsets_to_absolute(outs);

@@ -41,12 +41,12 @@
 
 #include "crypto/generic-ops.h"
 
-extern "C" {
+extern "C"
+{
 #include "crypto/random.h"
 #include "crypto/keccak.h"
 }
 #include "crypto/crypto.h"
-
 
 #include "rctTypes.h"
 #include "rctOps.h"
@@ -58,15 +58,16 @@ extern "C" {
 #define DP(x)
 #endif
 
-namespace hw {
+namespace hw
+{
     class device;
 }
 
+namespace rct
+{
 
-namespace rct {
-
-    clsag CLSAG_Gen(const key &message, const keyV & P, const key & p, const keyV & C, const key & z, const keyV & C_nonzero, const key & C_offset, const unsigned int l, const multisig_kLRki *kLRki, key *mscout, key *mspout, hw::device &hwdev);
-    clsag CLSAG_Gen(const key &message, const keyV & P, const key & p, const keyV & C, const key & z, const keyV & C_nonzero, const key & C_offset, const unsigned int l);
+    clsag CLSAG_Gen(const key &message, const keyV &P, const key &p, const keyV &C, const key &z, const keyV &C_nonzero, const key &C_offset, const unsigned int l, const multisig_kLRki *kLRki, key *mscout, key *mspout, hw::device &hwdev);
+    clsag CLSAG_Gen(const key &message, const keyV &P, const key &p, const keyV &C, const key &z, const keyV &C_nonzero, const key &C_offset, const unsigned int l);
     clsag proveRctCLSAGSimple(const key &, const ctkeyV &, const ctkey &, const key &, const key &, const multisig_kLRki *, key *, key *, unsigned int, hw::device &);
     bool verRctCLSAGSimple(const key &, const clsag &, const ctkeyV &, const key &);
 
@@ -78,29 +79,28 @@ namespace rct {
     //   this shows that sum inputs = sum outputs
     //Ver:
     //   verifies the above sig is created corretly
-    mgSig proveRctMG(const ctkeyM & pubs, const ctkeyV & inSk, const keyV &outMasks, const ctkeyV & outPk, const multisig_kLRki *kLRki, key *mscout, unsigned int index, const key &txnFee, const key &message, hw::device &hwdev);
-    mgSig proveRctMGSimple(const key & message, const ctkeyV & pubs, const ctkey & inSk, const key &a , const key &Cout, const multisig_kLRki *kLRki, key *mscout, unsigned int index, hw::device &hwdev);
-    bool verRctMG(const mgSig &mg, const ctkeyM & pubs, const ctkeyV & outPk, const key &txnFee, const key &message);
-    bool verRctMGSimple(const key &message, const mgSig &mg, const ctkeyV & pubs, const key & C);   
+    mgSig proveRctMG(const ctkeyM &pubs, const ctkeyV &inSk, const keyV &outMasks, const ctkeyV &outPk, const multisig_kLRki *kLRki, key *mscout, unsigned int index, const key &txnFee, const key &message, hw::device &hwdev);
+    mgSig proveRctMGSimple(const key &message, const ctkeyV &pubs, const ctkey &inSk, const key &a, const key &Cout, const multisig_kLRki *kLRki, key *mscout, unsigned int index, hw::device &hwdev);
+    bool verRctMG(const mgSig &mg, const ctkeyM &pubs, const ctkeyV &outPk, const key &txnFee, const key &message);
+    bool verRctMGSimple(const key &message, const mgSig &mg, const ctkeyV &pubs, const key &C);
 
     //These functions get keys from blockchain
     //replace these when connecting blockchain
     //getKeyFromBlockchain grabs a key from the blockchain at "reference_index" to mix with
     //populateFromBlockchain creates a keymatrix with "mixin" columns and one of the columns is inPk
     //   the return value are the key matrix, and the index where inPk was put (random).
-    void getKeyFromBlockchain(ctkey & a, size_t reference_index);
+    void getKeyFromBlockchain(ctkey &a, size_t reference_index);
     std::tuple<ctkeyM, xmr_amount> populateFromBlockchain(ctkeyV inPk, int mixin);
 
-    rctSig genRctSimple(const key & message, const ctkeyV & inSk, const ctkeyV & inPk, const keyV & destinations, const std::vector<xmr_amount> & inamounts, const std::vector<xmr_amount> & outamounts, const keyV &amount_keys, const std::vector<multisig_kLRki> *kLRki, multisig_out *msout, xmr_amount txnFee, unsigned int mixin, const RCTConfig &rct_config, hw::device &hwdev);
-    rctSig genRctSimple(const key & message, const ctkeyV & inSk, const keyV & destinations, const std::vector<xmr_amount> & inamounts, const std::vector<xmr_amount> & outamounts, xmr_amount txnFee, const ctkeyM & mixRing, const keyV &amount_keys, const std::vector<multisig_kLRki> *kLRki, multisig_out *msout, const std::vector<unsigned int> & index, ctkeyV &outSk, const RCTConfig &rct_config, hw::device &hwdev);
-	bool verRctSemanticsSimple(const rctSig & rv);
-    bool verRctSemanticsSimple(const std::vector<const rctSig*> & rv);
-    bool verRctNonSemanticsSimple(const rctSig & rv);
+    rctSig genRctSimple(const key &message, const ctkeyV &inSk, const ctkeyV &inPk, const keyV &destinations, const std::vector<xmr_amount> &inamounts, const std::vector<xmr_amount> &outamounts, const keyV &amount_keys, const std::vector<multisig_kLRki> *kLRki, multisig_out *msout, xmr_amount txnFee, unsigned int mixin, const RCTConfig &rct_config, hw::device &hwdev);
+    rctSig genRctSimple(const key &message, const ctkeyV &inSk, const keyV &destinations, const std::vector<xmr_amount> &inamounts, const std::vector<xmr_amount> &outamounts, xmr_amount txnFee, const ctkeyM &mixRing, const keyV &amount_keys, const std::vector<multisig_kLRki> *kLRki, multisig_out *msout, const std::vector<unsigned int> &index, ctkeyV &outSk, const RCTConfig &rct_config, hw::device &hwdev);
+    bool verRctSemanticsSimple(const rctSig &rv);
+    bool verRctSemanticsSimple(const std::vector<const rctSig *> &rv);
+    bool verRctNonSemanticsSimple(const rctSig &rv);
 
-    xmr_amount decodeRctSimple(const rctSig & rv, const key & sk, unsigned int i, key & mask, hw::device &hwdev);
-    xmr_amount decodeRctSimple(const rctSig & rv, const key & sk, unsigned int i, hw::device &hwdev);
+    xmr_amount decodeRctSimple(const rctSig &rv, const key &sk, unsigned int i, key &mask, hw::device &hwdev);
+    xmr_amount decodeRctSimple(const rctSig &rv, const key &sk, unsigned int i, hw::device &hwdev);
     key get_pre_mlsag_hash(const rctSig &rv, hw::device &hwdev);
     bool signMultisig(rctSig &rv, const std::vector<unsigned int> &indices, const keyV &k, const multisig_out &msout, const key &secret_key);
-}
-#endif  /* RCTSIGS_H */
-
+} // namespace rct
+#endif /* RCTSIGS_H */

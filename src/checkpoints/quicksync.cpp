@@ -29,7 +29,6 @@
 //
 // Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
-
 #include "quicksync.h"
 
 #include "common/dns_utils.h"
@@ -45,72 +44,72 @@ using namespace epee;
 
 namespace cryptonote
 {
-  quicksync::quicksync() { }
-  //---------------------------------------------------------------------------
-  bool quicksync::check_block(uint32_t height, const crypto::hash h) const
-  {
-    if (!m_is_loaded)
-      return false;
-
-    auto it = m_data.find(height);
-    
-    if(it == m_data.end())
-      return false;
-
-    if (it->second != h)
-      return false;
-
-    return true;
-  }
-  //---------------------------------------------------------------------------
-  bool quicksync::load(const std::string &qs_file)
-  {
-    auto qs = boost::filesystem::path(qs_file);
-    boost::system::error_code errcode;
-    if (!boost::filesystem::exists(qs, errcode))
+    quicksync::quicksync() {}
+    //---------------------------------------------------------------------------
+    bool quicksync::check_block(uint32_t height, const crypto::hash h) const
     {
-      LOG_PRINT_L1("Quick sync file not found");
-      return false;
+        if (!m_is_loaded)
+            return false;
+
+        auto it = m_data.find(height);
+
+        if (it == m_data.end())
+            return false;
+
+        if (it->second != h)
+            return false;
+
+        return true;
     }
-
-    LOG_PRINT_L1("Adding hashes from quick sync file");
-    
-    std::ifstream import_file;
-    import_file.open(qs_file, std::ios_base::binary | std::ifstream::in);
-
-    if (import_file.fail())
+    //---------------------------------------------------------------------------
+    bool quicksync::load(const std::string &qs_file)
     {
-      MWARNING("import_file.open() fail");
-      return false;
+        auto qs = boost::filesystem::path(qs_file);
+        boost::system::error_code errcode;
+        if (!boost::filesystem::exists(qs, errcode))
+        {
+            LOG_PRINT_L1("Quick sync file not found");
+            return false;
+        }
+
+        LOG_PRINT_L1("Adding hashes from quick sync file");
+
+        std::ifstream import_file;
+        import_file.open(qs_file, std::ios_base::binary | std::ifstream::in);
+
+        if (import_file.fail())
+        {
+            MWARNING("import_file.open() fail");
+            return false;
+        }
+
+        uint32_t quicksync_magic = 0x149f943e;
+
+        uint32_t comp = 0;
+        import_file.read((char *)&comp, sizeof(comp));
+
+        if (comp != quicksync_magic)
+        {
+            MERROR("Quick sync file magic incorrect. ignoring file");
+            return false;
+        }
+
+        import_file.read((char *)&m_min, sizeof(m_min));
+        import_file.read((char *)&m_max, sizeof(m_max));
+
+        LOG_PRINT_L0("Loading quick sync data for blocks " << m_min << " - " << m_max);
+
+        uint32_t count = m_max - m_min;
+        uint32_t x = m_min;
+
+        for (uint32_t i = 0; i < count; i++)
+        {
+            crypto::hash h = crypto::null_hash;
+            import_file.read((char *)&h.data, 32);
+            m_data[x++] = h;
+        }
+
+        m_is_loaded = true;
+        return true;
     }
-
-    uint32_t quicksync_magic = 0x149f943e;
-    
-    uint32_t comp = 0;
-    import_file.read ((char*)&comp, sizeof(comp));
-    
-    if (comp != quicksync_magic)
-    {
-      MERROR("Quick sync file magic incorrect. ignoring file");
-      return false;
-    }
-
-    import_file.read ((char*)&m_min, sizeof(m_min));
-    import_file.read ((char*)&m_max, sizeof(m_max));
-
-    LOG_PRINT_L0("Loading quick sync data for blocks " << m_min << " - " << m_max);
-
-    uint32_t count = m_max - m_min;
-    uint32_t x = m_min;
-
-    for (uint32_t i = 0; i < count; i++)
-    {
-      crypto::hash h = crypto::null_hash;
-      import_file.read ((char*)&h.data, 32);
-      m_data[x++] = h;
-    }
-
-    m_is_loaded = true;
-    return true;
-  }
-}
+} // namespace cryptonote

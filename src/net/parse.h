@@ -37,7 +37,7 @@
 
 namespace net
 {
-    void get_network_address_host_and_port(const std::string& address, std::string& host, std::string& port);
+    void get_network_address_host_and_port(const std::string &address, std::string &host, std::string &port);
 
     /*!
       Identifies onion, i2p and IPv4 addresses and returns them as a generic
@@ -52,7 +52,7 @@ namespace net
       \return A tor or IPv4 address, else error.
     */
     expect<epee::net_utils::network_address>
-        get_network_address(boost::string_ref address, std::uint16_t default_port);
+    get_network_address(boost::string_ref address, std::uint16_t default_port);
 
     /*!
       Identifies an IPv4 subnet in CIDR notatioa and returns it as a generic
@@ -65,8 +65,7 @@ namespace net
       \return A tor or IPv4 address, else error.
     */
     expect<epee::net_utils::ipv4_network_subnet>
-        get_ipv4_subnet_address(boost::string_ref address, bool allow_implicit_32 = false);
+    get_ipv4_subnet_address(boost::string_ref address, bool allow_implicit_32 = false);
 
     expect<boost::asio::ip::tcp::endpoint> get_tcp_endpoint(const boost::string_ref address);
-}
-
+} // namespace net

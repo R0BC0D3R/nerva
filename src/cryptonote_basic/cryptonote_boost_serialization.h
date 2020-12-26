@@ -97,7 +97,6 @@ namespace boost
             a &x.script;
         }
 
-
         template <class Archive>
         inline void serialize(Archive &a, cryptonote::txout_to_key &x, const boost::serialization::version_type ver)
         {
@@ -147,7 +146,6 @@ namespace boost
             a &x.amount;
             a &x.target;
         }
-
 
         template <class Archive>
         inline void serialize(Archive &a, cryptonote::transaction_prefix &x, const boost::serialization::version_type ver)
@@ -239,15 +237,15 @@ namespace boost
         }
 
         template <class Archive>
-  inline void serialize(Archive &a, rct::clsag &x, const boost::serialization::version_type ver)
-  {
-    a & x.s;
-    a & x.c1;
-    // a & x.I; // not serialized, we can recover it from the tx vin
-    a & x.D;
-  }
+        inline void serialize(Archive &a, rct::clsag &x, const boost::serialization::version_type ver)
+        {
+            a &x.s;
+            a &x.c1;
+            // a & x.I; // not serialized, we can recover it from the tx vin
+            a &x.D;
+        }
 
-  template <class Archive>
+        template <class Archive>
         inline void serialize(Archive &a, rct::ecdhTuple &x, const boost::serialization::version_type ver)
         {
             a &x.mask;
@@ -267,7 +265,7 @@ namespace boost
         inline void serialize(Archive &a, rct::multisig_out &x, const boost::serialization::version_type ver)
         {
             a &x.c;
-    a & x.mu_p;
+            a &x.mu_p;
         }
 
         template <class Archive>
@@ -298,7 +296,7 @@ namespace boost
             a &x.type;
             if (x.type == rct::RCTTypeNull)
                 return;
-    if (x.type != rct::RCTTypeCLSAG)
+            if (x.type != rct::RCTTypeCLSAG)
                 throw boost::archive::archive_exception(boost::archive::archive_exception::other_exception, "Unsupported rct type");
             // a & x.message; message is not serialized, as it can be reconstructed from the tx data
             // a & x.mixRing; mixRing is not serialized, as it can be reconstructed from the offsets
@@ -316,7 +314,7 @@ namespace boost
             if (x.rangeSigs.empty())
                 a &x.bulletproofs;
             a &x.MGs;
-      a & x.CLSAGs;
+            a &x.CLSAGs;
             if (x.rangeSigs.empty())
                 a &x.pseudoOuts;
         }
@@ -337,9 +335,9 @@ namespace boost
             if (x.p.rangeSigs.empty())
                 a &x.p.bulletproofs;
             a &x.p.MGs;
-      a & x.p.CLSAGs;
-    if (x.type == rct::RCTTypeCLSAG)
-            a &x.p.pseudoOuts;
+            a &x.p.CLSAGs;
+            if (x.type == rct::RCTTypeCLSAG)
+                a &x.p.pseudoOuts;
         }
 
         template <class Archive>
@@ -350,7 +348,7 @@ namespace boost
         }
 
         template <class Archive>
-  inline void serialize(Archive &a, cryptonote::difficulty_type &x, const boost::serialization::version_type ver)
+        inline void serialize(Archive &a, cryptonote::difficulty_type &x, const boost::serialization::version_type ver)
         {
             if (Archive::is_loading::value)
             {
@@ -366,7 +364,7 @@ namespace boost
             else
             {
                 // store high part
-      cryptonote::difficulty_type x_ = (x >> 64) & 0xffffffffffffffff;
+                cryptonote::difficulty_type x_ = (x >> 64) & 0xffffffffffffffff;
                 uint64_t v = x_.convert_to<uint64_t>();
                 a &v;
                 // store low part

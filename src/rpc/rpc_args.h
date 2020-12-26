@@ -41,56 +41,56 @@
 
 namespace cryptonote
 {
-  //! Processes command line arguments related to server-side RPC
-  struct rpc_args
-  {
-    // non-static construction prevents initialization order issues
-    struct descriptors
+    //! Processes command line arguments related to server-side RPC
+    struct rpc_args
     {
-      descriptors();
-      descriptors(const descriptors&) = delete;
-      descriptors(descriptors&&) = delete;
-      descriptors& operator=(const descriptors&) = delete;
-      descriptors& operator=(descriptors&&) = delete;
+        // non-static construction prevents initialization order issues
+        struct descriptors
+        {
+            descriptors();
+            descriptors(const descriptors &) = delete;
+            descriptors(descriptors &&) = delete;
+            descriptors &operator=(const descriptors &) = delete;
+            descriptors &operator=(descriptors &&) = delete;
 
-      const command_line::arg_descriptor<std::string> rpc_bind_ip;
-      const command_line::arg_descriptor<bool> rpc_auth_basic;
-      const command_line::arg_descriptor<std::string> rpc_bind_ipv6_address;
-      const command_line::arg_descriptor<bool> rpc_use_ipv6;
-      const command_line::arg_descriptor<bool> rpc_ignore_ipv4;
-      const command_line::arg_descriptor<std::string> rpc_login;
-      const command_line::arg_descriptor<bool> confirm_external_bind;
-      const command_line::arg_descriptor<bool> confirm_cleartext_auth;
-      const command_line::arg_descriptor<std::string> rpc_access_control_origins;
-      const command_line::arg_descriptor<std::string> rpc_ssl;
-      const command_line::arg_descriptor<std::string> rpc_ssl_private_key;
-      const command_line::arg_descriptor<std::string> rpc_ssl_certificate;
-      const command_line::arg_descriptor<std::string> rpc_ssl_ca_certificates;
-      const command_line::arg_descriptor<std::vector<std::string>> rpc_ssl_allowed_fingerprints;
-      const command_line::arg_descriptor<bool> rpc_ssl_allow_chained;
-      const command_line::arg_descriptor<bool> rpc_ssl_allow_any_cert;
-      const command_line::arg_descriptor<bool> disable_rpc_ban;
+            const command_line::arg_descriptor<std::string> rpc_bind_ip;
+            const command_line::arg_descriptor<bool> rpc_auth_basic;
+            const command_line::arg_descriptor<std::string> rpc_bind_ipv6_address;
+            const command_line::arg_descriptor<bool> rpc_use_ipv6;
+            const command_line::arg_descriptor<bool> rpc_ignore_ipv4;
+            const command_line::arg_descriptor<std::string> rpc_login;
+            const command_line::arg_descriptor<bool> confirm_external_bind;
+            const command_line::arg_descriptor<bool> confirm_cleartext_auth;
+            const command_line::arg_descriptor<std::string> rpc_access_control_origins;
+            const command_line::arg_descriptor<std::string> rpc_ssl;
+            const command_line::arg_descriptor<std::string> rpc_ssl_private_key;
+            const command_line::arg_descriptor<std::string> rpc_ssl_certificate;
+            const command_line::arg_descriptor<std::string> rpc_ssl_ca_certificates;
+            const command_line::arg_descriptor<std::vector<std::string>> rpc_ssl_allowed_fingerprints;
+            const command_line::arg_descriptor<bool> rpc_ssl_allow_chained;
+            const command_line::arg_descriptor<bool> rpc_ssl_allow_any_cert;
+            const command_line::arg_descriptor<bool> disable_rpc_ban;
+        };
+
+        // `allow_any_cert` bool toggles `--rpc-ssl-allow-any-cert` configuration
+
+        static const char *tr(const char *str);
+        static void init_options(boost::program_options::options_description &desc, const bool any_cert_option = false, const bool basic_auth_option = false);
+
+        //! \return Arguments specified by user, or `boost::none` if error
+        static boost::optional<rpc_args> process(const boost::program_options::variables_map &vm, const bool any_cert_option = false, const bool basic_auth_option = false);
+
+        //! \return SSL arguments specified by user, or `boost::none` if error
+        static boost::optional<epee::net_utils::ssl_options_t> process_ssl(const boost::program_options::variables_map &vm, const bool any_cert_option = false);
+
+        std::string bind_ip;
+        std::string bind_ipv6_address;
+        bool use_ipv6;
+        bool require_ipv4;
+        std::vector<std::string> access_control_origins;
+        epee::net_utils::http::authentication_type auth_type;
+        boost::optional<tools::login> login; // currently `boost::none` if unspecified by user
+        epee::net_utils::ssl_options_t ssl_options = epee::net_utils::ssl_support_t::e_ssl_support_enabled;
+        bool disable_rpc_ban = false;
     };
-
-    // `allow_any_cert` bool toggles `--rpc-ssl-allow-any-cert` configuration
-
-    static const char* tr(const char* str);
-    static void init_options(boost::program_options::options_description& desc, const bool any_cert_option = false, const bool basic_auth_option = false);
-
-    //! \return Arguments specified by user, or `boost::none` if error
-    static boost::optional<rpc_args> process(const boost::program_options::variables_map& vm, const bool any_cert_option = false, const bool basic_auth_option = false);
-
-    //! \return SSL arguments specified by user, or `boost::none` if error
-    static boost::optional<epee::net_utils::ssl_options_t> process_ssl(const boost::program_options::variables_map& vm, const bool any_cert_option = false);
-
-    std::string bind_ip;
-    std::string bind_ipv6_address;
-    bool use_ipv6;
-    bool require_ipv4;
-    std::vector<std::string> access_control_origins;
-    epee::net_utils::http::authentication_type auth_type;
-    boost::optional<tools::login> login; // currently `boost::none` if unspecified by user
-    epee::net_utils::ssl_options_t ssl_options = epee::net_utils::ssl_support_t::e_ssl_support_enabled;
-    bool disable_rpc_ban = false;
-  };
-}
+} // namespace cryptonote

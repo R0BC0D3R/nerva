@@ -1,21 +1,21 @@
 // Copyright (c) 2020, The Monero Project
-// 
+//
 // All rights reserved.
-// 
+//
 // Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
-// 
+//
 // 1. Redistributions of source code must retain the above copyright notice, this list of
 //    conditions and the following disclaimer.
-// 
+//
 // 2. Redistributions in binary form must reproduce the above copyright notice, this list
 //    of conditions and the following disclaimer in the documentation and/or other
 //    materials provided with the distribution.
-// 
+//
 // 3. Neither the name of the copyright holder nor the names of its contributors may be
 //    used to endorse or promote products derived from this software without specific
 //    prior written permission.
-// 
+//
 // THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
 // EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
 // MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
@@ -32,86 +32,86 @@
 
 namespace cryptonote
 {
-namespace bootstrap_node
-{
-
-  void selector_auto::node::handle_result(bool success)
-  {
-    if (!success)
+    namespace bootstrap_node
     {
-      fails = std::min(std::numeric_limits<size_t>::max() - 2, fails) + 2;
-    }
-    else
-    {
-      fails = std::max(std::numeric_limits<size_t>::min() + 2, fails) - 2;
-    }
-  }
 
-  void selector_auto::handle_result(const std::string &address, bool success)
-  {
-    auto &nodes_by_address = m_nodes.get<by_address>();
-    const auto it = nodes_by_address.find(address);
-    if (it != nodes_by_address.end())
-    {
-      nodes_by_address.modify(it, [success](node &entry) {
-        entry.handle_result(success);
-      });
-    }
-  }
+        void selector_auto::node::handle_result(bool success)
+        {
+            if (!success)
+            {
+                fails = std::min(std::numeric_limits<size_t>::max() - 2, fails) + 2;
+            }
+            else
+            {
+                fails = std::max(std::numeric_limits<size_t>::min() + 2, fails) - 2;
+            }
+        }
 
-  boost::optional<node_info> selector_auto::next_node()
-  {
-    if (!has_at_least_one_good_node())
-    {
-      append_new_nodes();
-    }
+        void selector_auto::handle_result(const std::string &address, bool success)
+        {
+            auto &nodes_by_address = m_nodes.get<by_address>();
+            const auto it = nodes_by_address.find(address);
+            if (it != nodes_by_address.end())
+            {
+                nodes_by_address.modify(it, [success](node &entry) {
+                    entry.handle_result(success);
+                });
+            }
+        }
 
-    if (m_nodes.empty())
-    {
-      return {};
-    }
+        boost::optional<node_info> selector_auto::next_node()
+        {
+            if (!has_at_least_one_good_node())
+            {
+                append_new_nodes();
+            }
 
-    auto node = m_nodes.get<by_fails>().begin();
-    const size_t count = std::distance(node, m_nodes.get<by_fails>().upper_bound(node->fails));
-    std::advance(node, crypto::rand_idx(count));
+            if (m_nodes.empty())
+            {
+                return {};
+            }
 
-    return {{node->address, {}}};
-  }
+            auto node = m_nodes.get<by_fails>().begin();
+            const size_t count = std::distance(node, m_nodes.get<by_fails>().upper_bound(node->fails));
+            std::advance(node, crypto::rand_idx(count));
 
-  bool selector_auto::has_at_least_one_good_node() const
-  {
-    return !m_nodes.empty() && m_nodes.get<by_fails>().begin()->fails == 0;
-  }
+            return {{node->address, {}}};
+        }
 
-  void selector_auto::append_new_nodes()
-  {
-    bool updated = false;
+        bool selector_auto::has_at_least_one_good_node() const
+        {
+            return !m_nodes.empty() && m_nodes.get<by_fails>().begin()->fails == 0;
+        }
 
-    for (const auto &node : m_get_nodes())
-    {
-      const auto &address = node.first;
-      const auto &white = node.second;
-      const size_t initial_score = white ? 0 : 1;
-      updated |= m_nodes.get<by_address>().insert({address, initial_score}).second;
-    }
+        void selector_auto::append_new_nodes()
+        {
+            bool updated = false;
 
-    if (updated)
-    {
-      truncate();
-    }
-  }
+            for (const auto &node : m_get_nodes())
+            {
+                const auto &address = node.first;
+                const auto &white = node.second;
+                const size_t initial_score = white ? 0 : 1;
+                updated |= m_nodes.get<by_address>().insert({address, initial_score}).second;
+            }
 
-  void selector_auto::truncate()
-  {
-    const size_t total = m_nodes.size();
-    if (total > m_max_nodes)
-    {
-      auto &nodes_by_fails = m_nodes.get<by_fails>();
-      auto from = nodes_by_fails.rbegin();
-      std::advance(from, total - m_max_nodes);
-      nodes_by_fails.erase(from.base(), nodes_by_fails.end());
-    }
-  }
+            if (updated)
+            {
+                truncate();
+            }
+        }
 
-}
-}
+        void selector_auto::truncate()
+        {
+            const size_t total = m_nodes.size();
+            if (total > m_max_nodes)
+            {
+                auto &nodes_by_fails = m_nodes.get<by_fails>();
+                auto from = nodes_by_fails.rbegin();
+                std::advance(from, total - m_max_nodes);
+                nodes_by_fails.erase(from.base(), nodes_by_fails.end());
+            }
+        }
+
+    } // namespace bootstrap_node
+} // namespace cryptonote

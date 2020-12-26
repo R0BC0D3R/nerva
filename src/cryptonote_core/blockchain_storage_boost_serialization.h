@@ -35,7 +35,6 @@ namespace boost
     namespace serialization
     {
 
-
         template <class archive_t>
         void serialize(archive_t &ar, cryptonote::blockchain_storage::transaction_chain_entry &te, const unsigned int version)
         {

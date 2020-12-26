@@ -42,75 +42,77 @@
 
 namespace epee
 {
-namespace levin
-{
-    template<typename> class async_protocol_handler_config;
-}
-}
+    namespace levin
+    {
+        template <typename>
+        class async_protocol_handler_config;
+    }
+} // namespace epee
 
 namespace nodetool
 {
-  template<typename> struct p2p_connection_context_t;
+    template <typename>
+    struct p2p_connection_context_t;
 }
 
 namespace cryptonote
 {
-namespace levin
-{
-  namespace detail
-  {
-    using p2p_context = nodetool::p2p_connection_context_t<cryptonote::cryptonote_connection_context>;
-    struct zone; //!< Internal data needed for zone notifications
-  } // detail
-
-  using connections = epee::levin::async_protocol_handler_config<detail::p2p_context>;
-
-  //! Provides tx notification privacy
-  class notify
-  {
-    std::shared_ptr<detail::zone> zone_;
-    i_core_events* core_;
-
-  public:
-    struct status
+    namespace levin
     {
-      bool has_noise;
-      bool connections_filled;
-    };
+        namespace detail
+        {
+            using p2p_context = nodetool::p2p_connection_context_t<cryptonote::cryptonote_connection_context>;
+            struct zone; //!< Internal data needed for zone notifications
+        }                // namespace detail
 
-    //! Construct an instance that cannot notify.
-    notify() noexcept
-      : zone_(nullptr)
-      , core_(nullptr)
-    {}
+        using connections = epee::levin::async_protocol_handler_config<detail::p2p_context>;
 
-    //! Construct an instance with available notification `zones`.
-    explicit notify(boost::asio::io_service& service, std::shared_ptr<connections> p2p, epee::byte_slice noise, bool is_public, bool pad_txs, i_core_events& core);
+        //! Provides tx notification privacy
+        class notify
+        {
+            std::shared_ptr<detail::zone> zone_;
+            i_core_events *core_;
 
-    notify(const notify&) = delete;
-    notify(notify&&) = default;
+        public:
+            struct status
+            {
+                bool has_noise;
+                bool connections_filled;
+            };
 
-    ~notify() noexcept;
+            //! Construct an instance that cannot notify.
+            notify() noexcept
+                : zone_(nullptr), core_(nullptr)
+            {
+            }
 
-    notify& operator=(const notify&) = delete;
-    notify& operator=(notify&&) = default;
+            //! Construct an instance with available notification `zones`.
+            explicit notify(boost::asio::io_service &service, std::shared_ptr<connections> p2p, epee::byte_slice noise, bool is_public, bool pad_txs, i_core_events &core);
 
-    //! \return Status information for zone selection.
-    status get_status() const noexcept;
+            notify(const notify &) = delete;
+            notify(notify &&) = default;
 
-    //! Probe for new outbound connection - skips if not needed.
-    void new_out_connection();
+            ~notify() noexcept;
 
-    //! Run the logic for the next epoch immediately. Only use in testing.
-    void run_epoch();
+            notify &operator=(const notify &) = delete;
+            notify &operator=(notify &&) = default;
 
-    //! Run the logic for the next stem timeout imemdiately. Only use in  testing.
-    void run_stems();
+            //! \return Status information for zone selection.
+            status get_status() const noexcept;
 
-    //! Run the logic for flushing all Dandelion++ fluff queued txs. Only use in testing.
-    void run_fluff();
+            //! Probe for new outbound connection - skips if not needed.
+            void new_out_connection();
 
-    /*! Send txs using `cryptonote_protocol_defs.h` payload format wrapped in a
+            //! Run the logic for the next epoch immediately. Only use in testing.
+            void run_epoch();
+
+            //! Run the logic for the next stem timeout imemdiately. Only use in  testing.
+            void run_stems();
+
+            //! Run the logic for flushing all Dandelion++ fluff queued txs. Only use in testing.
+            void run_fluff();
+
+            /*! Send txs using `cryptonote_protocol_defs.h` payload format wrapped in a
         levin header. The message will be sent in a "discreet" manner if
         enabled - if `!noise.empty()` then the `command`/`payload` will be
         queued to send at the next available noise interval. Otherwise, a
@@ -125,7 +127,7 @@ namespace levin
           particular stem.
 
       \return True iff the notification is queued for sending. */
-    bool send_txs(std::vector<blobdata> txs, const boost::uuids::uuid& source, relay_method tx_relay);
-  };
-} // levin
-} // net
+            bool send_txs(std::vector<blobdata> txs, const boost::uuids::uuid &source, relay_method tx_relay);
+        };
+    } // namespace levin
+} // namespace cryptonote

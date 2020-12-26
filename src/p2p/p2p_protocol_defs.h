@@ -84,13 +84,13 @@ namespace nodetool
         KV_SERIALIZE_OPT(rpc_port, (uint16_t)0)
         END_KV_SERIALIZE_MAP()
 
-    BEGIN_SERIALIZE()
-      FIELD(adr)
-      FIELD(id)
-      VARINT_FIELD(last_seen)
-      VARINT_FIELD(pruning_seed)
-      VARINT_FIELD(rpc_port)
-    END_SERIALIZE()
+        BEGIN_SERIALIZE()
+        FIELD(adr)
+        FIELD(id)
+        VARINT_FIELD(last_seen)
+        VARINT_FIELD(pruning_seed)
+        VARINT_FIELD(rpc_port)
+        END_SERIALIZE()
     };
     typedef peerlist_entry_base<epee::net_utils::network_address> peerlist_entry;
 
@@ -107,11 +107,11 @@ namespace nodetool
         KV_SERIALIZE(first_seen)
         END_KV_SERIALIZE_MAP()
 
-    BEGIN_SERIALIZE()
-      FIELD(adr)
-      FIELD(id)
-      VARINT_FIELD(first_seen)
-    END_SERIALIZE()
+        BEGIN_SERIALIZE()
+        FIELD(adr)
+        FIELD(id)
+        VARINT_FIELD(first_seen)
+        END_SERIALIZE()
     };
     typedef anchor_peerlist_entry_base<epee::net_utils::network_address> anchor_peerlist_entry;
 
@@ -128,18 +128,17 @@ namespace nodetool
         KV_SERIALIZE(is_income)
         END_KV_SERIALIZE_MAP()
 
-    BEGIN_SERIALIZE()
-      FIELD(adr)
-      FIELD(id)
-      FIELD(is_income)
-    END_SERIALIZE()
+        BEGIN_SERIALIZE()
+        FIELD(adr)
+        FIELD(id)
+        FIELD(is_income)
+        END_SERIALIZE()
     };
     typedef connection_entry_base<epee::net_utils::network_address> connection_entry;
 
 #pragma pack(pop)
 
-  inline 
-  std::string print_peerlist_to_string(const std::vector<peerlist_entry>& pl)
+    inline std::string print_peerlist_to_string(const std::vector<peerlist_entry> &pl)
     {
         time_t now_time = 0;
         time(&now_time);
@@ -147,7 +146,7 @@ namespace nodetool
         ss << std::setfill('0') << std::setw(8) << std::hex << std::noshowbase;
         for (const peerlist_entry &pe : pl)
         {
-      ss << peerid_to_string(pe.id) << "\t" << pe.adr.str()
+            ss << peerid_to_string(pe.id) << "\t" << pe.adr.str()
                << " \trpc port " << (pe.rpc_port > 0 ? std::to_string(pe.rpc_port) : "-")
                << " \tpruning seed " << pe.pruning_seed
                << " \tlast_seen: " << (pe.last_seen == 0 ? std::string("never") : epee::misc_utils::get_time_interval_string(now_time - pe.last_seen))
@@ -194,7 +193,6 @@ namespace nodetool
         KV_SERIALIZE(version)
         END_KV_SERIALIZE_MAP()
     };
-  
 
 #define P2P_COMMANDS_POOL_BASE 1000
 
@@ -227,7 +225,7 @@ namespace nodetool
             BEGIN_KV_SERIALIZE_MAP()
             KV_SERIALIZE(node_data)
             KV_SERIALIZE(payload_data)
-                KV_SERIALIZE(local_peerlist_new)
+            KV_SERIALIZE(local_peerlist_new)
             END_KV_SERIALIZE_MAP()
         };
         typedef epee::misc_utils::struct_init<response_t> response;
@@ -259,7 +257,7 @@ namespace nodetool
             BEGIN_KV_SERIALIZE_MAP()
             KV_SERIALIZE(local_time)
             KV_SERIALIZE(payload_data)
-                KV_SERIALIZE(local_peerlist_new)
+            KV_SERIALIZE(local_peerlist_new)
             END_KV_SERIALIZE_MAP()
         };
         typedef epee::misc_utils::struct_init<response_t> response;

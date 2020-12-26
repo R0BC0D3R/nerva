@@ -42,9 +42,11 @@
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "daemon"
 
-namespace daemonize {
+namespace daemonize
+{
 
-class t_rpc_command_executor final {
+    class t_rpc_command_executor final
+    {
     private:
         tools::t_rpc_client *m_rpc_client;
         cryptonote::core_rpc_server *m_rpc_server;
@@ -52,13 +54,7 @@ class t_rpc_command_executor final {
 
     public:
         t_rpc_command_executor(
-      uint32_t ip
-    , uint16_t port
-    , const boost::optional<tools::login>& user
-    , const epee::net_utils::ssl_options_t& ssl_options
-    , bool is_rpc = true
-    , cryptonote::core_rpc_server* rpc_server = NULL
-    );
+            uint32_t ip, uint16_t port, const boost::optional<tools::login> &user, const epee::net_utils::ssl_options_t &ssl_options, bool is_rpc = true, cryptonote::core_rpc_server *rpc_server = NULL);
 
         ~t_rpc_command_executor();
 
@@ -78,7 +74,7 @@ class t_rpc_command_executor final {
 
         bool print_connections();
 
-  bool print_blockchain_info(int64_t start_block_index, uint64_t end_block_index);
+        bool print_blockchain_info(int64_t start_block_index, uint64_t end_block_index);
 
         bool set_log_level(int8_t level);
 
@@ -90,7 +86,7 @@ class t_rpc_command_executor final {
 
         bool print_block_by_height(uint64_t height, bool include_hex);
 
-  bool print_transaction(crypto::hash transaction_hash, bool include_metadata, bool include_hex, bool include_json);
+        bool print_transaction(crypto::hash transaction_hash, bool include_metadata, bool include_hex, bool include_json);
 
         bool is_key_image_spent(const crypto::key_image &ki);
 
@@ -148,7 +144,7 @@ class t_rpc_command_executor final {
 
         bool print_blockchain_dynamic_stats(uint64_t nblocks);
 
-  bool update();
+        bool update();
 
         bool relay_tx(const std::string &txid);
 
@@ -162,14 +158,14 @@ class t_rpc_command_executor final {
 
         bool print_net_stats();
 
-  bool version();
+        bool version();
 
         bool set_bootstrap_daemon(
             const std::string &address,
             const std::string &username,
             const std::string &password);
 
-  bool flush_cache(bool bad_txs, bool invalid_blocks);
+        bool flush_cache(bool bad_txs, bool invalid_blocks);
     };
 
 } // namespace daemonize

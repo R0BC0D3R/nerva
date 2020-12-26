@@ -36,20 +36,20 @@
 
 namespace cryptonote
 {
-  class quicksync
-  {
-  public:
-    quicksync();
-    bool check_block(uint32_t height, const crypto::hash h) const;
-    bool load(const std::string &qs_file);
-    bool is_loaded() { return m_is_loaded; }
-    uint32_t min() { return m_min; }
-    uint32_t max() { return m_max; }
+    class quicksync
+    {
+    public:
+        quicksync();
+        bool check_block(uint32_t height, const crypto::hash h) const;
+        bool load(const std::string &qs_file);
+        bool is_loaded() { return m_is_loaded; }
+        uint32_t min() { return m_min; }
+        uint32_t max() { return m_max; }
 
-  private:
-    std::map<uint64_t, crypto::hash> m_data;
-    bool m_is_loaded = false;
-    uint32_t m_min = 0;
-    uint32_t m_max = 0;
-  };
-}
+    private:
+        std::map<uint64_t, crypto::hash> m_data;
+        bool m_is_loaded = false;
+        uint32_t m_min = 0;
+        uint32_t m_max = 0;
+    };
+} // namespace cryptonote

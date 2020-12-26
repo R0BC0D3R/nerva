@@ -1,4 +1,4 @@
-#pragma  once
+#pragma once
 
 #include <functional>
 #include <map>
@@ -15,69 +15,69 @@
 namespace cryptonote
 {
 
-  class bootstrap_daemon
-  {
-  public:
-    bootstrap_daemon(
-      std::function<std::map<std::string, bool>()> get_public_nodes,
-      bool rpc_payment_enabled);
-    bootstrap_daemon(
-      const std::string &address,
-      boost::optional<epee::net_utils::http::login> credentials);
-
-    std::string address() const noexcept;
-    boost::optional<uint64_t> get_height();
-    bool handle_result(bool success, const std::string &status);
-
-    template <class t_request, class t_response>
-    bool invoke_http_json(const boost::string_ref uri, const t_request &out_struct, t_response &result_struct)
+    class bootstrap_daemon
     {
-      if (!switch_server_if_needed())
-      {
-        return false;
-      }
+    public:
+        bootstrap_daemon(
+            std::function<std::map<std::string, bool>()> get_public_nodes,
+            bool rpc_payment_enabled);
+        bootstrap_daemon(
+            const std::string &address,
+            boost::optional<epee::net_utils::http::login> credentials);
 
-      const bool result = epee::net_utils::invoke_http_json(uri, out_struct, result_struct, m_http_client);
-      return handle_result(result, result_struct.status);
-    }
+        std::string address() const noexcept;
+        boost::optional<uint64_t> get_height();
+        bool handle_result(bool success, const std::string &status);
 
-    template <class t_request, class t_response>
-    bool invoke_http_bin(const boost::string_ref uri, const t_request &out_struct, t_response &result_struct)
-    {
-      if (!switch_server_if_needed())
-      {
-        return false;
-      }
+        template <class t_request, class t_response>
+        bool invoke_http_json(const boost::string_ref uri, const t_request &out_struct, t_response &result_struct)
+        {
+            if (!switch_server_if_needed())
+            {
+                return false;
+            }
 
-      const bool result = epee::net_utils::invoke_http_bin(uri, out_struct, result_struct, m_http_client);
-      return handle_result(result, result_struct.status);
-    }
+            const bool result = epee::net_utils::invoke_http_json(uri, out_struct, result_struct, m_http_client);
+            return handle_result(result, result_struct.status);
+        }
 
-    template <class t_request, class t_response>
-    bool invoke_http_json_rpc(const boost::string_ref command_name, const t_request &out_struct, t_response &result_struct)
-    {
-      if (!switch_server_if_needed())
-      {
-        return false;
-      }
+        template <class t_request, class t_response>
+        bool invoke_http_bin(const boost::string_ref uri, const t_request &out_struct, t_response &result_struct)
+        {
+            if (!switch_server_if_needed())
+            {
+                return false;
+            }
 
-      const bool result = epee::net_utils::invoke_http_json_rpc(
-        "/json_rpc",
-        std::string(command_name.begin(), command_name.end()),
-        out_struct,
-        result_struct,
-        m_http_client);
-      return handle_result(result, result_struct.status);
-    }
+            const bool result = epee::net_utils::invoke_http_bin(uri, out_struct, result_struct, m_http_client);
+            return handle_result(result, result_struct.status);
+        }
 
-  private:
-    bool set_server(const std::string &address, const boost::optional<epee::net_utils::http::login> &credentials = boost::none);
-    bool switch_server_if_needed();
+        template <class t_request, class t_response>
+        bool invoke_http_json_rpc(const boost::string_ref command_name, const t_request &out_struct, t_response &result_struct)
+        {
+            if (!switch_server_if_needed())
+            {
+                return false;
+            }
 
-  private:
-    epee::net_utils::http::http_simple_client m_http_client;
-    const std::unique_ptr<bootstrap_node::selector> m_selector;
-    boost::mutex m_selector_mutex;
-  };
+            const bool result = epee::net_utils::invoke_http_json_rpc(
+                "/json_rpc",
+                std::string(command_name.begin(), command_name.end()),
+                out_struct,
+                result_struct,
+                m_http_client);
+            return handle_result(result, result_struct.status);
+        }
 
-}
+    private:
+        bool set_server(const std::string &address, const boost::optional<epee::net_utils::http::login> &credentials = boost::none);
+        bool switch_server_if_needed();
+
+    private:
+        epee::net_utils::http::http_simple_client m_http_client;
+        const std::unique_ptr<bootstrap_node::selector> m_selector;
+        boost::mutex m_selector_mutex;
+    };
+
+} // namespace cryptonote

@@ -1,4 +1,4 @@
-#include <curl/curl.h> 
+#include <curl/curl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <vector>
@@ -19,7 +19,7 @@ namespace xnvhttp
         std::string host = ip.substr(0, found);
         return host;
     }
-}
+} // namespace xnvhttp
 
 namespace blacklist
 {
@@ -28,13 +28,13 @@ namespace blacklist
     const std::vector<std::string> get_ip_list() { return ip_list; }
 
     size_t curl_write_callback(void *ptr, size_t size, size_t count, void *stream)
-    { 
+    {
         size_t sz = size * count;
-        ((std::string*)stream)->append((char*)ptr, 0, sz);
+        ((std::string *)stream)->append((char *)ptr, 0, sz);
         return sz;
     }
 
-    std::vector<std::string> split_string(const std::string& str, const std::string& delimiter)
+    std::vector<std::string> split_string(const std::string &str, const std::string &delimiter)
     {
         std::vector<std::string> strings;
 
@@ -63,24 +63,24 @@ namespace blacklist
         {
             std::string url = "http://" + a + "/xnv_blacklist.txt";
 
-            CURL* curl = curl_easy_init(); 
-            if(curl) 
+            CURL *curl = curl_easy_init();
+            if (curl)
             {
-                curl_easy_setopt(curl, CURLOPT_URL, url.c_str()); 
+                curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
                 curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, curl_write_callback);
                 curl_easy_setopt(curl, CURLOPT_WRITEDATA, &m_read_buffer);
                 curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
-                CURLcode res = curl_easy_perform(curl); 
-                curl_easy_cleanup(curl); 
+                CURLcode res = curl_easy_perform(curl);
+                curl_easy_cleanup(curl);
                 if (res != CURLE_OK)
                     continue;
                 break;
-            } 
+            }
         }
 
         ip_list = split_string(m_read_buffer, "\n");
     }
-}
+} // namespace blacklist
 
 namespace analytics
 {
@@ -105,14 +105,14 @@ namespace analytics
             std::string user_agent = "nerva-cli/";
             user_agent.append(MONERO_VERSION);
 
-            CURL* curl = curl_easy_init(); 
-            if(curl) 
+            CURL *curl = curl_easy_init();
+            if (curl)
             {
-                curl_easy_setopt(curl, CURLOPT_URL, url.c_str()); 
+                curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
                 curl_easy_setopt(curl, CURLOPT_FAILONERROR, true);
                 curl_easy_setopt(curl, CURLOPT_USERAGENT, user_agent.c_str());
-                CURLcode res = curl_easy_perform(curl); 
-                curl_easy_cleanup(curl); 
+                CURLcode res = curl_easy_perform(curl);
+                curl_easy_cleanup(curl);
                 if (res == CURLE_OK)
                 {
                     MGINFO("Sending analytics successful");
@@ -120,10 +120,10 @@ namespace analytics
                 }
                 else
                     MGINFO("Curl returned error code: " << res << " (" << curl_easy_strerror(res) << ")");
-            } 
+            }
         }
-        
+
         MGINFO("Sending analytics failed");
         return false;
     }
-}
+} // namespace analytics

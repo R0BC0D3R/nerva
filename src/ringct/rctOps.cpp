@@ -38,9 +38,20 @@ using namespace std;
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "ringct"
 
-#define CHECK_AND_ASSERT_THROW_MES_L1(expr, message) {if(!(expr)) {MWARNING(message); throw std::runtime_error(message);}}
+#define CHECK_AND_ASSERT_THROW_MES_L1(expr, message) \
+    {                                                \
+        if (!(expr))                                 \
+        {                                            \
+            MWARNING(message);                       \
+            throw std::runtime_error(message);       \
+        }                                            \
+    }
 
-struct zero_commitment { uint64_t amount; rct::key commitment; };
+struct zero_commitment
+{
+    uint64_t amount;
+    rct::key commitment;
+};
 static const zero_commitment zero_commitments[] = {
     {(uint64_t)0ull, {{0x58, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66}}},
     {(uint64_t)1ull, {{0x17, 0x38, 0xeb, 0x7a, 0x67, 0x7c, 0x61, 0x49, 0x22, 0x8a, 0x2b, 0xea, 0xa2, 0x1b, 0xea, 0x9e, 0x33, 0x70, 0x80, 0x2d, 0x72, 0xa3, 0xee, 0xc7, 0x90, 0x11, 0x95, 0x80, 0xe0, 0x2b, 0xd5, 0x22}}},
@@ -217,17 +228,20 @@ static const zero_commitment zero_commitments[] = {
     {(uint64_t)10000000000000000000ull, {{0x65, 0x8d, 0x1, 0x37, 0x6d, 0x18, 0x63, 0xe7, 0x7b, 0x9, 0x6f, 0x98, 0xe6, 0xe5, 0x13, 0xc2, 0x4, 0x10, 0xf5, 0xc7, 0xfb, 0x18, 0xa6, 0xe5, 0x9a, 0x52, 0x66, 0x84, 0x5c, 0xd9, 0xb1, 0xe3}}},
 };
 
-namespace rct {
+namespace rct
+{
 
     //Various key initialization functions
 
     //initializes a key matrix;
     //first parameter is rows,
     //second is columns
-    keyM keyMInit(size_t rows, size_t cols) {
+    keyM keyMInit(size_t rows, size_t cols)
+    {
         keyM rv(cols);
         size_t i = 0;
-        for (i = 0 ; i < cols ; i++) {
+        for (i = 0; i < cols; i++)
+        {
             rv[i] = keyV(rows);
         }
         return rv;
@@ -245,12 +259,14 @@ namespace rct {
     }
 
     //generates a random scalar which can be used as a secret key or mask
-    void skGen(key &sk) {
+    void skGen(key &sk)
+    {
         random32_unbiased(sk.bytes);
     }
 
     //generates a random scalar which can be used as a secret key or mask
-    key skGen() {
+    key skGen()
+    {
         key sk;
         skGen(sk);
         return sk;
@@ -258,43 +274,50 @@ namespace rct {
 
     //Generates a vector of secret key
     //Mainly used in testing
-    keyV skvGen(size_t rows ) {
+    keyV skvGen(size_t rows)
+    {
         CHECK_AND_ASSERT_THROW_MES(rows > 0, "0 keys requested");
         keyV rv(rows);
         size_t i = 0;
-        for (i = 0 ; i < rows ; i++) {
+        for (i = 0; i < rows; i++)
+        {
             skGen(rv[i]);
         }
         return rv;
     }
 
     //generates a random curve point (for testing)
-    key  pkGen() {
+    key pkGen()
+    {
         key sk = skGen();
         key pk = scalarmultBase(sk);
         return pk;
     }
 
     //generates a random secret and corresponding public key
-    void skpkGen(key &sk, key &pk) {
+    void skpkGen(key &sk, key &pk)
+    {
         skGen(sk);
         scalarmultBase(pk, sk);
     }
 
     //generates a random secret and corresponding public key
-    tuple<key, key>  skpkGen() {
+    tuple<key, key> skpkGen()
+    {
         key sk = skGen();
         key pk = scalarmultBase(sk);
         return make_tuple(sk, pk);
     }
 
     //generates C =aG + bH from b, a is given..
-    void genC(key & C, const key & a, xmr_amount amount) {
+    void genC(key &C, const key &a, xmr_amount amount)
+    {
         addKeys2(C, a, d2h(amount), rct::H);
     }
 
     //generates a <secret , public> / Pedersen commitment to the amount
-    tuple<ctkey, ctkey> ctskpkGen(xmr_amount amount) {
+    tuple<ctkey, ctkey> ctskpkGen(xmr_amount amount)
+    {
         ctkey sk, pk;
         skpkGen(sk.dest, pk.dest);
         skpkGen(sk.mask, pk.mask);
@@ -303,8 +326,9 @@ namespace rct {
         addKeys(pk.mask, pk.mask, bH);
         return make_tuple(sk, pk);
     }
-    
-    tuple<ctkey, ctkey> ctskpkGen(const key &bH) {
+
+    tuple<ctkey, ctkey> ctskpkGen(const key &bH)
+    {
         ctkey sk, pk;
         skpkGen(sk.dest, pk.dest);
         skpkGen(sk.mask, pk.mask);
@@ -312,7 +336,8 @@ namespace rct {
         return make_tuple(sk, pk);
     }
 
-    key zeroCommit(xmr_amount amount) {
+    key zeroCommit(xmr_amount amount)
+    {
         const zero_commitment *begin = zero_commitments;
         const zero_commitment *end = zero_commitments + sizeof(zero_commitments) / sizeof(zero_commitments[0]);
         const zero_commitment value{amount, rct::zero()};
@@ -326,21 +351,24 @@ namespace rct {
         return addKeys(G, bH);
     }
 
-    key commit(xmr_amount amount, const key &mask) {
+    key commit(xmr_amount amount, const key &mask)
+    {
         key c;
         genC(c, mask, amount);
         return c;
     }
 
     //generates a random uint long long (for testing)
-    xmr_amount randXmrAmount(xmr_amount upperlimit) {
+    xmr_amount randXmrAmount(xmr_amount upperlimit)
+    {
         return h2d(skGen()) % (upperlimit);
     }
 
     //Scalar multiplications of curve points
 
     //does a * G where a is a scalar and G is the curve basepoint
-    void scalarmultBase(key &aG,const key &a) {
+    void scalarmultBase(key &aG, const key &a)
+    {
         ge_p3 point;
         sc_reduce32copy(aG.bytes, a.bytes); //do this beforehand!
         ge_scalarmult_base(&point, aG.bytes);
@@ -348,7 +376,8 @@ namespace rct {
     }
 
     //does a * G where a is a scalar and G is the curve basepoint
-    key scalarmultBase(const key & a) {
+    key scalarmultBase(const key &a)
+    {
         ge_p3 point;
         key aG;
         sc_reduce32copy(aG.bytes, a.bytes); //do this beforehand
@@ -358,7 +387,8 @@ namespace rct {
     }
 
     //does a * P where a is a scalar and P is an arbitrary point
-    void scalarmultKey(key & aP, const key &P, const key &a) {
+    void scalarmultKey(key &aP, const key &P, const key &a)
+    {
         ge_p3 A;
         ge_p2 R;
         CHECK_AND_ASSERT_THROW_MES_L1(ge_frombytes_vartime(&A, P.bytes) == 0, "ge_frombytes_vartime failed at " + boost::lexical_cast<std::string>(__LINE__));
@@ -367,7 +397,8 @@ namespace rct {
     }
 
     //does a * P where a is a scalar and P is an arbitrary point
-    key scalarmultKey(const key & P, const key & a) {
+    key scalarmultKey(const key &P, const key &a)
+    {
         ge_p3 A;
         ge_p2 R;
         CHECK_AND_ASSERT_THROW_MES_L1(ge_frombytes_vartime(&A, P.bytes) == 0, "ge_frombytes_vartime failed at " + boost::lexical_cast<std::string>(__LINE__));
@@ -377,8 +408,8 @@ namespace rct {
         return aP;
     }
 
-
-    key scalarmultH(const key & a) {
+    key scalarmultH(const key &a)
+    {
         ge_p2 R;
         ge_scalarmult(&R, a.bytes, &ge_p3_H);
         key aP;
@@ -387,7 +418,8 @@ namespace rct {
     }
 
     //Computes 8P
-    key scalarmult8(const key & P) {
+    key scalarmult8(const key &P)
+    {
         ge_p3 p3;
         CHECK_AND_ASSERT_THROW_MES_L1(ge_frombytes_vartime(&p3, P.bytes) == 0, "ge_frombytes_vartime failed at " + boost::lexical_cast<std::string>(__LINE__));
         ge_p2 p2;
@@ -413,7 +445,8 @@ namespace rct {
     }
 
     //Computes lA where l is the curve order
-    bool isInMainSubgroup(const key & A) {
+    bool isInMainSubgroup(const key &A)
+    {
         ge_p3 p3;
         return toPointCheckOrder(&p3, A.bytes);
     }
@@ -421,7 +454,8 @@ namespace rct {
     //Curve addition / subtractions
 
     //for curve points: AB = A + B
-    void addKeys(key &AB, const key &A, const key &B) {
+    void addKeys(key &AB, const key &A, const key &B)
+    {
         ge_p3 B2, A2;
         CHECK_AND_ASSERT_THROW_MES_L1(ge_frombytes_vartime(&B2, B.bytes) == 0, "ge_frombytes_vartime failed at " + boost::lexical_cast<std::string>(__LINE__));
         CHECK_AND_ASSERT_THROW_MES_L1(ge_frombytes_vartime(&A2, A.bytes) == 0, "ge_frombytes_vartime failed at " + boost::lexical_cast<std::string>(__LINE__));
@@ -433,13 +467,15 @@ namespace rct {
         ge_p3_tobytes(AB.bytes, &A2);
     }
 
-    rct::key addKeys(const key &A, const key &B) {
+    rct::key addKeys(const key &A, const key &B)
+    {
         key k;
         addKeys(k, A, B);
         return k;
     }
 
-    rct::key addKeys(const keyV &A) {
+    rct::key addKeys(const keyV &A)
+    {
         if (A.empty())
             return rct::identity();
         ge_p3 p3, tmp;
@@ -460,14 +496,16 @@ namespace rct {
 
     //addKeys1
     //aGB = aG + B where a is a scalar, G is the basepoint, and B is a point
-    void addKeys1(key &aGB, const key &a, const key & B) {
+    void addKeys1(key &aGB, const key &a, const key &B)
+    {
         key aG = scalarmultBase(a);
         addKeys(aGB, aG, B);
     }
 
     //addKeys2
     //aGbB = aG + bB where a, b are scalars, G is the basepoint and B is a point
-    void addKeys2(key &aGbB, const key &a, const key &b, const key & B) {
+    void addKeys2(key &aGbB, const key &a, const key &b, const key &B)
+    {
         ge_p2 rv;
         ge_p3 B2;
         CHECK_AND_ASSERT_THROW_MES_L1(ge_frombytes_vartime(&B2, B.bytes) == 0, "ge_frombytes_vartime failed at " + boost::lexical_cast<std::string>(__LINE__));
@@ -477,7 +515,8 @@ namespace rct {
 
     //Does some precomputation to make addKeys3 more efficient
     // input B a curve point and output a ge_dsmp which has precomputation applied
-    void precomp(ge_dsmp rv, const key & B) {
+    void precomp(ge_dsmp rv, const key &B)
+    {
         ge_p3 B2;
         CHECK_AND_ASSERT_THROW_MES_L1(ge_frombytes_vartime(&B2, B.bytes) == 0, "ge_frombytes_vartime failed at " + boost::lexical_cast<std::string>(__LINE__));
         ge_dsm_precomp(rv, &B2);
@@ -486,7 +525,8 @@ namespace rct {
     //addKeys3
     //aAbB = a*A + b*B where a, b are scalars, A, B are curve points
     //B must be input after applying "precomp"
-    void addKeys3(key &aAbB, const key &a, const key &A, const key &b, const ge_dsmp B) {
+    void addKeys3(key &aAbB, const key &a, const key &A, const key &b, const ge_dsmp B)
+    {
         ge_p2 rv;
         ge_p3 A2;
         CHECK_AND_ASSERT_THROW_MES_L1(ge_frombytes_vartime(&A2, A.bytes) == 0, "ge_frombytes_vartime failed at " + boost::lexical_cast<std::string>(__LINE__));
@@ -497,7 +537,8 @@ namespace rct {
     //addKeys3
     //aAbB = a*A + b*B where a, b are scalars, A, B are curve points
     //A and B must be input after applying "precomp"
-    void addKeys3(key &aAbB, const key &a, const ge_dsmp A, const key &b, const ge_dsmp B) {
+    void addKeys3(key &aAbB, const key &a, const ge_dsmp A, const key &b, const ge_dsmp B)
+    {
         ge_p2 rv;
         ge_double_scalarmult_precomp_vartime2(&rv, a.bytes, A, b.bytes, B);
         ge_tobytes(aAbB.bytes, &rv);
@@ -506,7 +547,8 @@ namespace rct {
     // addKeys_aGbBcC
     // computes aG + bB + cC
     // G is the fixed basepoint and B,C require precomputation
-    void addKeys_aGbBcC(key &aGbBcC, const key &a, const key &b, const ge_dsmp B, const key &c, const ge_dsmp C) {
+    void addKeys_aGbBcC(key &aGbBcC, const key &a, const key &b, const ge_dsmp B, const key &c, const ge_dsmp C)
+    {
         ge_p2 rv;
         ge_triple_scalarmult_base_vartime(&rv, a.bytes, b.bytes, B, c.bytes, C);
         ge_tobytes(aGbBcC.bytes, &rv);
@@ -515,7 +557,8 @@ namespace rct {
     // addKeys_aAbBcC
     // computes aA + bB + cC
     // A,B,C require precomputation
-    void addKeys_aAbBcC(key &aAbBcC, const key &a, const ge_dsmp A, const key &b, const ge_dsmp B, const key &c, const ge_dsmp C) {
+    void addKeys_aAbBcC(key &aAbBcC, const key &a, const ge_dsmp A, const key &b, const ge_dsmp B, const key &c, const ge_dsmp C)
+    {
         ge_p2 rv;
         ge_triple_scalarmult_precomp_vartime(&rv, a.bytes, A, b.bytes, B, c.bytes, C);
         ge_tobytes(aAbBcC.bytes, &rv);
@@ -523,7 +566,8 @@ namespace rct {
 
     //subtract Keys (subtracts curve points)
     //AB = A - B where A, B are curve points
-    void subKeys(key & AB, const key &A, const key &B) {
+    void subKeys(key &AB, const key &A, const key &B)
+    {
         ge_p3 B2, A2;
         CHECK_AND_ASSERT_THROW_MES_L1(ge_frombytes_vartime(&B2, B.bytes) == 0, "ge_frombytes_vartime failed at " + boost::lexical_cast<std::string>(__LINE__));
         CHECK_AND_ASSERT_THROW_MES_L1(ge_frombytes_vartime(&A2, A.bytes) == 0, "ge_frombytes_vartime failed at " + boost::lexical_cast<std::string>(__LINE__));
@@ -535,99 +579,119 @@ namespace rct {
         ge_p3_tobytes(AB.bytes, &A2);
     }
 
-    bool equalKeys(const key & a, const key & b) {
+    bool equalKeys(const key &a, const key &b)
+    {
         bool rv = true;
-        for (int i = 0; i < 32; ++i) {
-          if (a.bytes[i] != b.bytes[i]) {
+        for (int i = 0; i < 32; ++i)
+        {
+            if (a.bytes[i] != b.bytes[i])
+            {
                 rv = false;
             }
         }
         return rv;
     }
 
-    void cn_fast_hash(key &hash, const void * data, const std::size_t l) {
+    void cn_fast_hash(key &hash, const void *data, const std::size_t l)
+    {
         keccak((const uint8_t *)data, l, hash.bytes, 32);
     }
 
-    void hash_to_scalar(key &hash, const void * data, const std::size_t l) {
+    void hash_to_scalar(key &hash, const void *data, const std::size_t l)
+    {
         cn_fast_hash(hash, data, l);
         sc_reduce32(hash.bytes);
     }
 
-    void cn_fast_hash(key & hash, const key & in) {
+    void cn_fast_hash(key &hash, const key &in)
+    {
         keccak((const uint8_t *)in.bytes, 32, hash.bytes, 32);
     }
 
-    void hash_to_scalar(key & hash, const key & in) {
+    void hash_to_scalar(key &hash, const key &in)
+    {
         cn_fast_hash(hash, in);
         sc_reduce32(hash.bytes);
     }
 
-    key cn_fast_hash(const key & in) {
+    key cn_fast_hash(const key &in)
+    {
         key hash;
         keccak((const uint8_t *)in.bytes, 32, hash.bytes, 32);
         return hash;
     }
 
-     key hash_to_scalar(const key & in) {
+    key hash_to_scalar(const key &in)
+    {
         key hash = cn_fast_hash(in);
         sc_reduce32(hash.bytes);
         return hash;
     }
 
-    key cn_fast_hash128(const void * in) {
+    key cn_fast_hash128(const void *in)
+    {
         key hash;
         keccak((const uint8_t *)in, 128, hash.bytes, 32);
         return hash;
     }
 
-    key hash_to_scalar128(const void * in) {
+    key hash_to_scalar128(const void *in)
+    {
         key hash = cn_fast_hash128(in);
         sc_reduce32(hash.bytes);
         return hash;
     }
 
-    key cn_fast_hash(const ctkeyV &PC) {
-        if (PC.empty()) return rct::hash2rct(crypto::cn_fast_hash("", 0));
+    key cn_fast_hash(const ctkeyV &PC)
+    {
+        if (PC.empty())
+            return rct::hash2rct(crypto::cn_fast_hash("", 0));
         key rv;
         cn_fast_hash(rv, &PC[0], 64 * PC.size());
         return rv;
     }
 
-    key hash_to_scalar(const ctkeyV &PC) {
+    key hash_to_scalar(const ctkeyV &PC)
+    {
         key rv = cn_fast_hash(PC);
         sc_reduce32(rv.bytes);
         return rv;
     }
 
-   key cn_fast_hash(const keyV &keys) {
-       if (keys.empty()) return rct::hash2rct(crypto::cn_fast_hash("", 0));
+    key cn_fast_hash(const keyV &keys)
+    {
+        if (keys.empty())
+            return rct::hash2rct(crypto::cn_fast_hash("", 0));
         key rv;
         cn_fast_hash(rv, &keys[0], keys.size() * sizeof(keys[0]));
         //dp(rv);
         return rv;
     }
 
-   key hash_to_scalar(const keyV &keys) {
+    key hash_to_scalar(const keyV &keys)
+    {
         key rv = cn_fast_hash(keys);
         sc_reduce32(rv.bytes);
         return rv;
     }
 
-   key cn_fast_hash(const key64 keys) {
+    key cn_fast_hash(const key64 keys)
+    {
         key rv;
         cn_fast_hash(rv, &keys[0], 64 * sizeof(keys[0]));
         //dp(rv);
         return rv;
     }
 
-   key hash_to_scalar(const key64 keys) {
+    key hash_to_scalar(const key64 keys)
+    {
         key rv = cn_fast_hash(keys);
         sc_reduce32(rv.bytes);
         return rv;
     }
 
-    void hash_to_p3(ge_p3 &hash8_p3, const key &k) {
+    void hash_to_p3(ge_p3 &hash8_p3, const key &k)
+    {
         key hash_key = cn_fast_hash(k);
         ge_p2 hash_p2;
         ge_fromfe_frombytes_vartime(&hash_p2, hash_key.bytes);
@@ -636,10 +700,12 @@ namespace rct {
         ge_p1p1_to_p3(&hash8_p3, &hash8_p1p1);
     }
 
-    void sumKeys(key & Csum, const keyV &  Cis) {
+    void sumKeys(key &Csum, const keyV &Cis)
+    {
         identity(Csum);
         size_t i = 0;
-        for (i = 0; i < Cis.size(); i++) {
+        for (i = 0; i < Cis.size(); i++)
+        {
             addKeys(Csum, Csum, Cis[i]);
         }
     }
@@ -670,12 +736,14 @@ namespace rct {
         return scalar;
     }
 
-    void ecdhEncode(ecdhTuple & unmasked, const key & sharedSec) {
+    void ecdhEncode(ecdhTuple &unmasked, const key &sharedSec)
+    {
         unmasked.mask = zero();
         xor8(unmasked.amount, ecdhHash(sharedSec));
     }
 
-    void ecdhDecode(ecdhTuple &masked, const key &sharedSec) {
+    void ecdhDecode(ecdhTuple &masked, const key &sharedSec)
+    {
 
         masked.mask = genCommitmentMask(sharedSec);
         xor8(masked.amount, ecdhHash(sharedSec));

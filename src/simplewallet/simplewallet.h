@@ -81,9 +81,15 @@ namespace cryptonote
         bool process_command(const std::vector<std::string> &args);
         std::string get_commands_str();
         std::string get_command_usage(const std::vector<std::string> &args);
-    private:
 
-    enum ResetType { ResetNone, ResetSoft, ResetHard, ResetSoftKeepKI };
+    private:
+        enum ResetType
+        {
+            ResetNone,
+            ResetSoft,
+            ResetHard,
+            ResetSoftKeepKI
+        };
 
         bool handle_command_line(const boost::program_options::variables_map &vm);
 
@@ -166,8 +172,7 @@ namespace cryptonote
         bool sign_transfer(const std::vector<std::string> &args);
         bool submit_transfer(const std::vector<std::string> &args);
         std::vector<std::vector<cryptonote::tx_destination_entry>> split_amounts(
-        std::vector<cryptonote::tx_destination_entry> dsts, size_t num_splits
-    );
+            std::vector<cryptonote::tx_destination_entry> dsts, size_t num_splits);
         bool account(const std::vector<std::string> &args = std::vector<std::string>());
         void print_accounts();
         void print_accounts(const std::string &tag);
@@ -254,12 +259,12 @@ namespace cryptonote
         bool accept_loaded_tx(const std::function<size_t()> get_num_txes, const std::function<const tools::wallet2::tx_construction_data &(size_t)> &get_tx, const std::string &extra_message = std::string());
         bool accept_loaded_tx(const tools::wallet2::unsigned_tx_set &txs);
         bool accept_loaded_tx(const tools::wallet2::signed_tx_set &txs);
-    bool process_ring_members(const std::vector<tools::wallet2::pending_tx>& ptx_vector, std::ostream& ostr, bool verbose);
+        bool process_ring_members(const std::vector<tools::wallet2::pending_tx> &ptx_vector, std::ostream &ostr, bool verbose);
         std::string get_prompt() const;
         bool print_seed(bool encrypted);
         void key_images_sync_intern();
         void on_refresh_finished(uint64_t start_height, uint64_t fetched_blocks, bool is_init, bool received_money);
-    std::pair<std::string, std::string> show_outputs_line(const std::vector<uint64_t> &heights, uint64_t blockchain_height, uint64_t highlight_idx = std::numeric_limits<uint64_t>::max()) const;
+        std::pair<std::string, std::string> show_outputs_line(const std::vector<uint64_t> &heights, uint64_t blockchain_height, uint64_t highlight_idx = std::numeric_limits<uint64_t>::max()) const;
         bool freeze_thaw(const std::vector<std::string> &args, bool freeze);
         bool prompt_if_old(const std::vector<tools::wallet2::pending_tx> &ptx_vector);
         bool on_command(bool (simple_wallet::*cmd)(const std::vector<std::string> &), const std::vector<std::string> &args);
@@ -321,14 +326,14 @@ namespace cryptonote
         void handle_transfer_exception(const std::exception_ptr &e, bool trusted_daemon);
         //----------------- i_wallet2_callback ---------------------
         virtual void on_new_block(uint64_t height, const cryptonote::block &block);
-    virtual void on_money_received(uint64_t height, const crypto::hash &txid, const cryptonote::transaction& tx, uint64_t amount, const cryptonote::subaddress_index& subaddr_index, bool is_change, uint64_t unlock_time);
+        virtual void on_money_received(uint64_t height, const crypto::hash &txid, const cryptonote::transaction &tx, uint64_t amount, const cryptonote::subaddress_index &subaddr_index, bool is_change, uint64_t unlock_time);
         virtual void on_unconfirmed_money_received(uint64_t height, const crypto::hash &txid, const cryptonote::transaction &tx, uint64_t amount, const cryptonote::subaddress_index &subaddr_index);
         virtual void on_money_spent(uint64_t height, const crypto::hash &txid, const cryptonote::transaction &in_tx, uint64_t amount, const cryptonote::transaction &spend_tx, const cryptonote::subaddress_index &subaddr_index);
         virtual void on_skip_transaction(uint64_t height, const crypto::hash &txid, const cryptonote::transaction &tx);
         virtual boost::optional<epee::wipeable_string> on_get_password(const char *reason);
         virtual void on_device_button_request(uint64_t code);
         virtual boost::optional<epee::wipeable_string> on_device_pin_request();
-    virtual boost::optional<epee::wipeable_string> on_device_passphrase_request(bool & on_device);
+        virtual boost::optional<epee::wipeable_string> on_device_passphrase_request(bool &on_device);
         //----------------------------------------------------------
 
         friend class refresh_progress_reporter_t;
@@ -337,10 +342,7 @@ namespace cryptonote
         {
         public:
             refresh_progress_reporter_t(cryptonote::simple_wallet &simple_wallet)
-        : m_simple_wallet(simple_wallet)
-        , m_blockchain_height(0)
-        , m_blockchain_height_update_time()
-        , m_print_time()
+                : m_simple_wallet(simple_wallet), m_blockchain_height(0), m_blockchain_height_update_time(), m_print_time()
             {
             }
 
@@ -429,7 +431,12 @@ namespace cryptonote
         std::atomic<bool> m_locked;
         std::atomic<bool> m_in_command;
 
-    template<uint64_t mini, uint64_t maxi> struct get_random_interval { public: uint64_t operator()() const { return crypto::rand_range(mini, maxi); } };
+        template <uint64_t mini, uint64_t maxi>
+        struct get_random_interval
+        {
+        public:
+            uint64_t operator()() const { return crypto::rand_range(mini, maxi); }
+        };
 
         epee::math_helper::once_a_time_seconds<1> m_inactivity_checker;
         epee::math_helper::once_a_time_seconds_range<get_random_interval<80 * 1000000, 100 * 1000000>> m_refresh_checker;
@@ -447,7 +454,7 @@ namespace cryptonote
         void ask_send_all_ready_messages();
         void check_for_messages();
         bool user_confirms(const std::string &question);
-    bool user_confirms_auto_config();
+        bool user_confirms_auto_config();
         bool get_message_from_arg(const std::string &arg, mms::message &m);
         bool get_number_from_arg(const std::string &arg, uint32_t &number, const uint32_t lower_bound, const uint32_t upper_bound);
 
@@ -468,7 +475,7 @@ namespace cryptonote
         void mms_help(const std::vector<std::string> &args);
         void mms_send_signer_config(const std::vector<std::string> &args);
         void mms_start_auto_config(const std::vector<std::string> &args);
-    void mms_config_checksum(const std::vector<std::string> &args);
+        void mms_config_checksum(const std::vector<std::string> &args);
         void mms_stop_auto_config(const std::vector<std::string> &args);
         void mms_auto_config(const std::vector<std::string> &args);
     };

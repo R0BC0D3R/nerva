@@ -1,22 +1,22 @@
 // Copyright (c) 2019, The NERVA Project
 // Copyright (c) 2017-2019, The Monero Project
-// 
+//
 // All rights reserved.
-// 
+//
 // Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
-// 
+//
 // 1. Redistributions of source code must retain the above copyright notice, this list of
 //    conditions and the following disclaimer.
-// 
+//
 // 2. Redistributions in binary form must reproduce the above copyright notice, this list
 //    of conditions and the following disclaimer in the documentation and/or other
 //    materials provided with the distribution.
-// 
+//
 // 3. Neither the name of the copyright holder nor the names of its contributors may be
 //    used to endorse or promote products derived from this software without specific
 //    prior written permission.
-// 
+//
 // THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
 // EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
 // MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
@@ -39,67 +39,67 @@
 
 namespace tools
 {
-  bool check_updates(const cryptonote::network_type nettype, const std::string &software, std::string &version, std::string &codename, std::string &notice)
-  {
-    bool found = false;
-
-    dns_config::init(nettype == cryptonote::TESTNET);
-
-    if (!dns_config::has_update_records())
-      return false;
-
-    std::vector<std::string> records = dns_config::get_update_records();
-
-    for (const auto& record : records)
+    bool check_updates(const cryptonote::network_type nettype, const std::string &software, std::string &version, std::string &codename, std::string &notice)
     {
-      std::vector<std::string> fields;
-      boost::split(fields, record, boost::is_any_of(":"));
-      if (fields.size() != 4)
-      {
-        MWARNING("Update record does not have 4 fields: " << record);
-        continue;
-      }
+        bool found = false;
 
-      if (software != fields[0])
-        continue;
+        dns_config::init(nettype == cryptonote::TESTNET);
 
-      // use highest version
-      if (found)
-      {
-        int cmp = vercmp(version.c_str(), fields[1].c_str());
-        if (cmp > 0)
-          continue;
-      }
+        if (!dns_config::has_update_records())
+            return false;
 
-      version = fields[1];
-      codename = fields[2];
-      notice = fields[3];
+        std::vector<std::string> records = dns_config::get_update_records();
 
-      LOG_PRINT_L1("Found new version " << version << ":" << codename);
-      found = true;
-    }
-    return found;
-  }
+        for (const auto &record : records)
+        {
+            std::vector<std::string> fields;
+            boost::split(fields, record, boost::is_any_of(":"));
+            if (fields.size() != 4)
+            {
+                MWARNING("Update record does not have 4 fields: " << record);
+                continue;
+            }
 
-  std::string get_update_url(const std::string &software, const std::string &buildtag, const std::string &version)
-  {
-    std::vector<std::string> records = dns_config::get_download_records();
+            if (software != fields[0])
+                continue;
 
-    std::string key;
-    std::string value;
+            // use highest version
+            if (found)
+            {
+                int cmp = vercmp(version.c_str(), fields[1].c_str());
+                if (cmp > 0)
+                    continue;
+            }
 
-    for (const auto& record : records)
-    {
-      const auto idx = record.find_first_of(':');
-      if (idx != std::string::npos)
-      {
-        key = record.substr(0, idx);
-        value = record.substr(idx + 1);
-        if (buildtag == key)
-          return value;
-      }
+            version = fields[1];
+            codename = fields[2];
+            notice = fields[3];
+
+            LOG_PRINT_L1("Found new version " << version << ":" << codename);
+            found = true;
+        }
+        return found;
     }
 
-    return "Link not available";
-  }
-}
+    std::string get_update_url(const std::string &software, const std::string &buildtag, const std::string &version)
+    {
+        std::vector<std::string> records = dns_config::get_download_records();
+
+        std::string key;
+        std::string value;
+
+        for (const auto &record : records)
+        {
+            const auto idx = record.find_first_of(':');
+            if (idx != std::string::npos)
+            {
+                key = record.substr(0, idx);
+                value = record.substr(idx + 1);
+                if (buildtag == key)
+                    return value;
+            }
+        }
+
+        return "Link not available";
+    }
+} // namespace tools
