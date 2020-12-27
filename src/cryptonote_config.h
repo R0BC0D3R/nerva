@@ -177,11 +177,6 @@ namespace config
     uint64_t const CRYPTONOTE_PUBLIC_ADDRESS_BASE58_PREFIX = 0x3800;
     uint64_t const CRYPTONOTE_PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX = 0x7081;
     uint64_t const CRYPTONOTE_PUBLIC_SUBADDRESS_BASE58_PREFIX = 0x1080;
-    uint16_t const P2P_DEFAULT_PORT = 17565;
-    uint16_t const RPC_DEFAULT_PORT = 17566;
-    boost::uuids::uuid const NETWORK_ID = {{0x12, 0x30, 0xF1, 0x71, 0x61, 0x04, 0x41, 0x61, 0x17, 0x31, 0x00, 0x82, 0x16, 0xA1, 0xA1, 0x12}};
-    std::string const GENESIS_TX = "010a01ff0001ffffffffffff0f029b2e4c0281c0b02e7c53291a94d1d0cbff8883f8024f5142ee494ffbbd0880712101abf318a3dc8d66a0263839cffce83daa85963a27635a608a2ba9973055bcc8e400";
-    uint32_t const GENESIS_NONCE = 10000;
 
     // Hash domain separators
     const char HASH_KEY_BULLETPROOF_EXPONENT[] = "bulletproof";
@@ -199,18 +194,27 @@ namespace config
     const unsigned char HASH_KEY_CLSAG_AGG_1[] = "CLSAG_agg_1";
     const char HASH_KEY_MESSAGE_SIGNING[] = "MoneroMessageSignature";
 
-    std::string const HF_MIN_VERSION = "0.2.0.0";
-    std::string const MIN_VERSION = "0.2.0.0";
+    namespace mainnet
+    {
+        uint16_t const P2P_DEFAULT_PORT = 17565;
+        uint16_t const RPC_DEFAULT_PORT = 17566;
+        boost::uuids::uuid const NETWORK_ID = {{0x2e, 0x4e, 0x45, 0x52, 0x56, 0x41, 0x20, 0x4d, 0x41, 0x49, 0x4e, 0x4e, 0x45, 0x54, 0x20, 0x32}};
+        std::string const GENESIS_TX = "";
+        uint32_t const GENESIS_NONCE = 10000;
 
-    static const hard_fork hard_forks[] = {
-        {1, 1},
-        {2, 300}};
+        std::string const HF_MIN_VERSION = "0.2.0.0";
+        std::string const MIN_VERSION = "0.2.0.0";
+
+        static const hard_fork hard_forks[] = {
+            {1, 1},
+            {2, 257}};
+    }
 
     namespace testnet
     {
         uint16_t const P2P_DEFAULT_PORT = 18565;
         uint16_t const RPC_DEFAULT_PORT = 18566;
-        boost::uuids::uuid const NETWORK_ID = {{0x13, 0x22, 0xF0, 0x55, 0x42, 0x18, 0x40, 0x33, 0x16, 0x88, 0x01, 0x92, 0xAA, 0xBC, 0xFF, 0x13}};
+        boost::uuids::uuid const NETWORK_ID = {{0x2e, 0x4e, 0x45, 0x52, 0x56, 0x41, 0x20, 0x54, 0x45, 0x53, 0x54, 0x4e, 0x45, 0x54, 0x20, 0x32}};
         std::string const GENESIS_TX = "";
         uint32_t const GENESIS_NONCE = 10001;
 
@@ -219,21 +223,8 @@ namespace config
 
         static const hard_fork hard_forks[] = {
             {1, 1},
-            {2, 300}};
+            {2, 257}};
     } // namespace testnet
-
-    namespace stagenet
-    {
-        uint16_t const P2P_DEFAULT_PORT = 19565;
-        uint16_t const RPC_DEFAULT_PORT = 19566;
-        boost::uuids::uuid const NETWORK_ID = {{0x14, 0x31, 0xF1, 0x22, 0x54, 0x86, 0x36, 0xFF, 0xAB, 0x51, 0x00, 0x4F, 0x3C, 0x3D, 0xAA, 0x16}};
-        std::string const GENESIS_TX = "";
-        uint32_t const GENESIS_NONCE = 10002;
-
-        static const hard_fork hard_forks[] = {
-            {1, 1},
-            {2, 300}};
-    } // namespace stagenet
 } // namespace config
 
 #ifndef VERSION_TO_INT
@@ -266,8 +257,6 @@ namespace cryptonote
     {
         MAINNET = 0,
         TESTNET,
-        STAGENET,
-        FAKECHAIN,
         UNDEFINED = 255
     };
 
@@ -291,13 +280,13 @@ namespace cryptonote
             ::config::CRYPTONOTE_PUBLIC_ADDRESS_BASE58_PREFIX,
             ::config::CRYPTONOTE_PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX,
             ::config::CRYPTONOTE_PUBLIC_SUBADDRESS_BASE58_PREFIX,
-            ::config::P2P_DEFAULT_PORT,
-            ::config::RPC_DEFAULT_PORT,
-            ::config::NETWORK_ID,
-            ::config::GENESIS_TX,
-            ::config::GENESIS_NONCE,
-            ::config::HF_MIN_VERSION,
-            ::config::MIN_VERSION};
+            ::config::mainnet::P2P_DEFAULT_PORT,
+            ::config::mainnet::RPC_DEFAULT_PORT,
+            ::config::mainnet::NETWORK_ID,
+            ::config::mainnet::GENESIS_TX,
+            ::config::mainnet::GENESIS_NONCE,
+            ::config::mainnet::HF_MIN_VERSION,
+            ::config::mainnet::MIN_VERSION};
         static const config_t testnet = {
             ::config::CRYPTONOTE_PUBLIC_ADDRESS_BASE58_PREFIX,
             ::config::CRYPTONOTE_PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX,
@@ -309,16 +298,6 @@ namespace cryptonote
             ::config::testnet::GENESIS_NONCE,
             ::config::testnet::HF_MIN_VERSION,
             ::config::testnet::MIN_VERSION};
-        static const config_t stagenet = {
-            ::config::CRYPTONOTE_PUBLIC_ADDRESS_BASE58_PREFIX,
-            ::config::CRYPTONOTE_PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX,
-            ::config::CRYPTONOTE_PUBLIC_SUBADDRESS_BASE58_PREFIX,
-            ::config::stagenet::P2P_DEFAULT_PORT,
-            ::config::stagenet::RPC_DEFAULT_PORT,
-            ::config::stagenet::NETWORK_ID,
-            ::config::stagenet::GENESIS_TX,
-            ::config::stagenet::GENESIS_NONCE,
-            "", ""};
 
         switch (nettype)
         {
@@ -326,10 +305,6 @@ namespace cryptonote
             return mainnet;
         case TESTNET:
             return testnet;
-        case STAGENET:
-            return stagenet;
-        case FAKECHAIN:
-            return mainnet;
         default:
             throw std::runtime_error("Invalid network type");
         }

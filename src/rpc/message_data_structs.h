@@ -186,7 +186,6 @@ namespace cryptonote
             uint64_t grey_peerlist_size;
             bool mainnet;
             bool testnet;
-            bool stagenet;
             std::string nettype;
             crypto::hash top_block_hash;
             cryptonote::difficulty_type wide_cumulative_difficulty;

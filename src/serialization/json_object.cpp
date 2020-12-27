@@ -1194,7 +1194,6 @@ namespace cryptonote
             INSERT_INTO_JSON_OBJECT(dest, grey_peerlist_size, info.grey_peerlist_size);
             INSERT_INTO_JSON_OBJECT(dest, mainnet, info.mainnet);
             INSERT_INTO_JSON_OBJECT(dest, testnet, info.testnet);
-            INSERT_INTO_JSON_OBJECT(dest, stagenet, info.stagenet);
             INSERT_INTO_JSON_OBJECT(dest, nettype, info.nettype);
             INSERT_INTO_JSON_OBJECT(dest, top_block_hash, info.top_block_hash);
             INSERT_INTO_JSON_OBJECT(dest, cumulative_difficulty, info.cumulative_difficulty);
@@ -1228,7 +1227,6 @@ namespace cryptonote
             GET_FROM_JSON_OBJECT(val, info.grey_peerlist_size, grey_peerlist_size);
             GET_FROM_JSON_OBJECT(val, info.mainnet, mainnet);
             GET_FROM_JSON_OBJECT(val, info.testnet, testnet);
-            GET_FROM_JSON_OBJECT(val, info.stagenet, stagenet);
             GET_FROM_JSON_OBJECT(val, info.nettype, nettype);
             GET_FROM_JSON_OBJECT(val, info.top_block_hash, top_block_hash);
             GET_FROM_JSON_OBJECT(val, info.cumulative_difficulty, cumulative_difficulty);

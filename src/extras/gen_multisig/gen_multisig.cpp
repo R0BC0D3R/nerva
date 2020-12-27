@@ -67,7 +67,6 @@ namespace
     const command_line::arg_descriptor<uint32_t> arg_participants = {"participants", genms::tr("How many participants will share parts of the multisig wallet"), 0};
     const command_line::arg_descriptor<uint32_t> arg_threshold = {"threshold", genms::tr("How many signers are required to sign a valid transaction"), 0};
     const command_line::arg_descriptor<bool, false> arg_testnet = {"testnet", genms::tr("Create testnet multisig wallets"), false};
-    const command_line::arg_descriptor<bool, false> arg_stagenet = {"stagenet", genms::tr("Create stagenet multisig wallets"), false};
     const command_line::arg_descriptor<bool, false> arg_create_address_file = {"create-address-file", genms::tr("Create an address file for new wallets"), false};
 
     const command_line::arg_descriptor<std::vector<std::string>> arg_command = {"command", ""};
@@ -167,14 +166,13 @@ int main(int argc, char *argv[])
     command_line::add_arg(desc_params, arg_threshold);
     command_line::add_arg(desc_params, arg_participants);
     command_line::add_arg(desc_params, arg_testnet);
-    command_line::add_arg(desc_params, arg_stagenet);
     command_line::add_arg(desc_params, arg_create_address_file);
 
     boost::optional<po::variables_map> vm;
     bool should_terminate = false;
     std::tie(vm, should_terminate) = wallet_args::main(
         argc, argv,
-        "nerva-gen-multisig [(--testnet|--stagenet)] [--filename-base=<filename>] [--scheme=M/N] [--threshold=M] [--participants=N]",
+        "nerva-gen-multisig [(--testnet)] [--filename-base=<filename>] [--scheme=M/N] [--threshold=M] [--participants=N]",
         genms::tr("This program generates a set of multisig wallets - use this simpler scheme only if all the participants trust each other"),
         desc_params,
         boost::program_options::positional_options_description(),
@@ -185,17 +183,12 @@ int main(int argc, char *argv[])
     if (should_terminate)
         return 0;
 
-    bool testnet, stagenet;
+    bool testnet;
     uint32_t threshold = 0, total = 0;
     std::string basename;
 
     testnet = command_line::get_arg(*vm, arg_testnet);
-    stagenet = command_line::get_arg(*vm, arg_stagenet);
-    if (testnet && stagenet)
-    {
-        tools::fail_msg_writer() << genms::tr("Error: Can't specify more than one of --testnet and --stagenet");
-        return 1;
-    }
+
     if (command_line::has_arg(*vm, arg_scheme))
     {
         if (sscanf(command_line::get_arg(*vm, arg_scheme).c_str(), "%u/%u", &threshold, &total) != 2)
@@ -238,7 +231,7 @@ int main(int argc, char *argv[])
     }
 
     bool create_address_file = command_line::get_arg(*vm, arg_create_address_file);
-    if (!generate_multisig(threshold, total, basename, testnet ? TESTNET : stagenet ? STAGENET : MAINNET, create_address_file))
+    if (!generate_multisig(threshold, total, basename, testnet ? TESTNET : MAINNET, create_address_file))
         return 1;
 
     return 0;

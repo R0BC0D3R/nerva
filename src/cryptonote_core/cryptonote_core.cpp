@@ -74,16 +74,12 @@ namespace cryptonote
 {
     const command_line::arg_descriptor<bool, false> arg_testnet_on = {
         "testnet", "Run on testnet. The wallet must be launched with --testnet flag.", false};
-    const command_line::arg_descriptor<bool, false> arg_stagenet_on = {
-        "stagenet", "Run on stagenet. The wallet must be launched with --stagenet flag.", false};
     const command_line::arg_descriptor<uint64_t> arg_fixed_difficulty = {
         "fixed-difficulty", "Fixed difficulty used for testing.", 0};
-    const command_line::arg_descriptor<std::string, false, true, 2> arg_data_dir = {
-        "data-dir", "Specify data directory", tools::get_default_data_dir(), {{&arg_testnet_on, &arg_stagenet_on}}, [](std::array<bool, 2> testnet_stagenet, bool defaulted, std::string val) -> std::string {
-            if (testnet_stagenet[0])
+    const command_line::arg_descriptor<std::string, false, true, 1> arg_data_dir = {
+        "data-dir", "Specify data directory", tools::get_default_data_dir(), arg_testnet_on, [](bool tn, bool defaulted, std::string val) -> std::string {
+            if (tn)
                 return (boost::filesystem::path(val) / "testnet").string();
-            else if (testnet_stagenet[1])
-                return (boost::filesystem::path(val) / "stagenet").string();
             return val;
         }};
     const command_line::arg_descriptor<bool> arg_offline = {
@@ -234,7 +230,6 @@ namespace cryptonote
         command_line::add_arg(desc, arg_test_drop_download_height);
 
         command_line::add_arg(desc, arg_testnet_on);
-        command_line::add_arg(desc, arg_stagenet_on);
         command_line::add_arg(desc, arg_fixed_difficulty);
         command_line::add_arg(desc, arg_dns_checkpoints);
         command_line::add_arg(desc, arg_prep_blocks_threads);
@@ -262,12 +257,9 @@ namespace cryptonote
     //-----------------------------------------------------------------------------------------------
     bool core::handle_command_line(const boost::program_options::variables_map &vm)
     {
-        if (m_nettype != FAKECHAIN)
-        {
-            const bool testnet = command_line::get_arg(vm, arg_testnet_on);
-            const bool stagenet = command_line::get_arg(vm, arg_stagenet_on);
-            m_nettype = testnet ? TESTNET : stagenet ? STAGENET : MAINNET;
-        }
+
+        const bool testnet = command_line::get_arg(vm, arg_testnet_on);
+        m_nettype = testnet ? TESTNET : MAINNET;
 
         m_config_folder = command_line::get_arg(vm, arg_data_dir);
 
@@ -381,13 +373,10 @@ namespace cryptonote
         return m_blockchain_storage.get_alternative_blocks_count();
     }
     //-----------------------------------------------------------------------------------------------
-    bool core::init(const boost::program_options::variables_map &vm, const cryptonote::test_options *test_options, const GetCheckpointsCallback &get_checkpoints /* = nullptr */)
+    bool core::init(const boost::program_options::variables_map &vm, const GetCheckpointsCallback &get_checkpoints /* = nullptr */)
     {
         start_time = std::time(nullptr);
-        if (test_options != NULL)
-        {
-            m_nettype = FAKECHAIN;
-        }
+
         bool r = handle_command_line(vm);
         CHECK_AND_ASSERT_MES(r, false, "Failed to handle command line");
 
@@ -403,8 +392,6 @@ namespace cryptonote
         uint32_t pop_blocks_count = command_line::get_arg(vm, cryptonote::arg_pop_blocks);
 
         boost::filesystem::path folder(m_config_folder);
-        if (m_nettype == FAKECHAIN)
-            folder /= "fake";
 
         // make sure the data directory exists, and try to lock it
         CHECK_AND_ASSERT_MES(boost::filesystem::exists(folder) || boost::filesystem::create_directories(folder), false,
@@ -443,16 +430,6 @@ namespace cryptonote
         blockchain_db_sync_mode sync_mode = db_defaultsync;
         bool sync_on_blocks = true;
         uint64_t sync_threshold = 1;
-
-        if (m_nettype == FAKECHAIN)
-        {
-            // reset the db by removing the database file before opening it
-            if (!db->remove_data_file(filename))
-            {
-                MERROR("Failed to remove data file in " << filename);
-                return false;
-            }
-        }
 
         try
         {
@@ -603,7 +580,7 @@ namespace cryptonote
         }
 
         const uint64_t fixed_difficulty = command_line::get_arg(vm, arg_fixed_difficulty);
-        r = m_blockchain_storage.init(db.release(), m_nettype, m_offline, test_options, fixed_difficulty, get_checkpoints);
+        r = m_blockchain_storage.init(db.release(), m_nettype, m_offline, fixed_difficulty, get_checkpoints);
         CHECK_AND_ASSERT_MES(r, false, "Failed to initialize blockchain storage");
 
         r = m_mempool.init(max_txpool_weight);
@@ -1718,7 +1695,7 @@ namespace cryptonote
     //-----------------------------------------------------------------------------------------------
     bool core::check_block_rate()
     {
-        if (m_offline || m_nettype == FAKECHAIN || m_target_blockchain_height > get_current_blockchain_height() || m_target_blockchain_height == 0)
+        if (m_offline || m_target_blockchain_height > get_current_blockchain_height() || m_target_blockchain_height == 0)
         {
             MDEBUG("Not checking block rate, offline or syncing");
             return true;

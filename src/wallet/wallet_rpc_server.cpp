@@ -4554,9 +4554,7 @@ namespace tools
             const char *stype;
         } net_types[] = {
             {cryptonote::MAINNET, "mainnet"},
-            {cryptonote::TESTNET, "testnet"},
-            {cryptonote::STAGENET, "stagenet"},
-        };
+            {cryptonote::TESTNET, "testnet"}};
         if (!req.any_net_type && !m_wallet)
             return not_open(er);
         for (const auto &net_type : net_types)
@@ -4566,21 +4564,20 @@ namespace tools
             if (req.allow_openalias)
             {
                 std::string address;
-                res.valid = get_account_address_from_str_or_url(info, net_type.type, req.address,
-                                                                [&er, &address](const std::string &url, const std::vector<std::string> &addresses, bool dnssec_valid) -> std::string {
-                                                                    if (!dnssec_valid)
-                                                                    {
-                                                                        er.message = std::string("Invalid DNSSEC for ") + url;
-                                                                        return {};
-                                                                    }
-                                                                    if (addresses.empty())
-                                                                    {
-                                                                        er.message = std::string("No Monero address found at ") + url;
-                                                                        return {};
-                                                                    }
-                                                                    address = addresses[0];
-                                                                    return address;
-                                                                });
+                res.valid = get_account_address_from_str_or_url(info, net_type.type, req.address, [&er, &address](const std::string &url, const std::vector<std::string> &addresses, bool dnssec_valid) -> std::string {
+                    if (!dnssec_valid)
+                    {
+                        er.message = std::string("Invalid DNSSEC for ") + url;
+                        return {};
+                    }
+                    if (addresses.empty())
+                    {
+                        er.message = std::string("No Monero address found at ") + url;
+                        return {};
+                    }
+                    address = addresses[0];
+                    return address;
+                });
                 if (res.valid)
                     res.openalias_address = address;
             }
@@ -4719,12 +4716,6 @@ public:
         try
         {
             const bool testnet = tools::wallet2::has_testnet_option(vm);
-            const bool stagenet = tools::wallet2::has_stagenet_option(vm);
-            if (testnet && stagenet)
-            {
-                MERROR(tools::wallet_rpc_server::tr("Can't specify more than one of --testnet and --stagenet"));
-                return false;
-            }
 
             const auto arg_wallet_file = wallet_args::arg_wallet_file();
             const auto arg_from_json = wallet_args::arg_generate_from_json();

@@ -233,14 +233,7 @@ int main(int argc, char const *argv[])
             return 1;
         }
         const bool testnet = command_line::get_arg(vm, cryptonote::arg_testnet_on);
-        const bool stagenet = command_line::get_arg(vm, cryptonote::arg_stagenet_on);
         const bool noanalytics = command_line::get_arg(vm, daemon_args::arg_noanalytics);
-
-        if (testnet && stagenet)
-        {
-            std::cerr << "Can't specify more than one of --testnet and --stagenet" << ENDL;
-            return 1;
-        }
 
         uint64_t gb = command_line::get_arg(vm, daemon_args::arg_create_genesis_tx);
 

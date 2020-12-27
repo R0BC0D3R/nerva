@@ -364,8 +364,7 @@ namespace cryptonote
         cryptonote::network_type net_type = nettype();
         res.mainnet = net_type == MAINNET;
         res.testnet = net_type == TESTNET;
-        res.stagenet = net_type == STAGENET;
-        res.nettype = net_type == MAINNET ? "mainnet" : net_type == TESTNET ? "testnet" : net_type == STAGENET ? "stagenet" : "fakechain";
+        res.nettype = net_type == MAINNET ? "mainnet" : "testnet";
         store_difficulty(m_core.get_blockchain_storage().get_db().get_block_cumulative_difficulty(res.height - 1),
                          res.cumulative_difficulty, res.wide_cumulative_difficulty, res.cumulative_difficulty_top64);
         res.block_size_limit = res.block_weight_limit = m_core.get_blockchain_storage().get_current_cumulative_block_weight_limit();
@@ -2984,12 +2983,10 @@ namespace cryptonote
         return true;
     }
 
-    const command_line::arg_descriptor<std::string, false, true, 2> core_rpc_server::arg_rpc_bind_port = {
-        "rpc-bind-port", "Port for RPC server", std::to_string(config::RPC_DEFAULT_PORT), {{&cryptonote::arg_testnet_on, &cryptonote::arg_stagenet_on}}, [](std::array<bool, 2> testnet_stagenet, bool defaulted, std::string val) -> std::string {
-            if (testnet_stagenet[0] && defaulted)
+    const command_line::arg_descriptor<std::string, false, true, 1> core_rpc_server::arg_rpc_bind_port = {
+        "rpc-bind-port", "Port for RPC server", std::to_string(config::mainnet::RPC_DEFAULT_PORT), cryptonote::arg_testnet_on, [](bool tn, bool defaulted, std::string val) -> std::string {
+            if (tn && defaulted)
                 return std::to_string(config::testnet::RPC_DEFAULT_PORT);
-            else if (testnet_stagenet[1] && defaulted)
-                return std::to_string(config::stagenet::RPC_DEFAULT_PORT);
             return val;
         }};
 

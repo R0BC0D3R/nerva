@@ -265,9 +265,6 @@ bool Blockchain::scan_outputkeys_for_indexes(size_t tx_version, const txin_to_ke
 //------------------------------------------------------------------
 uint32_t Blockchain::get_minimum_version_for_fork(uint32_t min_ver) const
 {
-    if (m_nettype == STAGENET || m_nettype == FAKECHAIN)
-        return 0;
-
     const uint64_t top_height = m_db->height() - 1;
     const block top_block = m_db->get_top_block();
     const uint8_t hf_version = get_hardfork()->get_last_version();
@@ -299,11 +296,9 @@ uint64_t Blockchain::get_current_blockchain_height() const
 //------------------------------------------------------------------
 //FIXME: possibly move this into the constructor, to avoid accidentally
 //       dereferencing a null BlockchainDB pointer
-bool Blockchain::init(BlockchainDB *db, const network_type nettype, bool offline, const cryptonote::test_options *test_options, difficulty_type fixed_difficulty, const GetCheckpointsCallback &get_checkpoints /* = nullptr*/)
+bool Blockchain::init(BlockchainDB *db, const network_type nettype, bool offline, difficulty_type fixed_difficulty, const GetCheckpointsCallback &get_checkpoints /* = nullptr*/)
 {
     LOG_PRINT_L3("Blockchain::" << __func__);
-
-    CHECK_AND_ASSERT_MES(nettype != FAKECHAIN || test_options, false, "fake chain network type used without options");
 
     CRITICAL_REGION_LOCAL(m_tx_pool);
     CRITICAL_REGION_LOCAL1(m_blockchain_lock);
@@ -329,31 +324,21 @@ bool Blockchain::init(BlockchainDB *db, const network_type nettype, bool offline
 
     m_db = db;
 
-    m_nettype = test_options != NULL ? FAKECHAIN : nettype;
+    m_nettype = nettype;
     m_offline = offline;
     m_fixed_difficulty = fixed_difficulty;
     if (m_hardfork == nullptr)
         m_hardfork = new HardFork(*db, 1, 0);
 
-    if (m_nettype == FAKECHAIN)
-    {
-        for (size_t n = 0; test_options->hard_forks[n].first; ++n)
-            m_hardfork->add_fork(test_options->hard_forks[n].first, test_options->hard_forks[n].second, 0);
-    }
-    else if (m_nettype == TESTNET)
+    if (m_nettype == TESTNET)
     {
         for (size_t n = 0; n < sizeof(::config::testnet::hard_forks) / sizeof(::config::testnet::hard_forks[0]); ++n)
             m_hardfork->add_fork(::config::testnet::hard_forks[n].version, ::config::testnet::hard_forks[n].height);
     }
-    else if (m_nettype == STAGENET)
-    {
-        for (size_t n = 0; n < sizeof(::config::stagenet::hard_forks) / sizeof(::config::stagenet::hard_forks[0]); ++n)
-            m_hardfork->add_fork(::config::stagenet::hard_forks[n].version, ::config::stagenet::hard_forks[n].height);
-    }
     else
     {
-        for (size_t n = 0; n < sizeof(::config::hard_forks) / sizeof(::config::hard_forks[0]); ++n)
-            m_hardfork->add_fork(::config::hard_forks[n].version, ::config::hard_forks[n].height);
+        for (size_t n = 0; n < sizeof(::config::mainnet::hard_forks) / sizeof(::config::mainnet::hard_forks[0]); ++n)
+            m_hardfork->add_fork(::config::mainnet::hard_forks[n].version, ::config::mainnet::hard_forks[n].height);
     }
     m_hardfork->init();
 
@@ -447,12 +432,6 @@ bool Blockchain::init(BlockchainDB *db, const network_type nettype, bool offline
         uint64_t top_block_height;
         crypto::hash top_block_hash = get_tail_id(top_block_height);
         m_tx_pool.on_blockchain_dec(top_block_height, top_block_hash);
-    }
-
-    if (test_options && test_options->long_term_block_weight_window)
-    {
-        m_long_term_block_weights_window = test_options->long_term_block_weight_window;
-        m_long_term_block_weights_cache_rolling_median = epee::misc_utils::rolling_median_t<uint64_t>(m_long_term_block_weights_window);
     }
 
     bool difficulty_ok;
@@ -4482,11 +4461,11 @@ const std::vector<hard_fork> &Blockchain::get_hard_fork_heights(network_type net
 {
     static const std::vector<hard_fork> mainnet_heights = []() {
         std::vector<hard_fork> heights;
-        const size_t n = sizeof(::config::hard_forks) / sizeof(::config::hard_forks[0]);
+        const size_t n = sizeof(::config::mainnet::hard_forks) / sizeof(::config::mainnet::hard_forks[0]);
         heights.resize(n);
         for (size_t i = 0; i < n; i++)
         {
-            const hard_fork hf = ::config::hard_forks[i];
+            const hard_fork hf = ::config::mainnet::hard_forks[i];
             heights.push_back(hf);
         }
         return heights;
@@ -4502,17 +4481,6 @@ const std::vector<hard_fork> &Blockchain::get_hard_fork_heights(network_type net
         }
         return heights;
     }();
-    static const std::vector<hard_fork> stagenet_heights = []() {
-        std::vector<hard_fork> heights;
-        const size_t n = sizeof(::config::stagenet::hard_forks) / sizeof(::config::stagenet::hard_forks[0]);
-        heights.resize(n);
-        for (size_t i = 0; i < n; i++)
-        {
-            const hard_fork hf = ::config::stagenet::hard_forks[i];
-            heights.push_back(hf);
-        }
-        return heights;
-    }();
     static const std::vector<hard_fork> dummy;
     switch (nettype)
     {
@@ -4520,8 +4488,6 @@ const std::vector<hard_fork> &Blockchain::get_hard_fork_heights(network_type net
         return mainnet_heights;
     case TESTNET:
         return testnet_heights;
-    case STAGENET:
-        return stagenet_heights;
     default:
         return dummy;
     }

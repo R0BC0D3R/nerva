@@ -188,10 +188,6 @@ namespace cryptonote
         {
             return true;
         }
-        if (nettype == STAGENET)
-        {
-            return true;
-        }
         return true;
     }
 

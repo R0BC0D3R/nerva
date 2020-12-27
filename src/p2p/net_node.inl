@@ -391,9 +391,8 @@ namespace nodetool
         const boost::program_options::variables_map &vm)
     {
         bool testnet = command_line::get_arg(vm, cryptonote::arg_testnet_on);
-        bool stagenet = command_line::get_arg(vm, cryptonote::arg_stagenet_on);
         const bool pad_txs = command_line::get_arg(vm, arg_pad_transactions);
-        m_nettype = testnet ? cryptonote::TESTNET : stagenet ? cryptonote::STAGENET : cryptonote::MAINNET;
+        m_nettype = testnet ? cryptonote::TESTNET : cryptonote::MAINNET;
 
         network_zone &public_zone = m_network_zones[epee::net_utils::zone::public_];
         public_zone.m_connect = &public_connect;
@@ -732,7 +731,8 @@ namespace nodetool
         m_config_folder = command_line::get_arg(vm, cryptonote::arg_data_dir);
         network_zone &public_zone = m_network_zones.at(epee::net_utils::zone::public_);
 
-        if ((m_nettype == cryptonote::MAINNET && public_zone.m_port != std::to_string(::config::P2P_DEFAULT_PORT)) || (m_nettype == cryptonote::TESTNET && public_zone.m_port != std::to_string(::config::testnet::P2P_DEFAULT_PORT)) || (m_nettype == cryptonote::STAGENET && public_zone.m_port != std::to_string(::config::stagenet::P2P_DEFAULT_PORT)))
+        if ((m_nettype == cryptonote::MAINNET && public_zone.m_port != std::to_string(::config::mainnet::P2P_DEFAULT_PORT)) || 
+            (m_nettype == cryptonote::TESTNET && public_zone.m_port != std::to_string(::config::testnet::P2P_DEFAULT_PORT)))
         {
             m_config_folder = m_config_folder + "/" + public_zone.m_port;
         }
@@ -2728,7 +2728,7 @@ namespace nodetool
             return false; // Unable to determine how many connections from host
 
         // for testing networks we allow more than 1 connection
-        const size_t max_connections = m_nettype == cryptonote::STAGENET ? 3 : 1;
+        const size_t max_connections = m_nettype == cryptonote::TESTNET ? 3 : 1;
         size_t count = 0;
 
         m_network_zones.at(epee::net_utils::zone::public_).m_net_server.get_config_object().foreach_connection([&](const p2p_connection_context &cntxt) {

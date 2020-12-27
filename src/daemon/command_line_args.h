@@ -38,26 +38,18 @@ namespace daemon_args
 {
     std::string const WINDOWS_SERVICE_NAME = "NERVA Daemon";
 
-    const command_line::arg_descriptor<std::string, false, true, 2> arg_config_file = {
-        "config-file", "Specify configuration file", (daemonizer::get_default_data_dir() / std::string(CRYPTONOTE_NAME ".conf")).string(), {{&cryptonote::arg_testnet_on, &cryptonote::arg_stagenet_on}}, [](std::array<bool, 2> testnet_stagenet, bool defaulted, std::string val) -> std::string {
-            if (testnet_stagenet[0] && defaulted)
+    const command_line::arg_descriptor<std::string, false, true, 1> arg_config_file = {
+        "config-file", "Specify configuration file", (daemonizer::get_default_data_dir() / std::string(CRYPTONOTE_NAME ".conf")).string(), cryptonote::arg_testnet_on, [](bool tn, bool defaulted, std::string val) -> std::string {
+            if (tn && defaulted)
                 return (daemonizer::get_default_data_dir() / "testnet" /
-                        std::string(CRYPTONOTE_NAME ".conf"))
-                    .string();
-            else if (testnet_stagenet[1] && defaulted)
-                return (daemonizer::get_default_data_dir() / "stagenet" /
                         std::string(CRYPTONOTE_NAME ".conf"))
                     .string();
             return val;
         }};
-    const command_line::arg_descriptor<std::string, false, true, 2> arg_log_file = {
-        "log-file", "Specify log file", (daemonizer::get_default_data_dir() / std::string(CRYPTONOTE_NAME ".log")).string(), {{&cryptonote::arg_testnet_on, &cryptonote::arg_stagenet_on}}, [](std::array<bool, 2> testnet_stagenet, bool defaulted, std::string val) -> std::string {
-            if (testnet_stagenet[0] && defaulted)
+    const command_line::arg_descriptor<std::string, false, true, 1> arg_log_file = {
+        "log-file", "Specify log file", (daemonizer::get_default_data_dir() / std::string(CRYPTONOTE_NAME ".log")).string(), cryptonote::arg_testnet_on, [](bool tn, bool defaulted, std::string val) -> std::string {
+            if (tn && defaulted)
                 return (daemonizer::get_default_data_dir() / "testnet" /
-                        std::string(CRYPTONOTE_NAME ".log"))
-                    .string();
-            else if (testnet_stagenet[1] && defaulted)
-                return (daemonizer::get_default_data_dir() / "stagenet" /
                         std::string(CRYPTONOTE_NAME ".log"))
                     .string();
             return val;

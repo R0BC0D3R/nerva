@@ -663,7 +663,6 @@ namespace cryptonote
             uint64_t grey_peerlist_size;
             bool mainnet;
             bool testnet;
-            bool stagenet;
             std::string nettype;
             std::string top_block_hash;
             uint64_t cumulative_difficulty;
@@ -702,7 +701,6 @@ namespace cryptonote
             KV_SERIALIZE(grey_peerlist_size)
             KV_SERIALIZE(mainnet)
             KV_SERIALIZE(testnet)
-            KV_SERIALIZE(stagenet)
             KV_SERIALIZE(nettype)
             KV_SERIALIZE(top_block_hash)
             KV_SERIALIZE(cumulative_difficulty)

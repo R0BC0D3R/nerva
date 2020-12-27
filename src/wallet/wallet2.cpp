@@ -273,13 +273,10 @@ namespace
         const command_line::arg_descriptor<bool> daemon_ssl_allow_any_cert = {"daemon-ssl-allow-any-cert", tools::wallet2::tr("Allow any SSL certificate from the daemon"), false};
         const command_line::arg_descriptor<bool> daemon_ssl_allow_chained = {"daemon-ssl-allow-chained", tools::wallet2::tr("Allow user (via --daemon-ssl-ca-certificates) chain certificates"), false};
         const command_line::arg_descriptor<bool> testnet = {"testnet", tools::wallet2::tr("For testnet. Daemon must also be launched with --testnet flag"), false};
-        const command_line::arg_descriptor<bool> stagenet = {"stagenet", tools::wallet2::tr("For stagenet. Daemon must also be launched with --stagenet flag"), false};
-        const command_line::arg_descriptor<std::string, false, true, 2> shared_ringdb_dir = {
-            "shared-ringdb-dir", tools::wallet2::tr("Set shared ring database path"), get_default_ringdb_path(), {{&testnet, &stagenet}}, [](std::array<bool, 2> testnet_stagenet, bool defaulted, std::string val) -> std::string {
-                if (testnet_stagenet[0])
+        const command_line::arg_descriptor<std::string, false, true, 1> shared_ringdb_dir = {
+            "shared-ringdb-dir", tools::wallet2::tr("Set shared ring database path"), get_default_ringdb_path(), testnet, [](bool tn, bool defaulted, std::string val) -> std::string {
+                if (tn)
                     return (boost::filesystem::path(val) / "testnet").string();
-                else if (testnet_stagenet[1])
-                    return (boost::filesystem::path(val) / "stagenet").string();
                 return val;
             }};
         const command_line::arg_descriptor<uint64_t> kdf_rounds = {"kdf-rounds", tools::wallet2::tr("Number of rounds for the key derivation function"), 1};
@@ -330,8 +327,7 @@ namespace
         namespace ip = boost::asio::ip;
 
         const bool testnet = command_line::get_arg(vm, opts.testnet);
-        const bool stagenet = command_line::get_arg(vm, opts.stagenet);
-        const network_type nettype = testnet ? TESTNET : stagenet ? STAGENET : MAINNET;
+        const network_type nettype = testnet ? TESTNET : MAINNET;
         const uint64_t kdf_rounds = command_line::get_arg(vm, opts.kdf_rounds);
         THROW_WALLET_EXCEPTION_IF(kdf_rounds == 0, tools::error::wallet_internal_error, "KDF rounds must not be 0");
 
@@ -538,8 +534,7 @@ namespace
     std::pair<std::unique_ptr<tools::wallet2>, tools::password_container> generate_from_json(const std::string &json_file, const boost::program_options::variables_map &vm, bool unattended, const options &opts, const std::function<boost::optional<tools::password_container>(const char *, bool)> &password_prompter)
     {
         const bool testnet = command_line::get_arg(vm, opts.testnet);
-        const bool stagenet = command_line::get_arg(vm, opts.stagenet);
-        const network_type nettype = testnet ? TESTNET : stagenet ? STAGENET : MAINNET;
+        const network_type nettype = testnet ? TESTNET : MAINNET;
 
         /* GET_FIELD_FROM_JSON_RETURN_ON_ERROR Is a generic macro that can return
   false. Gcc will coerce this into unique_ptr(nullptr), but clang correctly
@@ -1169,11 +1164,6 @@ namespace tools
         return command_line::get_arg(vm, options().testnet);
     }
 
-    bool wallet2::has_stagenet_option(const boost::program_options::variables_map &vm)
-    {
-        return command_line::get_arg(vm, options().stagenet);
-    }
-
     std::string wallet2::device_name_option(const boost::program_options::variables_map &vm)
     {
         return command_line::get_arg(vm, options().hw_device);
@@ -1204,7 +1194,6 @@ namespace tools
         command_line::add_arg(desc_params, opts.daemon_ssl_allow_any_cert);
         command_line::add_arg(desc_params, opts.daemon_ssl_allow_chained);
         command_line::add_arg(desc_params, opts.testnet);
-        command_line::add_arg(desc_params, opts.stagenet);
         command_line::add_arg(desc_params, opts.shared_ringdb_dir);
         command_line::add_arg(desc_params, opts.kdf_rounds);
         mms::message_store::init_options(desc_params);
@@ -4041,7 +4030,7 @@ namespace tools
             GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, nettype, uint8_t, Uint, false, static_cast<uint8_t>(m_nettype));
             // The network type given in the program argument is inconsistent with the network type saved in the wallet
             THROW_WALLET_EXCEPTION_IF(static_cast<uint8_t>(m_nettype) != field_nettype, error::wallet_internal_error,
-                                      (boost::format("%s wallet cannot be opened as %s wallet") % (field_nettype == 0 ? "Mainnet" : field_nettype == 1 ? "Testnet" : "Stagenet") % (m_nettype == MAINNET ? "mainnet" : m_nettype == TESTNET ? "testnet" : "stagenet")).str());
+                                      (boost::format("%s wallet cannot be opened as %s wallet") % (field_nettype == 0 ? "Mainnet" : "Testnet") % (m_nettype == MAINNET ? "mainnet" : "testnet")).str());
             GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, track_uses, int, Int, false, false);
             m_track_uses = field_track_uses;
             GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, inactivity_lock_timeout, uint32_t, Uint, false, DEFAULT_INACTIVITY_LOCK_TIMEOUT);
@@ -5539,7 +5528,7 @@ namespace tools
     //----------------------------------------------------------------------------------------------------
     void wallet2::check_genesis(const crypto::hash &genesis_hash) const
     {
-        std::string what("Genesis block mismatch. You probably use wallet without testnet (or stagenet) flag with blockchain from test (or stage) network or vice versa");
+        std::string what("Genesis block mismatch. You probably use wallet without testnet flag with blockchain from test (or stage) network or vice versa");
 
         THROW_WALLET_EXCEPTION_IF(genesis_hash != m_blockchain.genesis(), error::wallet_internal_error, what);
     }

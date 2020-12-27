@@ -354,34 +354,20 @@ namespace daemonize
         {
             if (!cryptonote::get_account_address_from_str(info, cryptonote::TESTNET, args.front()))
             {
-                if (!cryptonote::get_account_address_from_str(info, cryptonote::STAGENET, args.front()))
-                {
-                    bool dnssec_valid;
-                    std::string address_str = tools::dns_utils::get_account_address_as_str_from_url(args.front(), dnssec_valid,
+                bool dnssec_valid;
+                std::string address_str = tools::dns_utils::get_account_address_as_str_from_url(args.front(), dnssec_valid,
                                                                                                     [](const std::string &url, const std::vector<std::string> &addresses, bool dnssec_valid) { return addresses[0]; });
-                    if (!cryptonote::get_account_address_from_str(info, cryptonote::MAINNET, address_str))
-                    {
-                        if (!cryptonote::get_account_address_from_str(info, cryptonote::TESTNET, address_str))
-                        {
-                            if (!cryptonote::get_account_address_from_str(info, cryptonote::STAGENET, address_str))
-                            {
-                                std::cout << "target account address has wrong format" << std::endl;
-                                return true;
-                            }
-                            else
-                            {
-                                nettype = cryptonote::STAGENET;
-                            }
-                        }
-                        else
-                        {
-                            nettype = cryptonote::TESTNET;
-                        }
-                    }
-                }
-                else
+                if (!cryptonote::get_account_address_from_str(info, cryptonote::MAINNET, address_str))
                 {
-                    nettype = cryptonote::STAGENET;
+                    if (!cryptonote::get_account_address_from_str(info, cryptonote::TESTNET, address_str))
+                    {
+                        std::cout << "target account address has wrong format" << std::endl;
+                        return true;
+                    }
+                    else
+                    {
+                        nettype = cryptonote::TESTNET;
+                    }
                 }
             }
             else
@@ -395,7 +381,7 @@ namespace daemonize
             return true;
         }
         if (nettype != cryptonote::MAINNET)
-            std::cout << "Mining to a " << (nettype == cryptonote::TESTNET ? "testnet" : "stagenet") << "address, make sure this is intentional!" << std::endl;
+            std::cout << "Mining to a testnet address, make sure this is intentional!" << std::endl;
         uint64_t threads_count = 0;
         bool do_background_mining = false;
         bool ignore_battery = false;
