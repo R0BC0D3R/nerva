@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2020, The Monero Project
+// Copyright (c) 2019-2020, The Monero Project
 //
 // All rights reserved.
 //
@@ -26,18 +26,18 @@
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
-// Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
+#pragma once
 
-#include "p2p/net_node.h"
-#include "p2p/net_node.inl"
-#include "cryptonote_protocol/cryptonote_protocol_handler.h"
-#include "cryptonote_protocol/cryptonote_protocol_handler.inl"
+#include <string>
 
-namespace nodetool
-{
-    template class node_server<cryptonote::t_cryptonote_protocol_handler<cryptonote::core>>;
-}
 namespace cryptonote
 {
-    template class t_cryptonote_protocol_handler<cryptonote::core>;
-}
+
+namespace rpc
+{
+
+bool is_version_string_valid(const std::string& str);
+
+} // namespace rpc
+
+} // namespace cryptonote

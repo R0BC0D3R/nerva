@@ -45,7 +45,7 @@ namespace epee
             PUSH_WARNINGS
             DISABLE_VS_WARNINGS(4018)
             CHECK_AND_ASSERT_THROW_MES(from >= 0, "unexpected int value with signed storage value less than 0, and unsigned receiver value");
-            DISABLE_GCC_AND_CLANG_WARNING(sign - compare)
+            DISABLE_GCC_AND_CLANG_WARNING(sign-compare)
             CHECK_AND_ASSERT_THROW_MES(from <= std::numeric_limits<to_type>::max(), "int value overhead: try to set value " << from << " to type " << typeid(to_type).name() << " with max possible value = " << std::numeric_limits<to_type>::max());
             to = static_cast<to_type>(from);
             POP_WARNINGS
@@ -55,7 +55,7 @@ namespace epee
         {
             CHECK_AND_ASSERT_THROW_MES(from >= boost::numeric::bounds<to_type>::lowest(), "int value overhead: try to set value " << from << " to type " << typeid(to_type).name() << " with lowest possible value = " << boost::numeric::bounds<to_type>::lowest());
             PUSH_WARNINGS
-            DISABLE_CLANG_WARNING(tautological - constant - out - of - range - compare)
+            DISABLE_CLANG_WARNING(tautological-constant-out-of-range-compare)
             CHECK_AND_ASSERT_THROW_MES(from <= std::numeric_limits<to_type>::max(), "int value overhead: try to set value " << from << " to type " << typeid(to_type).name() << " with max possible value = " << std::numeric_limits<to_type>::max());
             POP_WARNINGS
             to = static_cast<to_type>(from);
@@ -65,7 +65,7 @@ namespace epee
         {
             PUSH_WARNINGS
             DISABLE_VS_WARNINGS(4018)
-            DISABLE_CLANG_WARNING(tautological - constant - out - of - range - compare)
+            DISABLE_CLANG_WARNING(tautological-constant-out-of-range-compare)
             CHECK_AND_ASSERT_THROW_MES(from <= std::numeric_limits<to_type>::max(), "uint value overhead: try to set value " << from << " to type " << typeid(to_type).name() << " with max possible value = " << std::numeric_limits<to_type>::max());
             to = static_cast<to_type>(from);
             POP_WARNINGS

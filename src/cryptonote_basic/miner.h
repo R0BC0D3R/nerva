@@ -54,7 +54,7 @@ namespace cryptonote
     struct i_miner_handler
     {
         virtual bool handle_block_found(block &b, block_verification_context &bvc) = 0;
-        virtual bool get_block_template(block &b, const account_public_address &adr, uint64_t &diffic, uint64_t &height, uint64_t &expected_reward, const blobdata &ex_nonce) = 0;
+        virtual bool get_block_template(block &b, const account_public_address &adr, difficulty_type &diffic, uint64_t &height, uint64_t &expected_reward, const blobdata &ex_nonce) = 0;
         virtual uint64_t get_current_blockchain_height() const = 0;
 
     protected:

@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2018, The Monero Project
+// Copyright (c) 2014-2020, The Monero Project
 //
 // All rights reserved.
 //
@@ -44,8 +44,10 @@
 using namespace epee;
 
 #include "cryptonote_config.h"
+#include "cryptonote_core/tx_sanity_check.h"
 #include "wallet2.h"
 #include "cryptonote_basic/cryptonote_format_utils.h"
+#include "net/parse.h"
 #include "rpc/core_rpc_server_commands_defs.h"
 #include "rpc/core_rpc_server_error_codes.h"
 #include "misc_language.h"
@@ -304,12 +306,6 @@ namespace
         }
         wallet_file += ".cache";
         mms_file = file_path + ".mms";
-    }
-
-    uint64_t calculate_fee(uint64_t fee_per_kb, size_t bytes, uint64_t fee_multiplier)
-    {
-        uint64_t kB = (bytes + 1023) / 1024;
-        return kB * fee_per_kb * fee_multiplier;
     }
 
     uint64_t calculate_fee_from_weight(uint64_t base_fee, uint64_t weight, uint64_t fee_multiplier, uint64_t fee_quantization_mask)
@@ -851,7 +847,7 @@ namespace
         // txnFee
         size += 4;
 
-        LOG_PRINT_L2("estimated " << (bulletproof ? "bulletproof" : "borromean") << " rct tx size for " << n_inputs << " inputs with ring size " << (mixin + 1) << " and " << n_outputs << " outputs: " << size << " (" << ((32 * n_inputs /*+1*/) + 2 * 32 * (mixin + 1) * n_inputs + 32 * n_outputs) << " saved)");
+        LOG_PRINT_L2("estimated bulletproof rct tx size for " << n_inputs << " inputs with ring size " << (mixin + 1) << " and " << n_outputs << " outputs: " << size << " (" << ((32 * n_inputs /*+1*/) + 2 * 32 * (mixin + 1) * n_inputs + 32 * n_outputs) << " saved)");
         return size;
     }
 
@@ -1105,61 +1101,62 @@ namespace tools
             wallet->on_device_progress(event);
     }
 
-    wallet2::wallet2(network_type nettype, uint64_t kdf_rounds, bool unattended, std::unique_ptr<epee::net_utils::http::http_client_factory> http_client_factory) : m_http_client(http_client_factory->create()),
-                                                                                                                                                                    m_multisig_rescan_info(NULL),
-                                                                                                                                                                    m_multisig_rescan_k(NULL),
-                                                                                                                                                                    m_upper_transaction_weight_limit(0),
-                                                                                                                                                                    m_run(true),
-                                                                                                                                                                    m_callback(0),
-                                                                                                                                                                    m_trusted_daemon(false),
-                                                                                                                                                                    m_nettype(nettype),
-                                                                                                                                                                    m_multisig_rounds_passed(0),
-                                                                                                                                                                    m_always_confirm_transfers(true),
-                                                                                                                                                                    m_print_ring_members(false),
-                                                                                                                                                                    m_store_tx_info(true),
-                                                                                                                                                                    m_default_priority(0),
-                                                                                                                                                                    m_refresh_type(RefreshOptimizeCoinbase),
-                                                                                                                                                                    m_auto_refresh(true),
-                                                                                                                                                                    m_first_refresh_done(false),
-                                                                                                                                                                    m_refresh_from_block_height(0),
-                                                                                                                                                                    m_explicit_refresh_from_block_height(true),
-                                                                                                                                                                    m_confirm_missing_payment_id(true),
-                                                                                                                                                                    m_ask_password(AskPasswordToDecrypt),
-                                                                                                                                                                    m_min_output_count(0),
-                                                                                                                                                                    m_min_output_value(0),
-                                                                                                                                                                    m_merge_destinations(false),
-                                                                                                                                                                    m_confirm_backlog(true),
-                                                                                                                                                                    m_confirm_backlog_threshold(0),
-                                                                                                                                                                    m_confirm_export_overwrite(true),
-                                                                                                                                                                    m_auto_low_priority(true),
-                                                                                                                                                                    m_track_uses(false),
-                                                                                                                                                                    m_inactivity_lock_timeout(DEFAULT_INACTIVITY_LOCK_TIMEOUT),
-                                                                                                                                                                    m_setup_background_mining(BackgroundMiningMaybe),
-                                                                                                                                                                    m_is_initialized(false),
-                                                                                                                                                                    m_kdf_rounds(kdf_rounds),
-                                                                                                                                                                    is_old_file_format(false),
-                                                                                                                                                                    m_watch_only(false),
-                                                                                                                                                                    m_multisig(false),
-                                                                                                                                                                    m_multisig_threshold(0),
-                                                                                                                                                                    m_node_rpc_proxy(m_http_client, m_daemon_rpc_mutex),
-                                                                                                                                                                    m_account_public_address{crypto::null_pkey, crypto::null_pkey},
-                                                                                                                                                                    m_subaddress_lookahead_major(SUBADDRESS_LOOKAHEAD_MAJOR),
-                                                                                                                                                                    m_subaddress_lookahead_minor(SUBADDRESS_LOOKAHEAD_MINOR),
-                                                                                                                                                                    m_original_keys_available(false),
-                                                                                                                                                                    m_message_store(http_client_factory->create()),
-                                                                                                                                                                    m_key_device_type(hw::device::device_type::SOFTWARE),
-                                                                                                                                                                    m_ring_history_saved(false),
-                                                                                                                                                                    m_ringdb(),
-                                                                                                                                                                    m_last_block_reward(0),
-                                                                                                                                                                    m_encrypt_keys_after_refresh(boost::none),
-                                                                                                                                                                    m_decrypt_keys_lockers(0),
-                                                                                                                                                                    m_unattended(unattended),
-                                                                                                                                                                    m_devices_registered(false),
-                                                                                                                                                                    m_device_last_key_image_sync(0),
-                                                                                                                                                                    m_use_dns(true),
-                                                                                                                                                                    m_offline(false),
-                                                                                                                                                                    m_rpc_version(0),
-                                                                                                                                                                    m_export_format(ExportFormat::Binary)
+    wallet2::wallet2(network_type nettype, uint64_t kdf_rounds, bool unattended,
+                     std::unique_ptr<epee::net_utils::http::http_client_factory> http_client_factory) : m_http_client(http_client_factory->create()),
+                                                                                                        m_multisig_rescan_info(NULL),
+                                                                                                        m_multisig_rescan_k(NULL),
+                                                                                                        m_upper_transaction_weight_limit(0),
+                                                                                                        m_run(true),
+                                                                                                        m_callback(0),
+                                                                                                        m_trusted_daemon(false),
+                                                                                                        m_nettype(nettype),
+                                                                                                        m_multisig_rounds_passed(0),
+                                                                                                        m_always_confirm_transfers(true),
+                                                                                                        m_print_ring_members(false),
+                                                                                                        m_store_tx_info(true),
+                                                                                                        m_default_priority(0),
+                                                                                                        m_refresh_type(RefreshOptimizeCoinbase),
+                                                                                                        m_auto_refresh(true),
+                                                                                                        m_first_refresh_done(false),
+                                                                                                        m_refresh_from_block_height(0),
+                                                                                                        m_explicit_refresh_from_block_height(true),
+                                                                                                        m_confirm_missing_payment_id(true),
+                                                                                                        m_ask_password(AskPasswordToDecrypt),
+                                                                                                        m_min_output_count(0),
+                                                                                                        m_min_output_value(0),
+                                                                                                        m_merge_destinations(false),
+                                                                                                        m_confirm_backlog(true),
+                                                                                                        m_confirm_backlog_threshold(0),
+                                                                                                        m_confirm_export_overwrite(true),
+                                                                                                        m_auto_low_priority(true),
+                                                                                                        m_track_uses(false),
+                                                                                                        m_inactivity_lock_timeout(DEFAULT_INACTIVITY_LOCK_TIMEOUT),
+                                                                                                        m_setup_background_mining(BackgroundMiningMaybe),
+                                                                                                        m_is_initialized(false),
+                                                                                                        m_kdf_rounds(kdf_rounds),
+                                                                                                        is_old_file_format(false),
+                                                                                                        m_watch_only(false),
+                                                                                                        m_multisig(false),
+                                                                                                        m_multisig_threshold(0),
+                                                                                                        m_node_rpc_proxy(*m_http_client, m_daemon_rpc_mutex),
+                                                                                                        m_account_public_address{crypto::null_pkey, crypto::null_pkey},
+                                                                                                        m_subaddress_lookahead_major(SUBADDRESS_LOOKAHEAD_MAJOR),
+                                                                                                        m_subaddress_lookahead_minor(SUBADDRESS_LOOKAHEAD_MINOR),
+                                                                                                        m_original_keys_available(false),
+                                                                                                        m_message_store(http_client_factory->create()),
+                                                                                                        m_key_device_type(hw::device::device_type::SOFTWARE),
+                                                                                                        m_ring_history_saved(false),
+                                                                                                        m_ringdb(),
+                                                                                                        m_last_block_reward(0),
+                                                                                                        m_encrypt_keys_after_refresh(boost::none),
+                                                                                                        m_decrypt_keys_lockers(0),
+                                                                                                        m_unattended(unattended),
+                                                                                                        m_devices_registered(false),
+                                                                                                        m_device_last_key_image_sync(0),
+                                                                                                        m_use_dns(true),
+                                                                                                        m_offline(false),
+                                                                                                        m_rpc_version(0),
+                                                                                                        m_export_format(ExportFormat::Binary)
     {
     }
 
@@ -1816,20 +1813,6 @@ namespace tools
         }
     }
     //----------------------------------------------------------------------------------------------------
-    bool wallet2::spends_one_of_ours(const cryptonote::transaction &tx) const
-    {
-        for (const auto &in : tx.vin)
-        {
-            if (in.type() != typeid(cryptonote::txin_to_key))
-                continue;
-            const cryptonote::txin_to_key &in_to_key = boost::get<cryptonote::txin_to_key>(in);
-            auto it = m_key_images.find(in_to_key.k_image);
-            if (it != m_key_images.end())
-                return true;
-        }
-        return false;
-    }
-    //----------------------------------------------------------------------------------------------------
     void wallet2::process_new_transaction(const crypto::hash &txid, const cryptonote::transaction &tx, const std::vector<uint64_t> &o_indices, uint64_t height, uint8_t block_version, uint64_t ts, bool miner_tx, bool pool, bool double_spend_seen, const tx_cache_data &tx_cache_data, std::map<std::pair<uint64_t, uint64_t>, size_t> *output_tracker_cache)
     {
         PERF_TIMER(process_new_transaction);
@@ -2111,7 +2094,7 @@ namespace tools
                             }
                             LOG_PRINT_L0("Received money: " << print_money(td.amount()) << ", with tx: " << txid);
                             if (0 != m_callback)
-                                m_callback->on_money_received(height, txid, tx, td.m_amount, td.m_subaddr_index, spends_one_of_ours(tx), td.m_tx.unlock_time);
+                                m_callback->on_money_received(height, txid, tx, td.m_amount, td.m_subaddr_index);
                         }
                         total_received_1 += amount;
                         notify = true;
@@ -2188,7 +2171,7 @@ namespace tools
 
                             LOG_PRINT_L0("Received money: " << print_money(td.amount()) << ", with tx: " << txid);
                             if (0 != m_callback)
-                                m_callback->on_money_received(height, txid, tx, td.m_amount, td.m_subaddr_index, spends_one_of_ours(tx), td.m_tx.unlock_time);
+                                m_callback->on_money_received(height, txid, tx, td.m_amount, td.m_subaddr_index);
                         }
                         total_received_1 += extra_amount;
                         notify = true;
@@ -3198,11 +3181,12 @@ namespace tools
     //----------------------------------------------------------------------------------------------------
     std::shared_ptr<std::map<std::pair<uint64_t, uint64_t>, size_t>> wallet2::create_output_tracker_cache() const
     {
+        //todo: doesn't need to be a std::pair
         std::shared_ptr<std::map<std::pair<uint64_t, uint64_t>, size_t>> cache{new std::map<std::pair<uint64_t, uint64_t>, size_t>()};
         for (size_t i = 0; i < m_transfers.size(); ++i)
         {
             const transfer_details &td = m_transfers[i];
-            (*cache)[std::make_pair(td.is_rct() ? 0 : td.amount(), td.m_global_output_index)] = i;
+            (*cache)[std::make_pair(0, td.m_global_output_index)] = i;
         }
         return cache;
     }
@@ -3227,7 +3211,6 @@ namespace tools
         uint64_t blocks_start_height;
         std::vector<cryptonote::block_complete_entry> blocks;
         std::vector<parsed_block> parsed_blocks;
-        bool refreshed = false;
         std::shared_ptr<std::map<std::pair<uint64_t, uint64_t>, size_t>> output_tracker_cache;
         hw::device &hwdev = m_account.get_device();
 
@@ -3290,7 +3273,6 @@ namespace tools
                 if (!first && blocks.empty())
                 {
                     m_node_rpc_proxy.set_height(m_blockchain.size());
-                    refreshed = true;
                     break;
                 }
                 if (!last)
@@ -3336,7 +3318,6 @@ namespace tools
                 if (!first && blocks_start_height == next_blocks_start_height)
                 {
                     m_node_rpc_proxy.set_height(m_blockchain.size());
-                    refreshed = true;
                     break;
                 }
 
@@ -3432,18 +3413,6 @@ namespace tools
             if (*result != CORE_RPC_STATUS_OK)
             {
                 MDEBUG("Cannot determine daemon RPC version, not requesting rct distribution");
-                return false;
-            }
-        }
-        else
-        {
-            if (rpc_version >= MAKE_CORE_RPC_VERSION(1, 19))
-            {
-                MDEBUG("Daemon is recent enough, requesting rct distribution");
-            }
-            else
-            {
-                MDEBUG("Daemon is too old, not requesting rct distribution");
                 return false;
             }
         }
@@ -5337,7 +5306,8 @@ namespace tools
     {
         crypto::generate_chacha_key(pass.data(), pass.size(), key, m_kdf_rounds);
     }
-    void wallet2::load(const std::string &wallet_, const epee::wipeable_string &password)
+    //----------------------------------------------------------------------------------------------------
+    void wallet2::load(const std::string &wallet_, const epee::wipeable_string &password, const std::string &keys_buf, const std::string &cache_buf)
     {
         clear();
         prepare_file_names(wallet_);
@@ -5784,11 +5754,10 @@ namespace tools
         return amount_per_subaddr;
     }
     //----------------------------------------------------------------------------------------------------
-    std::map<uint32_t, std::pair<uint64_t, std::pair<uint64_t, uint64_t>>> wallet2::unlocked_balance_per_subaddress(uint32_t index_major, bool strict)
+    std::map<uint32_t, std::pair<uint64_t, uint64_t>> wallet2::unlocked_balance_per_subaddress(uint32_t index_major, bool strict)
     {
-        std::map<uint32_t, std::pair<uint64_t, std::pair<uint64_t, uint64_t>>> amount_per_subaddr;
+        std::map<uint32_t, std::pair<uint64_t, uint64_t>> amount_per_subaddr;
         const uint64_t blockchain_height = get_blockchain_current_height();
-        const uint64_t now = time(NULL);
         for (const transfer_details &td : m_transfers)
         {
             if (td.m_subaddr_index.major == index_major && !is_spent(td, strict) && !td.m_frozen)
@@ -5828,7 +5797,7 @@ namespace tools
         return r;
     }
     //----------------------------------------------------------------------------------------------------
-    uint64_t wallet2::unlocked_balance_all(bool strict, uint64_t *blocks_to_unlock) const
+    uint64_t wallet2::unlocked_balance_all(bool strict, uint64_t *blocks_to_unlock)
     {
         uint64_t r = 0;
         if (blocks_to_unlock)
@@ -6030,7 +5999,7 @@ namespace tools
             // XXX: this needs to be fast, so we'd need to get the starting heights
             // from the daemon to be correct once voting kicks in
             uint64_t leeway = CRYPTONOTE_LOCKED_TX_ALLOWED_DELTA_SECONDS_V1;
-            if (current_time + leeway >= unlock_time)
+            if (adjusted_time + leeway >= unlock_time)
                 return true;
             else
                 return false;
@@ -7075,12 +7044,12 @@ namespace tools
                 {4, {1, 5, 25, 1000}},
             };
 
-        if (fee_algorithm == -1)
-            fee_algorithm = get_fee_algorithm();
+        uint32_t fee_algorithm = 3;
 
         // 0 -> default (here, x1 till fee algorithm 2, x4 from it)
         if (priority == 0)
             priority = m_default_priority;
+
         if (priority == 0)
         {
             if (fee_algorithm >= 2)
@@ -7088,8 +7057,6 @@ namespace tools
             else
                 priority = 1;
         }
-
-        THROW_WALLET_EXCEPTION_IF(fee_algorithm < 0 || fee_algorithm > 3, error::invalid_priority);
 
         // 1 to 3/4 are allowed as priorities
         const uint32_t max_priority = multipliers[fee_algorithm].count;
@@ -7644,10 +7611,7 @@ namespace tools
             std::vector<uint64_t> rct_offsets;
             uint64_t max_rct_index = 0;
             for (size_t idx : selected_transfers)
-            {
-                has_rct = true;
                 max_rct_index = std::max(max_rct_index, m_transfers[idx].m_global_output_index);
-            }
 
             const bool has_rct_distribution = get_rct_distribution(rct_start_height, rct_offsets);
             if (has_rct_distribution)
@@ -7663,8 +7627,8 @@ namespace tools
             cryptonote::COMMAND_RPC_GET_OUTPUT_HISTOGRAM::request req_t = AUTO_VAL_INIT(req_t);
             cryptonote::COMMAND_RPC_GET_OUTPUT_HISTOGRAM::response resp_t = AUTO_VAL_INIT(resp_t);
             for (size_t idx : selected_transfers)
-                if (!m_transfers[idx].is_rct() || !has_rct_distribution)
-                    req_t.amounts.push_back(m_transfers[idx].is_rct() ? 0 : m_transfers[idx].amount());
+                if (!has_rct_distribution)
+                    req_t.amounts.push_back(0);
             if (!req_t.amounts.empty())
             {
                 std::sort(req_t.amounts.begin(), req_t.amounts.end());
@@ -7745,7 +7709,7 @@ namespace tools
 
                 // how many fake outs to draw on a pre-fork triangular distribution
                 // how many fake outs to draw otherwise
-                size_t normal_output_count = requested_outputs_count - pre_fork_outputs_count - post_fork_outputs_count;
+                size_t normal_output_count = requested_outputs_count;
 
                 size_t recent_outputs_count = 0;
                 if (use_histogram)
@@ -7759,7 +7723,6 @@ namespace tools
                     if (td.m_global_output_index >= num_outs - num_recent_outs && recent_outputs_count > 0)
                         --recent_outputs_count; // if the real out is recent, pick one less recent fake out
                 }
-                LOG_PRINT_L1("Fake output makeup: " << requested_outputs_count << " requested: " << recent_outputs_count << " recent, " << pre_fork_outputs_count << " pre-fork, " << post_fork_outputs_count << " post-fork, " << (requested_outputs_count - recent_outputs_count - pre_fork_outputs_count - post_fork_outputs_count) << " full-chain");
 
                 uint64_t num_found = 0;
 
@@ -7853,14 +7816,14 @@ namespace tools
                         {
                             THROW_WALLET_EXCEPTION_IF(!gamma, error::wallet_internal_error, "No gamma picker");
                             // gamma distribution
-                            if (num_found - 1 < recent_outputs_count + pre_fork_outputs_count)
+                            if (num_found - 1 < recent_outputs_count)
                             {
                                 do
                                     i = gamma->pick();
                                 while (i >= segregation_limit[amount].first);
                                 type = "pre-fork gamma";
                             }
-                            else if (num_found - 1 < recent_outputs_count + pre_fork_outputs_count + post_fork_outputs_count)
+                            else if (num_found - 1 < recent_outputs_count)
                             {
                                 do
                                     i = gamma->pick();
@@ -7886,7 +7849,7 @@ namespace tools
                                 --i;
                             type = "recent";
                         }
-                        else if (num_found - 1 < recent_outputs_count + pre_fork_outputs_count)
+                        else if (num_found - 1 < recent_outputs_count)
                         {
                             // triangular distribution over [a,b) with a=0, mode c=b=up_index_limit
                             uint64_t r = crypto::rand<uint64_t>() % ((uint64_t)1 << 53);
@@ -7897,7 +7860,7 @@ namespace tools
                                 --i;
                             type = " pre-fork";
                         }
-                        else if (num_found - 1 < recent_outputs_count + pre_fork_outputs_count + post_fork_outputs_count)
+                        else if (num_found - 1 < recent_outputs_count)
                         {
                             // triangular distribution over [a,b) with a=0, mode c=b=up_index_limit
                             uint64_t r = crypto::rand<uint64_t>() % ((uint64_t)1 << 53);
@@ -8059,7 +8022,7 @@ namespace tools
                     order[n] = n;
                 std::shuffle(order.begin(), order.end(), crypto::random_device{});
 
-                LOG_PRINT_L2("Looking for " << (fake_outputs_count + 1) << " outputs of size " << print_money(td.is_rct() ? 0 : td.amount()));
+                LOG_PRINT_L2("Looking for " << (fake_outputs_count + 1) << " outputs of size " << print_money(0));
                 for (size_t o = 0; o < requested_outputs_count && outs.back().size() < fake_outputs_count + 1; ++o)
                 {
                     size_t i = base + order[o];
@@ -8068,7 +8031,7 @@ namespace tools
                 }
                 if (outs.back().size() < fake_outputs_count + 1)
                 {
-                    scanty_outs[td.is_rct() ? 0 : td.amount()] = outs.back().size();
+                    scanty_outs[0] = outs.back().size();
                 }
                 else
                 {
@@ -8105,9 +8068,7 @@ namespace tools
         }
     }
 
-    void wallet2::transfer_selected_rct(std::vector<cryptonote::tx_destination_entry> dsts, const std::vector<size_t> &selected_transfers, size_t fake_outputs_count,
-                                        std::vector<std::vector<tools::wallet2::get_outs_entry>> &outs,
-                                        uint64_t unlock_time, uint64_t fee, const std::vector<uint8_t> &extra, cryptonote::transaction &tx, pending_tx &ptx)
+    void wallet2::transfer_selected_rct(std::vector<cryptonote::tx_destination_entry> dsts, const std::vector<size_t> &selected_transfers, size_t fake_outputs_count, std::vector<std::vector<tools::wallet2::get_outs_entry>> &outs, uint64_t unlock_time, uint64_t fee, const std::vector<uint8_t> &extra, cryptonote::transaction &tx, pending_tx &ptx)
     {
         using namespace cryptonote;
         // throw if attempting a transaction with no destinations
@@ -8207,7 +8168,6 @@ namespace tools
             cryptonote::tx_source_entry &src = sources.back();
             const transfer_details &td = m_transfers[idx];
             src.amount = td.amount();
-            src.rct = true;
             //paste mixin transaction
 
             THROW_WALLET_EXCEPTION_IF(outs.size() < out_index + 1, error::wallet_internal_error, "outs.size() < out_index + 1");
@@ -8373,7 +8333,6 @@ namespace tools
         ptx.construction_data.selected_transfers = ptx.selected_transfers;
         ptx.construction_data.extra = tx.extra;
         ptx.construction_data.unlock_time = unlock_time;
-        ptx.construction_data.use_bulletproofs = !tx.rct_signatures.p.bulletproofs.empty();
         ptx.construction_data.dests = dsts;
         // record which subaddress indices are being used as inputs
         ptx.construction_data.subaddr_account = subaddr_account;
@@ -8409,14 +8368,14 @@ namespace tools
         for (size_t i = 0; i < m_transfers.size(); ++i)
         {
             const transfer_details &td = m_transfers[i];
-            if (!is_spent(td, false) && !td.m_frozen && !td.m_key_image_partial && td.is_rct() && is_transfer_unlocked(td) && td.m_subaddr_index.major == subaddr_account && subaddr_indices.count(td.m_subaddr_index.minor) == 1)
+            if (!is_spent(td, false) && !td.m_frozen && !td.m_key_image_partial && is_transfer_unlocked(td) && td.m_subaddr_index.major == subaddr_account && subaddr_indices.count(td.m_subaddr_index.minor) == 1)
             {
                 LOG_PRINT_L2("Considering input " << i << ", " << print_money(td.amount()));
                 for (size_t j = i + 1; j < m_transfers.size(); ++j)
                 {
                     const transfer_details &td2 = m_transfers[j];
 
-                    if (!is_spent(td2, false) && !td2.m_frozen && !td.m_key_image_partial && td2.is_rct() && td.amount() + td2.amount() >= needed_money && is_transfer_unlocked(td2) && td2.m_subaddr_index == td.m_subaddr_index)
+                    if (!is_spent(td2, false) && !td2.m_frozen && !td.m_key_image_partial && td.amount() + td2.amount() >= needed_money && is_transfer_unlocked(td2) && td2.m_subaddr_index == td.m_subaddr_index)
                     {
                         // update our picks if those outputs are less related than any we
                         // already found. If the same, don't update, and oldest suitable outputs
@@ -8453,7 +8412,9 @@ namespace tools
         // we want at least one free rct output to avoid a corner case where
         // we'd choose a non rct output which doesn't have enough "siblings"
         // value-wise on the chain, and thus can't be mixed
-        bool found = false;
+
+        //todo: just return true?
+        /*bool found = false;
         for (auto i : unused_dust_indices)
         {
             if (m_transfers[i].is_rct())
@@ -8472,7 +8433,7 @@ namespace tools
                 }
             }
         if (!found)
-            return false;
+            return false;*/
         return true;
     }
 
@@ -8567,7 +8528,7 @@ namespace tools
         uint64_t needed_fee, available_for_fee = 0;
         uint64_t upper_transaction_weight_limit = get_upper_transaction_weight_limit();
         const uint64_t base_fee = get_base_fee();
-        const uint64_t fee_multiplier = get_fee_multiplier(priority, get_fee_algorithm());
+        const uint64_t fee_multiplier = get_fee_multiplier(priority);
         const uint64_t fee_quantization_mask = get_fee_quantization_mask();
 
         // throw if attempting a transaction with no destinations
@@ -8587,7 +8548,7 @@ namespace tools
         // throw if attempting a transaction with no money
         THROW_WALLET_EXCEPTION_IF(needed_money == 0, error::zero_destination);
 
-        std::map<uint32_t, std::pair<uint64_t, std::pair<uint64_t, uint64_t>>> unlocked_balance_per_subaddr = unlocked_balance_per_subaddress(subaddr_account, false);
+        std::map<uint32_t, std::pair<uint64_t, uint64_t>> unlocked_balance_per_subaddr = unlocked_balance_per_subaddress(subaddr_account, false);
         std::map<uint32_t, uint64_t> balance_per_subaddr = balance_per_subaddress(subaddr_account, false);
 
         if (subaddr_indices.empty()) // "index=<N1>[,<N2>,...]" wasn't specified -> use all the indices with non-zero unlocked balance
@@ -8616,31 +8577,15 @@ namespace tools
         for (uint32_t i : subaddr_indices)
             LOG_PRINT_L2("Candidate subaddress index for spending: " << i);
 
-        // determine threshold for fractional amount
-        const size_t tx_weight_one_ring = estimate_tx_weight(1, fake_outs_count, 2, 0);
-        const size_t tx_weight_two_rings = estimate_tx_weight(2, fake_outs_count, 2, 0);
-        THROW_WALLET_EXCEPTION_IF(tx_weight_one_ring > tx_weight_two_rings, error::wallet_internal_error, "Estimated tx weight with 1 input is larger than with 2 inputs!");
-        const size_t tx_weight_per_ring = tx_weight_two_rings - tx_weight_one_ring;
-        const uint64_t fractional_threshold = (fee_multiplier * base_fee * tx_weight_per_ring);
-
         // gather all dust and non-dust outputs belonging to specified subaddresses
         size_t num_nondust_outputs = 0;
         size_t num_dust_outputs = 0;
         for (size_t i = 0; i < m_transfers.size(); ++i)
         {
             const transfer_details &td = m_transfers[i];
-            if (m_ignore_fractional_outputs && td.amount() < fractional_threshold)
-            {
-                MDEBUG("Ignoring output " << i << " of amount " << print_money(td.amount()) << " which is below fractional threshold " << print_money(fractional_threshold));
-                continue;
-            }
+
             if (!is_spent(td, false) && !td.m_frozen && !td.m_key_image_partial && is_transfer_unlocked(td) && td.m_subaddr_index.major == subaddr_account && subaddr_indices.count(td.m_subaddr_index.minor) == 1)
             {
-                if (td.amount() > m_ignore_outputs_above || td.amount() < m_ignore_outputs_below)
-                {
-                    MDEBUG("Ignoring output " << i << " of amount " << print_money(td.amount()) << " which is outside prescribed range [" << print_money(m_ignore_outputs_below) << ", " << print_money(m_ignore_outputs_above) << "]");
-                    continue;
-                }
                 const uint32_t index_minor = td.m_subaddr_index.minor;
                 auto find_predicate = [&index_minor](const std::pair<uint32_t, std::vector<size_t>> &x) { return x.first == index_minor; };
                 if (is_valid_decomposed_amount(td.amount()))
@@ -8712,7 +8657,7 @@ namespace tools
         rct_outs_needed += 100; // some fudge factor since we don't know how many are locked
 
         // this is used to build a tx that's 1 or 2 inputs, and 2 outputs, which
-        uint64_t estimated_fee = estimate_fee(use_per_byte_fee, use_rct, 2, fake_outs_count, 2, extra.size(), bulletproof, clsag, base_fee, fee_multiplier, fee_quantization_mask);
+        uint64_t estimated_fee = estimate_fee(2, fake_outs_count, 2, extra.size(), base_fee, fee_multiplier, fee_quantization_mask);
         preferred_inputs = pick_preferred_rct_inputs(needed_money + estimated_fee, subaddr_account, subaddr_indices);
         if (!preferred_inputs.empty())
         {
@@ -8880,7 +8825,7 @@ namespace tools
                 pending_tx test_ptx;
 
                 const size_t num_outputs = get_num_outputs(tx.dsts, m_transfers, tx.selected_transfers);
-                needed_fee = estimate_fee(use_per_byte_fee, tx.selected_transfers.size(), fake_outs_count, num_outputs, extra.size(), base_fee, fee_multiplier, fee_quantization_mask);
+                needed_fee = estimate_fee(tx.selected_transfers.size(), fake_outs_count, num_outputs, extra.size(), base_fee, fee_multiplier, fee_quantization_mask);
 
                 uint64_t inputs = 0, outputs = needed_fee;
                 for (size_t idx : tx.selected_transfers)
@@ -8896,11 +8841,10 @@ namespace tools
                 }
 
                 LOG_PRINT_L2("Trying to create a tx now, with " << tx.dsts.size() << " outputs and " << tx.selected_transfers.size() << " inputs");
-                transfer_selected_rct(tx.dsts, tx.selected_transfers, fake_outs_count, outs, unlock_time, needed_fee, extra,
-                                      test_tx, test_ptx);
+                transfer_selected_rct(tx.dsts, tx.selected_transfers, fake_outs_count, outs, unlock_time, needed_fee, extra, test_tx, test_ptx);
 
                 auto txBlob = t_serializable_object_to_blob(test_ptx.tx);
-                needed_fee = calculate_fee(use_per_byte_fee, test_ptx.tx, txBlob.size(), base_fee, fee_multiplier, fee_quantization_mask);
+                needed_fee = calculate_fee(test_ptx.tx, txBlob.size(), base_fee, fee_multiplier, fee_quantization_mask);
                 available_for_fee = test_ptx.fee + test_ptx.change_dts.amount + (!test_ptx.dust_added_to_fee ? test_ptx.dust : 0);
                 LOG_PRINT_L2("Made a " << get_weight_string(test_ptx.tx, txBlob.size()) << " tx, with " << print_money(available_for_fee) << " available for fee (" << print_money(needed_fee) << " needed)");
 
@@ -8934,11 +8878,10 @@ namespace tools
                     LOG_PRINT_L2("We made a tx, adjusting fee and saving it, we need " << print_money(needed_fee) << " and we have " << print_money(test_ptx.fee));
                     while (needed_fee > test_ptx.fee)
                     {
-                        transfer_selected_rct(tx.dsts, tx.selected_transfers, fake_outs_count, outs, unlock_time, needed_fee, extra,
-                                              test_tx, test_ptx);
+                        transfer_selected_rct(tx.dsts, tx.selected_transfers, fake_outs_count, outs, unlock_time, needed_fee, extra, test_tx, test_ptx);
 
                         txBlob = t_serializable_object_to_blob(test_ptx.tx);
-                        needed_fee = calculate_fee(use_per_byte_fee, test_ptx.tx, txBlob.size(), base_fee, fee_multiplier, fee_quantization_mask);
+                        needed_fee = calculate_fee(test_ptx.tx, txBlob.size(), base_fee, fee_multiplier, fee_quantization_mask);
                         LOG_PRINT_L2("Made an attempt at a  final " << get_weight_string(test_ptx.tx, txBlob.size()) << " tx, with " << print_money(test_ptx.fee) << " fee  and " << print_money(test_ptx.change_dts.amount) << " change");
                     }
 
@@ -9002,8 +8945,8 @@ namespace tools
                                   tx.needed_fee,         /* CONST uint64_t fee, */
                                   extra,                 /* const std::vector<uint8_t>& extra, */
                                   test_tx,               /* OUT   cryptonote::transaction& tx, */
-                                  test_ptx,              /* OUT   cryptonote::transaction& tx, */
-                                  );
+                                  test_ptx               /* OUT   cryptonote::transaction& tx, */
+            );
 
             auto txBlob = t_serializable_object_to_blob(test_ptx.tx);
             tx.tx = test_tx;
@@ -9105,12 +9048,7 @@ namespace tools
 
         // determine threshold for fractional amount
         const uint64_t base_fee = get_base_fee();
-        const uint64_t fee_multiplier = get_fee_multiplier(priority, get_fee_algorithm());
-        const size_t tx_weight_one_ring = estimate_tx_weight(1, fake_outs_count, 2, 0);
-        const size_t tx_weight_two_rings = estimate_tx_weight(2, fake_outs_count, 2, 0);
-        THROW_WALLET_EXCEPTION_IF(tx_weight_one_ring > tx_weight_two_rings, error::wallet_internal_error, "Estimated tx weight with 1 input is larger than with 2 inputs!");
-        const size_t tx_weight_per_ring = tx_weight_two_rings - tx_weight_one_ring;
-        const uint64_t fractional_threshold = (fee_multiplier * base_fee * tx_weight_per_ring);
+        const uint64_t fee_multiplier = get_fee_multiplier(priority);
 
         THROW_WALLET_EXCEPTION_IF(unlocked_balance(subaddr_account, false) == 0, error::wallet_internal_error, "No unlocked balance in the specified account");
 
@@ -9121,20 +9059,16 @@ namespace tools
         for (size_t i = 0; i < m_transfers.size(); ++i)
         {
             const transfer_details &td = m_transfers[i];
-            if (m_ignore_fractional_outputs && td.amount() < fractional_threshold)
-            {
-                MDEBUG("Ignoring output " << i << " of amount " << print_money(td.amount()) << " which is below threshold " << print_money(fractional_threshold));
-                continue;
-            }
+
             if (!is_spent(td, false) && !td.m_frozen && !td.m_key_image_partial && is_transfer_unlocked(td) && td.m_subaddr_index.major == subaddr_account && (subaddr_indices.empty() || subaddr_indices.count(td.m_subaddr_index.minor) == 1))
             {
                 fund_found = true;
                 if (below == 0 || td.amount() < below)
                 {
-        if (is_valid_decomposed_amount(td.amount())
-                    unused_transfer_dust_indices_per_subaddr[td.m_subaddr_index.minor].first.push_back(i);
-        else
-          unused_transfer_dust_indices_per_subaddr[td.m_subaddr_index.minor].second.push_back(i);
+                    if (is_valid_decomposed_amount(td.amount()))
+                        unused_transfer_dust_indices_per_subaddr[td.m_subaddr_index.minor].first.push_back(i);
+                    else
+                        unused_transfer_dust_indices_per_subaddr[td.m_subaddr_index.minor].second.push_back(i);
                 }
             }
         }
@@ -9210,7 +9144,7 @@ namespace tools
         std::vector<std::vector<get_outs_entry>> outs;
 
         const uint64_t base_fee = get_base_fee();
-        const uint64_t fee_multiplier = get_fee_multiplier(priority, get_fee_algorithm());
+        const uint64_t fee_multiplier = get_fee_multiplier(priority);
         const uint64_t fee_quantization_mask = get_fee_quantization_mask();
 
         LOG_PRINT_L2("Starting with " << unused_transfers_indices.size() << " non-dust outputs and " << unused_dust_indices.size() << " dust outputs");
@@ -9257,7 +9191,7 @@ namespace tools
             // here, check if we need to sent tx and start a new one
             LOG_PRINT_L2("Considering whether to create a tx now, " << tx.selected_transfers.size() << " inputs, tx limit "
                                                                     << upper_transaction_weight_limit);
-            const size_t estimated_rct_tx_weight = estimate_tx_weight(tx.selected_transfers.size(), fake_outs_count, tx.dsts.size() + 2, extra.size(), bulletproof, clsag);
+            const size_t estimated_rct_tx_weight = estimate_tx_weight(tx.selected_transfers.size(), fake_outs_count, tx.dsts.size() + 2, extra.size());
             bool try_tx = (unused_dust_indices.empty() && unused_transfers_indices.empty()) || (estimated_rct_tx_weight >= TX_WEIGHT_TARGET(upper_transaction_weight_limit));
 
             if (try_tx)
@@ -9266,7 +9200,7 @@ namespace tools
                 pending_tx test_ptx;
 
                 const size_t num_outputs = get_num_outputs(tx.dsts, m_transfers, tx.selected_transfers);
-                needed_fee = estimate_fee(tx.selected_transfers.size(), fake_outs_count, num_outputs, extra.size(), bulletproof, clsag, base_fee, fee_multiplier, fee_quantization_mask);
+                needed_fee = estimate_fee(tx.selected_transfers.size(), fake_outs_count, num_outputs, extra.size(), base_fee, fee_multiplier, fee_quantization_mask);
 
                 for (size_t i = 0; i < ((outputs > 1) ? outputs - 1 : outputs); ++i)
                     tx.dsts.push_back(tx_destination_entry(1, address, is_subaddress));
@@ -9276,7 +9210,7 @@ namespace tools
                 transfer_selected_rct(tx.dsts, tx.selected_transfers, fake_outs_count, outs, unlock_time, needed_fee, extra,
                                       test_tx, test_ptx);
                 auto txBlob = t_serializable_object_to_blob(test_ptx.tx);
-                needed_fee = calculate_fee(use_per_byte_fee, test_ptx.tx, txBlob.size(), base_fee, fee_multiplier, fee_quantization_mask);
+                needed_fee = calculate_fee(test_ptx.tx, txBlob.size(), base_fee, fee_multiplier, fee_quantization_mask);
                 available_for_fee = test_ptx.fee + test_ptx.change_dts.amount;
                 for (auto &dt : test_ptx.dests)
                     available_for_fee += dt.amount;
@@ -9309,7 +9243,7 @@ namespace tools
                                           test_tx, test_ptx);
 
                     txBlob = t_serializable_object_to_blob(test_ptx.tx);
-                    needed_fee = calculate_fee(use_per_byte_fee, test_ptx.tx, txBlob.size(), base_fee, fee_multiplier, fee_quantization_mask);
+                    needed_fee = calculate_fee(test_ptx.tx, txBlob.size(), base_fee, fee_multiplier, fee_quantization_mask);
                     LOG_PRINT_L2("Made an attempt at a final " << get_weight_string(test_ptx.tx, txBlob.size()) << " tx, with " << print_money(test_ptx.fee) << " fee  and " << print_money(test_ptx.change_dts.amount) << " change");
                 } while (needed_fee > test_ptx.fee);
 
@@ -9518,7 +9452,7 @@ namespace tools
         return vector;
     }
     //----------------------------------------------------------------------------------------------------
-    std::vector<size_t> wallet2::select_available_outputs_from_histogram(uint64_t count, bool atleast, bool unlocked, bool allow_rct)
+    std::vector<size_t> wallet2::select_available_outputs_from_histogram(uint64_t count, bool atleast, bool unlocked)
     {
         cryptonote::COMMAND_RPC_GET_OUTPUT_HISTOGRAM::request req_t = AUTO_VAL_INIT(req_t);
         cryptonote::COMMAND_RPC_GET_OUTPUT_HISTOGRAM::response resp_t = AUTO_VAL_INIT(resp_t);
@@ -9541,9 +9475,7 @@ namespace tools
             mixable.insert(i.amount);
         }
 
-        return select_available_outputs([mixable, atleast, allow_rct](const transfer_details &td) {
-            if (!allow_rct && td.is_rct())
-                return false;
+        return select_available_outputs([mixable, atleast](const transfer_details &td) {
             const uint64_t amount = 0;
             if (atleast)
             {
@@ -9589,20 +9521,17 @@ namespace tools
     std::vector<size_t> wallet2::select_available_unmixable_outputs()
     {
         // request all outputs with less than 3 instances
-        return select_available_outputs_from_histogram(DEFAULT_MIXIN + 1, false, true, false);
+        return select_available_outputs_from_histogram(DEFAULT_MIXIN + 1, false, true);
     }
     //----------------------------------------------------------------------------------------------------
     std::vector<size_t> wallet2::select_available_mixable_outputs()
     {
         // request all outputs with at least 3 instances, so we can use mixin 2 with
-        return select_available_outputs_from_histogram(DEFAULT_MIXIN + 1, true, true, true);
+        return select_available_outputs_from_histogram(DEFAULT_MIXIN + 1, true, true);
     }
     //----------------------------------------------------------------------------------------------------
     std::vector<wallet2::pending_tx> wallet2::create_unmixable_sweep_transactions()
     {
-        // From hard fork 1, we don't consider small amounts to be dust anymore
-        tx_dust_policy dust_policy(::config::DEFAULT_DUST_THRESHOLD);
-
         const uint64_t base_fee = get_base_fee();
 
         // may throw
@@ -10387,20 +10316,20 @@ namespace tools
         std::vector<int> good_signature(num_sigs, 0);
         if (is_out)
         {
-            good_signature[0] = is_subaddress ? crypto::check_tx_proof(prefix_hash, tx_pub_key, address.m_view_public_key, address.m_spend_public_key, shared_secret[0], sig[0], version) : crypto::check_tx_proof(prefix_hash, tx_pub_key, address.m_view_public_key, boost::none, shared_secret[0], sig[0], version);
+            good_signature[0] = is_subaddress ? crypto::check_tx_proof(prefix_hash, tx_pub_key, address.m_view_public_key, address.m_spend_public_key, shared_secret[0], sig[0]) : crypto::check_tx_proof(prefix_hash, tx_pub_key, address.m_view_public_key, boost::none, shared_secret[0], sig[0]);
 
             for (size_t i = 0; i < additional_tx_pub_keys.size(); ++i)
             {
-                good_signature[i + 1] = is_subaddress ? crypto::check_tx_proof(prefix_hash, additional_tx_pub_keys[i], address.m_view_public_key, address.m_spend_public_key, shared_secret[i + 1], sig[i + 1], version) : crypto::check_tx_proof(prefix_hash, additional_tx_pub_keys[i], address.m_view_public_key, boost::none, shared_secret[i + 1], sig[i + 1], version);
+                good_signature[i + 1] = is_subaddress ? crypto::check_tx_proof(prefix_hash, additional_tx_pub_keys[i], address.m_view_public_key, address.m_spend_public_key, shared_secret[i + 1], sig[i + 1]) : crypto::check_tx_proof(prefix_hash, additional_tx_pub_keys[i], address.m_view_public_key, boost::none, shared_secret[i + 1], sig[i + 1]);
             }
         }
         else
         {
-            good_signature[0] = is_subaddress ? crypto::check_tx_proof(prefix_hash, address.m_view_public_key, tx_pub_key, address.m_spend_public_key, shared_secret[0], sig[0], version) : crypto::check_tx_proof(prefix_hash, address.m_view_public_key, tx_pub_key, boost::none, shared_secret[0], sig[0], version);
+            good_signature[0] = is_subaddress ? crypto::check_tx_proof(prefix_hash, address.m_view_public_key, tx_pub_key, address.m_spend_public_key, shared_secret[0], sig[0]) : crypto::check_tx_proof(prefix_hash, address.m_view_public_key, tx_pub_key, boost::none, shared_secret[0], sig[0]);
 
             for (size_t i = 0; i < additional_tx_pub_keys.size(); ++i)
             {
-                good_signature[i + 1] = is_subaddress ? crypto::check_tx_proof(prefix_hash, address.m_view_public_key, additional_tx_pub_keys[i], address.m_spend_public_key, shared_secret[i + 1], sig[i + 1], version) : crypto::check_tx_proof(prefix_hash, address.m_view_public_key, additional_tx_pub_keys[i], boost::none, shared_secret[i + 1], sig[i + 1], version);
+                good_signature[i + 1] = is_subaddress ? crypto::check_tx_proof(prefix_hash, address.m_view_public_key, additional_tx_pub_keys[i], address.m_spend_public_key, shared_secret[i + 1], sig[i + 1]) : crypto::check_tx_proof(prefix_hash, address.m_view_public_key, additional_tx_pub_keys[i], boost::none, shared_secret[i + 1], sig[i + 1]);
             }
         }
 
@@ -10555,6 +10484,7 @@ namespace tools
         THROW_WALLET_EXCEPTION_IF(!tools::base58::decode(sig_str.substr(std::strlen(header)), sig_decoded), error::wallet_internal_error,
                                   "Signature decoding error");
 
+        bool loaded = false;
         std::vector<reserve_proof_entry> proofs;
         serializable_unordered_map<crypto::public_key, crypto::signature> subaddr_spendkeys;
         try
@@ -10568,6 +10498,12 @@ namespace tools
         }
         catch (...)
         {
+        }
+
+        if (!loaded)
+        {
+            THROW_WALLET_EXCEPTION_IF(!loaded, error::wallet_internal_error, "Signature deserializing error");
+            return false;
         }
 
         THROW_WALLET_EXCEPTION_IF(subaddr_spendkeys.count(address.m_spend_public_key) == 0, error::wallet_internal_error,
@@ -10934,7 +10870,7 @@ namespace tools
             LOG_PRINT_L0("Signature header check error");
             return {};
         }
-        
+
         std::string decoded;
         if (!tools::base58::decode(signature.substr(header_len), decoded))
         {
@@ -11627,8 +11563,8 @@ namespace tools
                 const transfer_details &org_td = m_transfers[i + offset];
                 if (!org_td.m_key_image_known)
                     goto process;
-#define CMPF(f) \
-    CMPF(m_txid);
+#define CMPF(f) if (!(td.f == org_td.f)) goto process
+                CMPF(m_txid);
                 CMPF(m_key_image);
                 CMPF(m_internal_output_index);
 #undef CMPF
@@ -12259,10 +12195,7 @@ namespace tools
         {
             throw std::runtime_error("failed to connect to daemon: " + get_daemon_address());
         }
-        if (version < MAKE_CORE_RPC_VERSION(1, 6))
-        {
-            throw std::runtime_error("this function requires RPC version 1.6 or higher");
-        }
+
         std::tm date = {0, 0, 0, 0, 0, 0, 0, 0};
         date.tm_year = year - 1900;
         date.tm_mon = month - 1;
@@ -12431,7 +12364,7 @@ namespace tools
     //----------------------------------------------------------------------------------------------------
     void wallet2::generate_genesis(cryptonote::block &b) const
     {
-        cryptonote::generate_genesis_block(b);
+        cryptonote::generate_genesis_block(b, get_config(m_nettype).GENESIS_TX, get_config(m_nettype).GENESIS_NONCE);
     }
     //----------------------------------------------------------------------------------------------------
     mms::multisig_wallet_state wallet2::get_multisig_wallet_state() const

@@ -31,6 +31,10 @@
 
 #pragma once
 #include <boost/asio/io_service.hpp>
+#include <boost/function/function_fwd.hpp>
+#if BOOST_VERSION >= 107400
+#include <boost/serialization/library_version_type.hpp>
+#endif
 #include <boost/serialization/serialization.hpp>
 #include <boost/serialization/version.hpp>
 #include <boost/serialization/list.hpp>
@@ -38,7 +42,6 @@
 #include <boost/multi_index/global_fun.hpp>
 #include <boost/multi_index/hashed_index.hpp>
 #include <boost/multi_index/member.hpp>
-#include <boost/circular_buffer.hpp>
 #include <atomic>
 #include <functional>
 #include <unordered_map>
@@ -607,7 +610,7 @@ namespace cryptonote
      *
      * @return the fee
      */
-        static uint64_t get_dynamic_base_fee(uint64_t block_reward, size_t median_block_weight, uint8_t version);
+        static uint64_t get_dynamic_base_fee(uint64_t block_reward, size_t median_block_weight);
 
         /**
      * @brief get dynamic per kB or byte fee estimate for the next few blocks
@@ -995,13 +998,6 @@ namespace cryptonote
         void unlock();
 
         void cancel();
-
-        /**
-     * @brief called when we see a tx originating from a block
-     *
-     * Used for handling txes from historical blocks in a fast way
-     */
-        void on_new_tx_from_block(const cryptonote::transaction &tx);
 
         /**
      * @brief returns the timestamps of the last N blocks

@@ -79,7 +79,7 @@ namespace cryptonote
         LOG_PRINT_L2("destinations include " << num_stdaddresses << " standard addresses and " << num_subaddresses << " subaddresses");
     }
     //---------------------------------------------------------------
-    bool construct_miner_tx(size_t height, size_t median_weight, size_t current_block_weight, uint64_t fee, const account_public_address &miner_address, transaction &tx, const blobdata &extra_nonce, size_t max_outs, uint8_t hard_fork_version)
+    bool construct_miner_tx(size_t height, size_t median_weight, size_t current_block_weight, uint64_t fee, const account_public_address &miner_address, transaction &tx, const blobdata &extra_nonce, size_t max_outs)
     {
         tx.vin.clear();
         tx.vout.clear();
@@ -107,7 +107,7 @@ namespace cryptonote
 
         std::vector<uint64_t> out_amounts;
         decompose_amount_into_digits(
-            block_reward, hard_fork_version >= 2 ? 0 : ::config::DEFAULT_DUST_THRESHOLD,
+            block_reward, 0,
             [&out_amounts](uint64_t a_chunk) { out_amounts.push_back(a_chunk); },
             [&out_amounts](uint64_t a_dust) { out_amounts.push_back(a_dust); });
 
@@ -581,8 +581,7 @@ namespace cryptonote
         return construct_tx_and_get_tx_key(sender_account_keys, subaddresses, sources, destinations_copy, change_addr, extra, tx, unlock_time, tx_key, additional_tx_keys, NULL);
     }
     //---------------------------------------------------------------
-    bool generate_genesis_block(
-        block &bl, std::string const &genesis_tx, uint32_t nonce)
+    bool generate_genesis_block(block &bl, std::string const &genesis_tx, uint32_t nonce)
     {
         //genesis block
         bl = {};

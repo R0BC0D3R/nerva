@@ -46,7 +46,7 @@ namespace cryptonote
 {
 
     //---------------------------------------------------------------
-    bool construct_miner_tx(size_t height, size_t median_weight, size_t current_block_weight, uint64_t fee, const account_public_address &miner_address, transaction &tx, const blobdata &extra_nonce = blobdata(), size_t max_outs = 999, uint8_t hard_fork_version = 1);
+    bool construct_miner_tx(size_t height, size_t median_weight, size_t current_block_weight, uint64_t fee, const account_public_address &miner_address, transaction &tx, const blobdata &extra_nonce = blobdata(), size_t max_outs = 999);
 
     bool construct_genesis_tx(transaction &tx, uint64_t amount);
 
@@ -140,7 +140,7 @@ namespace cryptonote
                                         std::vector<rct::key> &amount_keys,
                                         crypto::public_key &out_eph_public_key);
 
-    bool generate_genesis_block(block &bl);
+    bool generate_genesis_block(block &bl, std::string const &genesis_tx, uint32_t nonce);
     class Blockchain;
 
     //todo: could probably get rid of some of these overloads

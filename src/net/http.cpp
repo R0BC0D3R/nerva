@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2020, The Monero Project
+// Copyright (c) 2020, The Monero Project
 //
 // All rights reserved.
 //
@@ -25,19 +25,46 @@
 // INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
-#include "p2p/net_node.h"
-#include "p2p/net_node.inl"
-#include "cryptonote_protocol/cryptonote_protocol_handler.h"
-#include "cryptonote_protocol/cryptonote_protocol_handler.inl"
+#include "http.h"
 
-namespace nodetool
+#include "parse.h"
+#include "socks_connect.h"
+
+namespace net
 {
-    template class node_server<cryptonote::t_cryptonote_protocol_handler<cryptonote::core>>;
-}
-namespace cryptonote
+namespace http
 {
-    template class t_cryptonote_protocol_handler<cryptonote::core>;
+
+bool client::set_proxy(const std::string &address)
+{
+  if (address.empty())
+  {
+    set_connector(epee::net_utils::direct_connect{});
+  }
+  else
+  {
+    const auto endpoint = get_tcp_endpoint(address);
+    if (!endpoint)
+    {
+      auto always_fail = net::socks::connector{boost::asio::ip::tcp::endpoint()};
+      set_connector(always_fail);
+    }
+    else
+    {
+      set_connector(net::socks::connector{*endpoint});
+    }
+  }
+
+  disconnect();
+
+  return true;
 }
+
+std::unique_ptr<epee::net_utils::http::abstract_http_client> client_factory::create()
+{
+  return std::unique_ptr<epee::net_utils::http::abstract_http_client>(new client());
+}
+
+} // namespace http
+} // namespace net

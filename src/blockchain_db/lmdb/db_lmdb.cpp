@@ -4624,13 +4624,6 @@ uint64_t BlockchainLMDB::add_transaction_data(const crypto::hash& blk_hash, cons
         return size;
     }
 
-    void BlockchainLMDB::fixup()
-    {
-        LOG_PRINT_L3("BlockchainLMDB::" << __func__);
-        // Always call parent as well
-        BlockchainDB::fixup();
-    }
-
 #define RENAME_DB(name)                                                                                 \
     do                                                                                                  \
     {                                                                                                   \

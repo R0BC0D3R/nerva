@@ -384,7 +384,7 @@ namespace nodetool
         bool handle_command_line(
             const boost::program_options::variables_map &vm);
         bool idle_worker();
-        bool handle_remote_peerlist(const std::vector<peerlist_entry> &peerlist, time_t local_time, const epee::net_utils::connection_context_base &context);
+        bool handle_remote_peerlist(const std::vector<peerlist_entry> &peerlist, const epee::net_utils::connection_context_base &context);
         bool get_local_node_data(basic_node_data &node_data, const network_zone &zone);
 
         bool sanitize_peerlist(std::vector<peerlist_entry> &local_peerlist);
@@ -417,7 +417,7 @@ namespace nodetool
         void record_addr_failed(const epee::net_utils::network_address &addr);
         bool is_addr_recently_failed(const epee::net_utils::network_address &addr);
         bool is_priority_node(const epee::net_utils::network_address &na);
-        std::set<std::string> get_seed_nodes(epee::net_utils::zone);
+        std::vector<std::string> get_seed_nodes(epee::net_utils::zone);
         bool connect_to_seed(epee::net_utils::zone);
 
         template <class Container>

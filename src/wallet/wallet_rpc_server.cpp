@@ -170,7 +170,6 @@ namespace tools
 
         m_vm = vm;
 
-        epee::net_utils::http::authentication_type http_auth_type = rpc_config->auth_type;
         boost::optional<epee::net_utils::http::login> http_login{};
         std::string bind_port = command_line::get_arg(*m_vm, arg_rpc_bind_port);
         const bool disable_auth = command_line::get_arg(*m_vm, arg_disable_rpc_login);
@@ -207,7 +206,6 @@ namespace tools
                 LOG_ERROR(tr("Cannot specify --") << arg_disable_rpc_login.name << tr(" and --") << arg.rpc_login.name);
                 return false;
             }
-            http_auth_type = epee::net_utils::http::http_auth_none;
         }
         else // auth enabled
         {
@@ -256,7 +254,7 @@ namespace tools
         return epee::http_server_impl_base<wallet_rpc_server, connection_context>::init(
             rng, std::move(bind_port), std::move(rpc_config->bind_ip),
             std::move(rpc_config->bind_ipv6_address), std::move(rpc_config->use_ipv6), std::move(rpc_config->require_ipv4),
-            std::move(rpc_config->access_control_origins), http_auth_type, std::move(http_login),
+            std::move(rpc_config->access_control_origins), std::move(http_login),
             std::move(rpc_config->ssl_options));
     }
     //------------------------------------------------------------------------------------------------------------------------------
@@ -438,7 +436,7 @@ namespace tools
             res.unlocked_balance = req.all_accounts ? m_wallet->unlocked_balance_all(req.strict, &res.blocks_to_unlock) : m_wallet->unlocked_balance(req.account_index, req.strict, &res.blocks_to_unlock);
             res.multisig_import_needed = m_wallet->multisig() && m_wallet->has_multisig_partial_key_images();
             std::map<uint32_t, std::map<uint32_t, uint64_t>> balance_per_subaddress_per_account;
-            std::map<uint32_t, std::map<uint32_t, std::pair<uint64_t, std::pair<uint64_t, uint64_t>>>> unlocked_balance_per_subaddress_per_account;
+            std::map<uint32_t, std::map<uint32_t, std::pair<uint64_t, uint64_t>>> unlocked_balance_per_subaddress_per_account;
             if (req.all_accounts)
             {
                 for (uint32_t account_index = 0; account_index < m_wallet->get_num_subaddress_accounts(); ++account_index)
@@ -458,7 +456,7 @@ namespace tools
             {
                 uint32_t account_index = p.first;
                 std::map<uint32_t, uint64_t> balance_per_subaddress = p.second;
-                std::map<uint32_t, std::pair<uint64_t, std::pair<uint64_t, uint64_t>>> unlocked_balance_per_subaddress = unlocked_balance_per_subaddress_per_account[account_index];
+                std::map<uint32_t, std::pair<uint64_t, uint64_t>> unlocked_balance_per_subaddress = unlocked_balance_per_subaddress_per_account[account_index];
                 std::set<uint32_t> address_indices;
                 if (!req.all_accounts && !req.address_indices.empty())
                 {
@@ -2089,26 +2087,38 @@ namespace tools
 
         cryptonote::address_parse_info info;
         er.message = "";
-        if (!get_account_address_from_str_or_url(info, m_wallet->nettype(), req.address,
-                                                 [&er](const std::string &url, const std::vector<std::string> &addresses, bool dnssec_valid) -> std::string {
-                                                     if (!dnssec_valid)
-                                                     {
-                                                         er.message = std::string("Invalid DNSSEC for ") + url;
-                                                         return {};
-                                                     }
-                                                     if (addresses.empty())
-                                                     {
-                                                         er.message = std::string("No NERVA address found at ") + url;
-                                                         return {};
-                                                     }
-                                                     return addresses[0];
-                                                 }))
+        if (!get_account_address_from_str_or_url(info, m_wallet->nettype(), req.address, [&er](const std::string &url, const std::vector<std::string> &addresses, bool dnssec_valid) -> std::string {
+                if (!dnssec_valid)
+                {
+                    er.message = std::string("Invalid DNSSEC for ") + url;
+                    return {};
+                }
+                if (addresses.empty())
+                {
+                    er.message = std::string("No NERVA address found at ") + url;
+                    return {};
+                }
+                return addresses[0];
+            }))
         {
             er.code = WALLET_RPC_ERROR_CODE_WRONG_ADDRESS;
             return false;
         }
 
-        res.good = m_wallet->verify(req.data, info.address, req.signature);
+        const auto result = m_wallet->verify(req.data, info.address, req.signature);
+        res.good = result.valid;
+        switch (result.type)
+        {
+        case tools::wallet2::sign_with_spend_key:
+            res.signature_type = "spend";
+            break;
+        case tools::wallet2::sign_with_view_key:
+            res.signature_type = "view";
+            break;
+        default:
+            res.signature_type = "invalid";
+            break;
+        }
         return true;
     }
     //------------------------------------------------------------------------------------------------------------------------------

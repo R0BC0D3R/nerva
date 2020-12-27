@@ -1,4 +1,3 @@
-// Copyright (c) 2019, The NERVA Project
 // Copyright (c) 2014-2020, The Monero Project
 //
 // All rights reserved.
@@ -31,10 +30,9 @@
 
 #include <boost/algorithm/string.hpp>
 #include <boost/asio/ip/address.hpp>
-#include <boost/bind.hpp>
+#include <functional>
 #include "common/command_line.h"
 #include "hex.h"
-#include "net/local_ip.h"
 
 namespace cryptonote
 {
@@ -88,24 +86,21 @@ namespace cryptonote
     } // namespace
 
     rpc_args::descriptors::descriptors()
-        : rpc_bind_ip({"rpc-bind-ip", rpc_args::tr("Specify IP to bind RPC server"), "127.0.0.1"}), rpc_bind_ipv6_address({"rpc-bind-ipv6-address", rpc_args::tr("Specify IPv6 address to bind RPC server"), "::1"}), rpc_use_ipv6({"rpc-use-ipv6", rpc_args::tr("Allow IPv6 for RPC"), false}), rpc_ignore_ipv4({"rpc-ignore-ipv4", rpc_args::tr("Ignore unsuccessful IPv4 bind for RPC"), false}), rpc_auth_basic({"rpc-auth-basic", rpc_args::tr("Use HTTP Basic authentication")}), rpc_login({"rpc-login", rpc_args::tr("Specify username[:password] required for RPC server"), "", true}), confirm_external_bind({"confirm-external-bind", rpc_args::tr("Confirm rpc-bind-ip value is NOT a loopback (local) IP")}), confirm_cleartext_auth({"confirm-cleartext-auth", rpc_args::tr("Confirm use of basic authentication with external IP binding")}), rpc_access_control_origins({"rpc-access-control-origins", rpc_args::tr("Specify a comma separated list of origins to allow cross origin resource sharing"), ""}), rpc_ssl({"rpc-ssl", rpc_args::tr("Enable SSL on RPC connections: enabled|disabled|autodetect"), "autodetect"}), rpc_ssl_private_key({"rpc-ssl-private-key", rpc_args::tr("Path to a PEM format private key"), ""}), rpc_ssl_certificate({"rpc-ssl-certificate", rpc_args::tr("Path to a PEM format certificate"), ""}), rpc_ssl_ca_certificates({"rpc-ssl-ca-certificates", rpc_args::tr("Path to file containing concatenated PEM format certificate(s) to replace system CA(s)."), ""}), rpc_ssl_allowed_fingerprints({"rpc-ssl-allowed-fingerprints", rpc_args::tr("List of certificate fingerprints to allow")}), rpc_ssl_allow_chained({"rpc-ssl-allow-chained", rpc_args::tr("Allow user (via --rpc-ssl-certificates) chain certificates"), false}), rpc_ssl_allow_any_cert({"rpc-ssl-allow-any-cert", rpc_args::tr("Allow any peer certificate"), false}), disable_rpc_ban({"disable-rpc-ban", rpc_args::tr("Do not ban hosts on RPC errors"), false, false})
+        : rpc_bind_ip({"rpc-bind-ip", rpc_args::tr("Specify IP to bind RPC server"), "127.0.0.1"}), rpc_bind_ipv6_address({"rpc-bind-ipv6-address", rpc_args::tr("Specify IPv6 address to bind RPC server"), "::1"}), rpc_use_ipv6({"rpc-use-ipv6", rpc_args::tr("Allow IPv6 for RPC"), false}), rpc_ignore_ipv4({"rpc-ignore-ipv4", rpc_args::tr("Ignore unsuccessful IPv4 bind for RPC"), false}), rpc_login({"rpc-login", rpc_args::tr("Specify username[:password] required for RPC server"), "", true}), confirm_external_bind({"confirm-external-bind", rpc_args::tr("Confirm rpc-bind-ip value is NOT a loopback (local) IP")}), rpc_access_control_origins({"rpc-access-control-origins", rpc_args::tr("Specify a comma separated list of origins to allow cross origin resource sharing"), ""}), rpc_ssl({"rpc-ssl", rpc_args::tr("Enable SSL on RPC connections: enabled|disabled|autodetect"), "autodetect"}), rpc_ssl_private_key({"rpc-ssl-private-key", rpc_args::tr("Path to a PEM format private key"), ""}), rpc_ssl_certificate({"rpc-ssl-certificate", rpc_args::tr("Path to a PEM format certificate"), ""}), rpc_ssl_ca_certificates({"rpc-ssl-ca-certificates", rpc_args::tr("Path to file containing concatenated PEM format certificate(s) to replace system CA(s)."), ""}), rpc_ssl_allowed_fingerprints({"rpc-ssl-allowed-fingerprints", rpc_args::tr("List of certificate fingerprints to allow")}), rpc_ssl_allow_chained({"rpc-ssl-allow-chained", rpc_args::tr("Allow user (via --rpc-ssl-certificates) chain certificates"), false}), rpc_ssl_allow_any_cert({"rpc-ssl-allow-any-cert", rpc_args::tr("Allow any peer certificate"), false}), disable_rpc_ban({"disable-rpc-ban", rpc_args::tr("Do not ban hosts on RPC errors"), false, false})
     {
     }
 
     const char *rpc_args::tr(const char *str) { return str; }
 
-    void rpc_args::init_options(boost::program_options::options_description &desc, const bool any_cert_option, const bool basic_auth_option)
+    void rpc_args::init_options(boost::program_options::options_description &desc, const bool any_cert_option)
     {
         const descriptors arg{};
         command_line::add_arg(desc, arg.rpc_bind_ip);
         command_line::add_arg(desc, arg.rpc_bind_ipv6_address);
         command_line::add_arg(desc, arg.rpc_use_ipv6);
         command_line::add_arg(desc, arg.rpc_ignore_ipv4);
-        if (basic_auth_option)
-            command_line::add_arg(desc, arg.rpc_auth_basic);
         command_line::add_arg(desc, arg.rpc_login);
         command_line::add_arg(desc, arg.confirm_external_bind);
-        command_line::add_arg(desc, arg.confirm_cleartext_auth);
         command_line::add_arg(desc, arg.rpc_access_control_origins);
         command_line::add_arg(desc, arg.rpc_ssl);
         command_line::add_arg(desc, arg.rpc_ssl_private_key);
@@ -118,12 +113,10 @@ namespace cryptonote
             command_line::add_arg(desc, arg.rpc_ssl_allow_any_cert);
     }
 
-    boost::optional<rpc_args> rpc_args::process(const boost::program_options::variables_map &vm, const bool any_cert_option, const bool basic_auth_option)
+    boost::optional<rpc_args> rpc_args::process(const boost::program_options::variables_map &vm, const bool any_cert_option)
     {
         const descriptors arg{};
         rpc_args config{};
-
-        config.auth_type = (basic_auth_option && command_line::get_arg(vm, arg.rpc_auth_basic) ? epee::net_utils::http::http_auth_basic : epee::net_utils::http::http_auth_digest);
 
         config.bind_ip = command_line::get_arg(vm, arg.rpc_bind_ip);
         config.bind_ipv6_address = command_line::get_arg(vm, arg.rpc_bind_ipv6_address);
@@ -170,16 +163,6 @@ namespace cryptonote
                 LOG_ERROR(
                     "--" << arg.rpc_bind_ipv6_address.name << tr(" permits inbound unencrypted external connections. Consider SSH tunnel or SSL proxy instead. Override with --") << arg.confirm_external_bind.name);
                 return boost::none;
-            }
-
-            if (!(config.auth_type == epee::net_utils::http::http_auth_digest || (parsed_ip.is_v4() && epee::net_utils::is_ip_local(static_cast<uint32_t>(parsed_ip.to_v4().to_ulong())))))
-            {
-                if (!command_line::get_arg(vm, arg.confirm_cleartext_auth))
-                {
-                    LOG_ERROR(
-                        tr("The provided configuration permits unencrypted non-local connections with cleartext authentication. Either enable SSL, disable connections from non-local networks, or use digest authentication."));
-                    return boost::none;
-                }
             }
         }
 

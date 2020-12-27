@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2020, The Monero Project
+// Copyright (c) 2020, The Monero Project
 //
 // All rights reserved.
 //
@@ -25,19 +25,27 @@
 // INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
-#include "p2p/net_node.h"
-#include "p2p/net_node.inl"
-#include "cryptonote_protocol/cryptonote_protocol_handler.h"
-#include "cryptonote_protocol/cryptonote_protocol_handler.inl"
+#pragma once
 
-namespace nodetool
+#include "net/http_client.h"
+
+namespace net
 {
-    template class node_server<cryptonote::t_cryptonote_protocol_handler<cryptonote::core>>;
-}
-namespace cryptonote
+namespace http
 {
-    template class t_cryptonote_protocol_handler<cryptonote::core>;
-}
+
+class client : public epee::net_utils::http::http_simple_client
+{
+public:
+  bool set_proxy(const std::string &address) override;
+};
+
+class client_factory : public epee::net_utils::http::http_client_factory
+{
+public:
+  std::unique_ptr<epee::net_utils::http::abstract_http_client> create() override;
+};
+
+} // namespace http
+} // namespace net

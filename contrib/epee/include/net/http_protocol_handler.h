@@ -1,4 +1,3 @@
-// Copyright (c) 2019, The NERVA Project
 // Copyright (c) 2006-2013, Andrey N. Sabelnikov, www.sabelnikov.net
 // All rights reserved.
 //
@@ -52,7 +51,6 @@ namespace epee
             {
                 std::string m_folder;
                 std::vector<std::string> m_access_control_origins;
-                authentication_type m_auth_type;
                 boost::optional<login> m_user;
                 critical_section m_lock;
             };
@@ -177,32 +175,10 @@ namespace epee
 
                 http_custom_handler(i_service_endpoint *psnd_hndlr, config_type &config, t_connection_context &conn_context)
                     : simple_http_connection_handler<t_connection_context>(psnd_hndlr, config, conn_context),
-                      m_config(config)
+                      m_config(config),
+                      m_auth(m_config.m_user ? http_server_auth{*m_config.m_user, config.rng} : http_server_auth{})
                 {
-                    switch (m_config.m_auth_type)
-                    {
-                    case http_auth_none:
-                        m_auth = new http_server_auth_digest{};
-                        break;
-                    case http_auth_basic:
-                        m_auth = new http_server_auth_basic{*m_config.m_user};
-                        break;
-                    case http_auth_digest:
-                    default:
-                        m_auth = (m_config.m_user ? new http_server_auth_digest{*m_config.m_user, config.rng} : new http_server_auth_digest{});
-                        break;
-                    }
                 }
-
-                ~http_custom_handler()
-                {
-                    if (m_auth != nullptr)
-                    {
-                        delete m_auth;
-                        m_auth = nullptr;
-                    }
-                }
-
                 inline bool handle_request(const http_request_info &query_info, http_response_info &response)
                 {
                     CHECK_AND_ASSERT_MES(m_config.m_phandler, false, "m_config.m_phandler is NULL!!!!");

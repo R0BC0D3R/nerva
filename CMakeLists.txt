@@ -911,6 +911,12 @@ if(CMAKE_C_COMPILER_ID STREQUAL "Clang" AND ARCH_WIDTH EQUAL "32" AND NOT IOS AN
   endif()
 endif()
 
+find_library(PGM_LIBRARY pgm)
+find_library(NORM_LIBRARY norm)
+find_library(GSSAPI_LIBRARY gssapi_krb5)
+find_library(PROTOLIB_LIBRARY protolib)
+find_library(SODIUM_LIBRARY sodium)
+
 add_subdirectory(contrib)
 add_subdirectory(src)
 

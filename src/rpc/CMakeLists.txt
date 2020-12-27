@@ -32,8 +32,8 @@ set(rpc_base_sources
 
 set(rpc_sources
   bootstrap_daemon.cpp
-  bootstrap_node_selector.cpp
   core_rpc_server.cpp
+  rpc_version_str.cpp
   instanciations)
 
 set(daemon_messages_sources
@@ -49,6 +49,7 @@ set(rpc_base_headers
   rpc_handler.h)
 
 set(rpc_headers
+  rpc_version_str.h
   rpc_handler.h)
 
 set(daemon_rpc_server_headers)

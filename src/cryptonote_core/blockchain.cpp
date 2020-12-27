@@ -33,6 +33,7 @@
 #include <cstdio>
 #include <boost/filesystem.hpp>
 #include <boost/range/adaptor/reversed.hpp>
+#include <boost/format.hpp>
 
 #include "include_base_utils.h"
 #include "cryptonote_basic/cryptonote_basic_impl.h"
@@ -376,12 +377,6 @@ bool Blockchain::init(BlockchainDB *db, const network_type nettype, bool offline
     //       hard-coded and runtime-loaded (and enforced) checkpoints.
     else
     {
-    }
-
-    if (m_nettype != FAKECHAIN)
-    {
-        // ensure we fixup anything we found and fix in the future
-        m_db->fixup();
     }
 
     db_rtxn_guard rtxn_guard(m_db);
@@ -891,15 +886,15 @@ start:
     bool check = false;
     if (m_reset_timestamps_and_difficulties_height)
         m_timestamps_and_difficulties_height = 0;
-    if (m_timestamps_and_difficulties_height != 0 && ((height - m_timestamps_and_difficulties_height) == 1) && m_timestamps.size() >= DIFFICULTY_BLOCKS_COUNT_V6)
+    if (m_timestamps_and_difficulties_height != 0 && ((height - m_timestamps_and_difficulties_height) == 1) && m_timestamps.size() >= DIFFICULTY_BLOCKS_COUNT)
     {
         uint64_t index = height - 1;
         m_timestamps.push_back(m_db->get_block_timestamp(index));
         m_difficulties.push_back(m_db->get_block_cumulative_difficulty(index));
 
-        while (m_timestamps.size() > DIFFICULTY_BLOCKS_COUNT_V6)
+        while (m_timestamps.size() > DIFFICULTY_BLOCKS_COUNT)
             m_timestamps.erase(m_timestamps.begin());
-        while (m_difficulties.size() > DIFFICULTY_BLOCKS_COUNT_V6)
+        while (m_difficulties.size() > DIFFICULTY_BLOCKS_COUNT)
             m_difficulties.erase(m_difficulties.begin());
 
         m_timestamps_and_difficulties_height = height;
@@ -1253,7 +1248,6 @@ bool Blockchain::switch_to_alternative_blockchain(std::list<block_extended_info>
     }
 
     m_hardfork->reorganize_from_chain_height(split_height);
-    get_block_longhash_reorg(split_height);
 
     std::shared_ptr<tools::Notify> reorg_notify = m_reorg_notify;
     if (reorg_notify)
@@ -1289,13 +1283,13 @@ difficulty_type Blockchain::get_next_difficulty_for_alternative_chain(const std:
 
     // if the alt chain isn't long enough to calculate the difficulty target
     // based on its blocks alone, need to get more blocks from the main chain
-    if (alt_chain.size() < DIFFICULTY_BLOCKS_COUNT_V6)
+    if (alt_chain.size() < DIFFICULTY_BLOCKS_COUNT)
     {
         CRITICAL_REGION_LOCAL(m_blockchain_lock);
 
         // Figure out start and stop offsets for main chain blocks
         size_t main_chain_stop_offset = alt_chain.size() ? alt_chain.front().height : bei.height;
-        size_t main_chain_count = DIFFICULTY_BLOCKS_COUNT_V6 - std::min(static_cast<size_t>(DIFFICULTY_BLOCKS_COUNT_V6), alt_chain.size());
+        size_t main_chain_count = DIFFICULTY_BLOCKS_COUNT - std::min(static_cast<size_t>(DIFFICULTY_BLOCKS_COUNT), alt_chain.size());
         main_chain_count = std::min(main_chain_count, main_chain_stop_offset);
         size_t main_chain_start_offset = main_chain_stop_offset - main_chain_count;
 
@@ -1310,7 +1304,7 @@ difficulty_type Blockchain::get_next_difficulty_for_alternative_chain(const std:
         }
 
         // make sure we haven't accidentally grabbed too many blocks...maybe don't need this check?
-        CHECK_AND_ASSERT_MES((alt_chain.size() + timestamps.size()) <= DIFFICULTY_BLOCKS_COUNT_V6, false, "Internal error, alt_chain.size()[" << alt_chain.size() << "] + vtimestampsec.size()[" << timestamps.size() << "] NOT <= DIFFICULTY_WINDOW[]" << DIFFICULTY_BLOCKS_COUNT_V6);
+        CHECK_AND_ASSERT_MES((alt_chain.size() + timestamps.size()) <= DIFFICULTY_BLOCKS_COUNT, false, "Internal error, alt_chain.size()[" << alt_chain.size() << "] + vtimestampsec.size()[" << timestamps.size() << "] NOT <= DIFFICULTY_WINDOW[]" << DIFFICULTY_BLOCKS_COUNT);
 
         for (const auto &bei : alt_chain)
         {
@@ -1322,8 +1316,8 @@ difficulty_type Blockchain::get_next_difficulty_for_alternative_chain(const std:
     // and timestamps from it alone
     else
     {
-        timestamps.resize(static_cast<size_t>(DIFFICULTY_BLOCKS_COUNT_V6));
-        cumulative_difficulties.resize(static_cast<size_t>(DIFFICULTY_BLOCKS_COUNT_V6));
+        timestamps.resize(static_cast<size_t>(DIFFICULTY_BLOCKS_COUNT));
+        cumulative_difficulties.resize(static_cast<size_t>(DIFFICULTY_BLOCKS_COUNT));
         size_t count = 0;
         size_t max_i = timestamps.size() - 1;
         // get difficulties and timestamps from most recent blocks in alt chain
@@ -1332,7 +1326,7 @@ difficulty_type Blockchain::get_next_difficulty_for_alternative_chain(const std:
             timestamps[max_i - count] = bei.bl.timestamp;
             cumulative_difficulties[max_i - count] = bei.cumulative_difficulty;
             count++;
-            if (count >= DIFFICULTY_BLOCKS_COUNT_V6)
+            if (count >= DIFFICULTY_BLOCKS_COUNT)
                 break;
         }
     }
@@ -1596,12 +1590,12 @@ bool Blockchain::create_block_template(block &b, const crypto::hash *from_block,
    block weight, so first miner transaction generated with fake amount of money, and with phase we know think we know expected block weight
    */
     //make blocks coin-base tx looks close to real coinbase tx to get truthful blob size
-    bool r = construct_miner_tx(height, median_weight, txs_weight, fee, miner_address, b.miner_tx, ex_nonce, 1, hf_version);
+    bool r = construct_miner_tx(height, median_weight, txs_weight, fee, miner_address, b.miner_tx, ex_nonce, 1);
     CHECK_AND_ASSERT_MES(r, false, "Failed to construct miner tx, first chance");
     size_t cumulative_weight = txs_weight + get_transaction_weight(b.miner_tx);
     for (size_t try_count = 0; try_count != 10; ++try_count)
     {
-        r = construct_miner_tx(height, median_weight, cumulative_weight, fee, miner_address, b.miner_tx, ex_nonce, 1, hf_version);
+        r = construct_miner_tx(height, median_weight, cumulative_weight, fee, miner_address, b.miner_tx, ex_nonce, 1);
 
         CHECK_AND_ASSERT_MES(r, false, "Failed to construct miner tx, second chance");
         size_t coinbase_weight = get_transaction_weight(b.miner_tx);
@@ -2146,29 +2140,7 @@ void Blockchain::get_output_key_mask_unlocked(const uint64_t &amount, const uint
 //------------------------------------------------------------------
 bool Blockchain::get_output_distribution(uint64_t amount, uint64_t from_height, uint64_t to_height, uint64_t &start_height, std::vector<uint64_t> &distribution, uint64_t &base) const
 {
-    // rct outputs don't exist before v4
-    if (amount == 0)
-    {
-        kill this.random text to generate error switch (m_nettype)
-        {
-        case STAGENET:
-            start_height = config::stagenet::hard_forks[3].height;
-            break;
-        case TESTNET:
-            start_height = config::testnet::hard_forks[3].height;
-            break;
-        case MAINNET:
-            start_height = config::hard_forks[3].height;
-            break;
-        case FAKECHAIN:
-            start_height = 0;
-            break;
-        default:
-            return false;
-        }
-    }
-    else
-        start_height = 0;
+    start_height = 0;
     base = 0;
 
     if (to_height > 0 && to_height < from_height)
@@ -3068,8 +3040,7 @@ uint64_t Blockchain::get_dynamic_base_fee(uint64_t block_reward, size_t median_b
     lo /= 5;
     return lo;
 
-    const uint64_t fee_base = DYNAMIC_FEE_PER_KB_BASE_FEE_V5;
-    // divide in two steps, since the divisor must be 32 bits, but DYNAMIC_FEE_PER_KB_BASE_BLOCK_REWARD isn't
+    const uint64_t fee_base = DYNAMIC_FEE_PER_KB_BASE_FEE;
     uint64_t unscaled_fee_base = (fee_base * min_block_weight / median_block_weight);
     lo = mul128(unscaled_fee_base, block_reward, &hi);
     div128_64(hi, lo, DYNAMIC_FEE_PER_KB_BASE_BLOCK_REWARD, &hi, &lo, NULL, NULL);
@@ -3086,19 +3057,13 @@ uint64_t Blockchain::get_dynamic_base_fee(uint64_t block_reward, size_t median_b
 //------------------------------------------------------------------
 bool Blockchain::check_fee(size_t tx_weight, uint64_t fee) const
 {
-    const uint8_t version = get_current_hard_fork_version();
-
     uint64_t median = 0;
     uint64_t base_reward = 0;
     median = m_current_block_cumul_weight_limit / 2;
-    if (!get_block_reward(median, 1, base_reward))
-        return false;
 
-    uint64_t needed_fee;
-    const bool use_long_term_median_in_fee = version >= HF_VERSION_LONG_TERM_BLOCK_WEIGHT;
-    uint64_t fee_per_byte = get_dynamic_base_fee(base_reward, use_long_term_median_in_fee ? std::min<uint64_t>(median, m_long_term_effective_median_block_weight) : median, version);
+    uint64_t fee_per_byte = get_dynamic_base_fee(base_reward, std::min<uint64_t>(median, m_long_term_effective_median_block_weight));
     MDEBUG("Using " << print_money(fee_per_byte) << "/byte fee");
-    needed_fee = tx_weight * fee_per_byte;
+    uint64_t needed_fee = tx_weight * fee_per_byte;
     // quantize fee up to 8 decimals
 
     const uint64_t mask = get_fee_quantization_mask();
@@ -3139,7 +3104,7 @@ uint64_t Blockchain::get_dynamic_base_fee_estimate(uint64_t grace_blocks) const
     }
 
     const uint64_t use_median_value = std::min<uint64_t>(median, m_long_term_effective_median_block_weight);
-    const uint64_t fee = get_dynamic_base_fee(base_reward, use_median_value, version);
+    const uint64_t fee = get_dynamic_base_fee(base_reward, use_median_value);
     MDEBUG("Estimating " << grace_blocks << "-block fee at " << print_money(fee) << "/byte");
     return fee;
 }
@@ -3234,7 +3199,7 @@ uint64_t Blockchain::get_adjusted_time(uint64_t height) const
 
     if (height < BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW)
         return static_cast<uint64_t>(time(NULL));
-    
+
     std::vector<uint64_t> timestamps;
 
     // need most recent 60 blocks, get index of first of those
@@ -4170,7 +4135,8 @@ bool Blockchain::prepare_handle_incoming_blocks(const std::vector<block_complete
     m_tx_pool.lock();
     CRITICAL_REGION_LOCAL1(m_blockchain_lock);
 
-    if (blocks_entry.size() == 0)
+  const size_t nblocks = blocks_entry.size();
+  if(nblocks == 0)
         return false;
 
     for (const auto &entry : blocks_entry)
@@ -4194,7 +4160,7 @@ bool Blockchain::prepare_handle_incoming_blocks(const std::vector<block_complete
     m_batch_success = true;
 
     const uint64_t height = m_db->height();
-    if ((height + blocks_entry.size()) < m_blocks_hash_check.size())
+  if ((height + nblocks) < m_blocks_hash_check.size())
         return true;
 
     blocks.resize(nblocks);
@@ -4636,6 +4602,11 @@ std::vector<std::pair<Blockchain::block_extended_info, std::vector<crypto::hash>
 void Blockchain::cancel()
 {
     m_cancel = true;
+}
+
+bool Blockchain::is_within_compiled_block_hash_area(uint64_t height) const
+{
+    return false;
 }
 
 void Blockchain::lock()

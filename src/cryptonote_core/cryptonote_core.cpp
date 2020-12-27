@@ -611,7 +611,7 @@ namespace cryptonote
 
         // now that we have a valid m_blockchain_storage, we can clean out any
         // transactions in the pool that do not conform to the current fork
-        m_mempool.validate(m_blockchain_storage.get_current_hard_fork_version());
+        m_mempool.validate();
 
         bool show_time_stats = command_line::get_arg(vm, arg_show_time_stats) != 0;
         m_blockchain_storage.set_show_time_stats(show_time_stats);
@@ -936,7 +936,6 @@ namespace cryptonote
         if (!tx_info.empty())
             handle_incoming_tx_accumulated_batch(tx_info, tx_relay == relay_method::block);
 
-        bool valid_events = false;
         bool ok = true;
         it = tx_blobs.begin();
         for (size_t i = 0; i < tx_blobs.size(); i++, ++it)
@@ -946,8 +945,7 @@ namespace cryptonote
                 ok = false;
                 continue;
             }
-            if (tx_relay == relay_method::block)
-                get_blockchain_storage().on_new_tx_from_block(results[i].tx);
+
             if (already_have[i])
                 continue;
 
@@ -955,19 +953,12 @@ namespace cryptonote
             ok &= add_new_tx(results[i].tx, results[i].hash, tx_blobs[i].blob, weight, tvc[i], tx_relay, relayed);
 
             if (tvc[i].m_verifivation_failed)
-            {
                 MERROR_VER("Transaction verification failed: " << results[i].hash);
-            }
             else if (tvc[i].m_verifivation_impossible)
-            {
                 MERROR_VER("Transaction verification impossible: " << results[i].hash);
-            }
 
             if (tvc[i].m_added_to_pool)
-            {
                 MDEBUG("tx added: " << results[i].hash);
-                valid_events = true;
-            }
             else
                 results[i].res = false;
         }

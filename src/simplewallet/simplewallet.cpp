@@ -163,7 +163,8 @@ namespace
     const char *USAGE_PAYMENTS("payments <PID_1> [<PID_2> ... <PID_N>]");
     const char *USAGE_PAYMENT_ID("payment_id");
     const char *USAGE_TRANSFER("transfer [index=<N1>[,<N2>,...]] [<priority>] (<URI> | <address> <amount>) [<payment_id>]");
-    const char *USAGE_SWEEP_ALL("sweep_all [index=<N1>[,<N2>,...]] [<priority>] [outputs=<N>] <address> [<payment_id (obsolete)>]");
+    const char* USAGE_SWEEP_ALL("sweep_all [index=<N1>[,<N2>,...] | index=all] [<priority>] [outputs=<N>] <address> [<payment_id>]");
+    const char* USAGE_SWEEP_ACCOUNT("sweep_account <account> [index=<N1>[,<N2>,...] | index=all] [<priority>] [outputs=<N>] <address> [<payment_id (obsolete)>]");
     const char *USAGE_SWEEP_BELOW("sweep_below <amount_threshold> [index=<N1>[,<N2>,...]] [<priority>] [<ring_size>] <address> [<payment_id (obsolete)>]");
     const char *USAGE_SWEEP_SINGLE("sweep_single [<priority>] [<ring_size>] [outputs=<N>] <key_image> <address> [<payment_id (obsolete)>]");
     const char *USAGE_DONATE("donate [index=<N1>[,<N2>,...]] [<priority>] [<ring_size>] <amount> [<payment_id (obsolete)>]");
@@ -181,7 +182,7 @@ namespace
     const char *USAGE_ADDRESS_BOOK("address_book [(add (<address>|<integrated address>) [<description possibly with whitespaces>])|(delete <index>)]");
     const char *USAGE_SET_VARIABLE("set <option> [<value>]");
     const char *USAGE_GET_TX_KEY("get_tx_key <txid>");
-    const char *USAGE_SET_TX_KEY("set_tx_key <txid> <tx_key>");
+    const char* USAGE_SET_TX_KEY("set_tx_key <txid> <tx_key> [<subaddress>]");
     const char *USAGE_CHECK_TX_KEY("check_tx_key <txid> <txkey> <address>");
     const char *USAGE_GET_TX_PROOF("get_tx_proof <txid> <address> [<message>]");
     const char *USAGE_CHECK_TX_PROOF("check_tx_proof <txid> <address> <signature_file> [<message>]");
@@ -189,7 +190,7 @@ namespace
     const char *USAGE_CHECK_SPEND_PROOF("check_spend_proof <txid> <signature_file> [<message>]");
     const char *USAGE_GET_RESERVE_PROOF("get_reserve_proof (all|<amount>) [<message>]");
     const char *USAGE_CHECK_RESERVE_PROOF("check_reserve_proof <address> <signature_file> [<message>]");
-    const char *USAGE_SHOW_TRANSFERS("show_transfers [in|out|pending|failed|pool|coinbase] [index=<N1>[,<N2>,...]] [<min_height> [<max_height>]]");
+    const char* USAGE_SHOW_TRANSFERS("show_transfers [in|out|all|pending|failed|pool|coinbase] [index=<N1>[,<N2>,...]] [<min_height> [<max_height>]]");
     const char *USAGE_UNSPENT_OUTPUTS("unspent_outputs [index=<N1>[,<N2>,...]] [<min_amount> [<max_amount>]]");
     const char *USAGE_RESCAN_BC("rescan_bc [hard|soft|keep_ki] [start_height=0]");
     const char *USAGE_SET_TX_NOTE("set_tx_note <txid> [free text note]");
@@ -230,6 +231,7 @@ namespace
     const char *USAGE_MMS_SET("mms set <option_name> [<option_value>]");
     const char *USAGE_MMS_SEND_SIGNER_CONFIG("mms send_signer_config");
     const char *USAGE_MMS_START_AUTO_CONFIG("mms start_auto_config [<label> <label> ...]");
+    const char* USAGE_MMS_CONFIG_CHECKSUM("mms config_checksum");
     const char *USAGE_MMS_STOP_AUTO_CONFIG("mms stop_auto_config");
     const char *USAGE_MMS_AUTO_CONFIG("mms auto_config <auto_config_token>");
     const char *USAGE_PRINT_RING("print_ring <key_image> | <txid>");
@@ -247,7 +249,8 @@ namespace
     const char *USAGE_PUBLIC_NODES("public_nodes");
     const char *USAGE_WELCOME("welcome");
     const char *USAGE_VERSION("version");
-    const char *USAGE_HELP("help [<command>]");
+    const char* USAGE_HELP("help [<command> | all]");
+    const char* USAGE_APROPOS("apropos <keyword> [<keyword> ...]");
 
     std::string input_line(const std::string &prompt, bool yesno = false)
     {
@@ -2569,19 +2572,6 @@ bool simple_wallet::set_auto_low_priority(const std::vector<std::string> &args /
     return true;
 }
 
-bool simple_wallet::set_persistent_rpc_client_id(const std::vector<std::string> &args /* = std::vector<std::string>()*/)
-{
-    const auto pwd_container = get_and_verify_password();
-    if (pwd_container)
-    {
-        parse_bool_and_use(args[1], [&](bool r) {
-            m_wallet->persistent_rpc_client_id(r);
-            m_wallet->rewrite(m_wallet_file, pwd_container->password());
-        });
-    }
-    return true;
-}
-
 bool simple_wallet::set_subaddress_lookahead(const std::vector<std::string> &args /* = std::vector<std::string>()*/)
 {
     const auto pwd_container = get_and_verify_password();
@@ -2783,9 +2773,12 @@ simple_wallet::simple_wallet()
     m_cmd_binder.set_handler("sweep_unmixable",
                              boost::bind(&simple_wallet::on_command, this, &simple_wallet::sweep_unmixable, _1),
                              tr("Send all unmixable outputs to yourself with ring_size 1"));
-    m_cmd_binder.set_handler("sweep_all", boost::bind(&simple_wallet::sweep_all, this, _1),
+  m_cmd_binder.set_handler("sweep_all", boost::bind(&simple_wallet::on_command, this, &simple_wallet::sweep_all, _1),
                              tr(USAGE_SWEEP_ALL),
-                             tr("Send all unlocked balance to an address. If the parameter \"index<N1>[,<N2>,...]\" is specified, the wallet sweeps outputs received by those address indices. If omitted, the wallet randomly chooses an address index to be used. If the parameter \"outputs=<N>\" is specified and  N > 0, wallet splits the transaction into N even outputs."));
+                           tr("Send all unlocked balance to an address. If the parameter \"index=<N1>[,<N2>,...]\" or \"index=all\" is specified, the wallet sweeps outputs received by those or all address indices, respectively. If omitted, the wallet randomly chooses an address index to be used. If the parameter \"outputs=<N>\" is specified and  N > 0, wallet splits the transaction into N even outputs."));
+  m_cmd_binder.set_handler("sweep_account", boost::bind(&simple_wallet::on_command, this, &simple_wallet::sweep_account, _1),
+                           tr(USAGE_SWEEP_ACCOUNT),
+                           tr("Send all unlocked balance from a given account to an address. If the parameter \"index=<N1>[,<N2>,...]\" or \"index=all\" is specified, the wallet sweeps outputs received by those or all address indices, respectively. If omitted, the wallet randomly chooses an address index to be used. If the parameter \"outputs=<N>\" is specified and  N > 0, wallet splits the transaction into N even outputs."));
     m_cmd_binder.set_handler("sweep_below",
                              boost::bind(&simple_wallet::on_command, this, &simple_wallet::sweep_below, _1),
                              tr(USAGE_SWEEP_BELOW),
@@ -4051,7 +4044,7 @@ bool simple_wallet::init(const boost::program_options::variables_map &vm)
             while (true)
             {
                 std::string heightstr;
-                if (!connected || version < MAKE_CORE_RPC_VERSION(1, 6))
+                if (!connected)
                     heightstr = input_line("Restore from specific blockchain height (optional, default 0)");
                 else
                     heightstr = input_line("Restore from specific blockchain height (optional, default 0),\nor alternatively from specific date (YYYY-MM-DD)");
@@ -4069,7 +4062,7 @@ bool simple_wallet::init(const boost::program_options::variables_map &vm)
                 }
                 catch (const boost::bad_lexical_cast &)
                 {
-                    if (!connected || version < MAKE_CORE_RPC_VERSION(1, 6))
+                    if (!connected)
                     {
                         fail_msg_writer() << tr("bad m_restore_height parameter: ") << heightstr;
                         continue;
@@ -5477,7 +5470,7 @@ bool simple_wallet::show_incoming_transfers(const std::vector<std::string> &args
                                                                                                    print_money(td.amount()) %
                                                                                                    (td.m_spent ? tr("T") : tr("F")) %
                                                                                                    (m_wallet->frozen(td) ? tr("[frozen]") : m_wallet->is_transfer_unlocked(td) ? tr("unlocked") : tr("locked")) %
-                                                                                                   (td.is_rct() ? tr("RingCT") : tr("-")) %
+                                                                                                   tr("RingCT") %
                                                                                                    td.m_global_output_index %
                                                                                                    td.m_txid %
                                                                                                    td.m_subaddr_index.minor %
@@ -6150,39 +6143,19 @@ bool simple_wallet::transfer_main(const std::vector<std::string> &args_, bool ca
                 prompt << boost::format(tr(", of which %s is dust from change")) % print_money(dust_in_fee);
             if (dust_not_in_fee != 0)
                 prompt << tr(".") << ENDL << boost::format(tr("A total of %s from dust change will be sent to dust address")) % print_money(dust_not_in_fee);
-            if (transfer_type == TransferLocked)
-            {
-                float days = locked_blocks / 720.0f;
-                prompt << boost::format(tr(".\nThis transaction (including %s change) will unlock on block %llu, in approximately %s days (assuming 2 minutes per block)")) % cryptonote::print_money(change) % ((unsigned long long)unlock_block) % days;
-            }
-            if (!process_ring_members(ptx_vector, prompt, m_wallet->print_ring_members()))
+
+            if (process_ring_members(ptx_vector, prompt, m_wallet->print_ring_members()))
                 return false;
-            bool default_ring_size = true;
-            for (const auto &ptx : ptx_vector)
-            {
-                for (const auto &vin : ptx.tx.vin)
-                {
-                    if (vin.type() == typeid(txin_to_key))
-                    {
-                        const txin_to_key &in_to_key = boost::get<txin_to_key>(vin);
-                        if (in_to_key.key_offsets.size() != DEFAULT_MIX + 1)
-                            default_ring_size = false;
-                    }
-                }
-            }
-            if (m_wallet->confirm_non_default_ring_size() && !default_ring_size)
-            {
-                prompt << tr("WARNING: this is a non default ring size, which may harm your privacy. Default is recommended.");
-            }
+            
             prompt << ENDL << tr("Is this okay?");
 
             std::string accepted = input_line(prompt.str(), true);
             if (std::cin.eof())
                 return false;
+
             if (!command_line::is_yes(accepted))
             {
                 fail_msg_writer() << tr("transaction cancelled.");
-
                 return false;
             }
         }
@@ -6899,7 +6872,7 @@ bool simple_wallet::sweep_single(const std::vector<std::string> &args_)
 //----------------------------------------------------------------------------------------------------
 bool simple_wallet::sweep_all(const std::vector<std::string> &args_)
 {
-    sweep_main(m_current_subaddress_account, 0, false, args_);
+    sweep_main(m_current_subaddress_account, 0, args_);
     return true;
 }
 //----------------------------------------------------------------------------------------------------
@@ -6919,7 +6892,7 @@ bool simple_wallet::sweep_account(const std::vector<std::string> &args_)
     }
     local_args.erase(local_args.begin());
 
-    sweep_main(account, 0, false, local_args);
+    sweep_main(account, 0, local_args);
     return true;
 }
 //----------------------------------------------------------------------------------------------------
@@ -7797,11 +7770,6 @@ static std::string get_human_readable_timespan(std::chrono::seconds seconds)
     if (ts < 3600 * 24 * 365.25)
         return std::to_string((uint64_t)(ts / (3600 * 24 * 30.5))) + sw::tr(" months");
     return sw::tr("a long time");
-}
-//----------------------------------------------------------------------------------------------------
-static std::string get_human_readable_timespan(uint64_t seconds)
-{
-    return get_human_readable_timespan(std::chrono::seconds(seconds));
 }
 //----------------------------------------------------------------------------------------------------
 // mutates local_args as it parses and consumes arguments
@@ -9250,7 +9218,7 @@ bool simple_wallet::verify(const std::vector<std::string> &args)
     }
     else
     {
-        success_msg_writer() << tr("Good signature from ") << address_string << (result.old ? " (using old signature algorithm)" : "") << " with " << (result.type == tools::wallet2::sign_with_spend_key ? "spend key" : result.type == tools::wallet2::sign_with_view_key ? "view key" : "unknown key combination (suspicious)");
+        success_msg_writer() << tr("Good signature from ") << address_string << " with " << (result.type == tools::wallet2::sign_with_spend_key ? "spend key" : result.type == tools::wallet2::sign_with_view_key ? "view key" : "unknown key combination (suspicious)");
     }
     return true;
 }

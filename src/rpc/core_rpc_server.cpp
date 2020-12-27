@@ -65,6 +65,10 @@ using namespace epee;
 #define OUTPUT_HISTOGRAM_RECENT_CUTOFF_RESTRICTION (3 * 86400) // 3 days max, the wallet requests 1.8 days
 
 #define RESTRICTED_BLOCK_COUNT 1000
+#define RESTRICTED_BLOCK_HEADER_RANGE 1000
+#define RESTRICTED_TRANSACTIONS_COUNT 100
+#define RESTRICTED_SPENT_KEY_IMAGES_COUNT 5000
+#define RESTRICTED_BLOCK_COUNT 1000
 
 #define RPC_TRACKER(rpc) \
     PERF_TIMER(rpc);     \
@@ -263,7 +267,7 @@ namespace cryptonote
         return epee::http_server_impl_base<core_rpc_server, connection_context>::init(
             rng, std::move(port), std::move(rpc_config->bind_ip),
             std::move(rpc_config->bind_ipv6_address), std::move(rpc_config->use_ipv6), std::move(rpc_config->require_ipv4),
-            std::move(rpc_config->access_control_origins), epee::net_utils::http::http_auth_digest, std::move(http_login), std::move(rpc_config->ssl_options));
+            std::move(rpc_config->access_control_origins), std::move(http_login), std::move(rpc_config->ssl_options));
     }
     //------------------------------------------------------------------------------------------------------------------------------
     bool core_rpc_server::check_core_ready()
@@ -1972,7 +1976,7 @@ namespace cryptonote
             if (*bootstrap_daemon_height < target_height)
             {
                 MINFO("Bootstrap daemon is out of sync");
-                return m_bootstrap_daemon->handle_result(false, {});
+                return m_bootstrap_daemon->handle_result(false);
             }
 
             uint64_t top_height = m_core.get_current_blockchain_height();
@@ -2006,7 +2010,7 @@ namespace cryptonote
             m_was_bootstrap_ever_used = true;
         }
 
-        if (r && res.status != CORE_RPC_STATUS_PAYMENT_REQUIRED && res.status != CORE_RPC_STATUS_OK)
+        if (r && res.status != CORE_RPC_STATUS_OK)
         {
             MINFO("Failing RPC " << command_name << " due to peer return status " << res.status);
             r = false;
@@ -2035,7 +2039,7 @@ namespace cryptonote
             return false;
         }
         const bool restricted = m_restricted && ctx;
-        bool response_filled = fill_block_header_response(last_block, false, last_block_height, last_block_hash, res.block_header, !restricted);
+        bool response_filled = fill_block_header_response(last_block, false, last_block_height, last_block_hash, res.block_header);
         if (!response_filled)
         {
             error_resp.code = CORE_RPC_ERROR_CODE_INTERNAL_ERROR;
@@ -2086,7 +2090,7 @@ namespace cryptonote
                 return false;
             }
             uint64_t block_height = boost::get<txin_gen>(blk.miner_tx.vin.front()).height;
-            bool response_filled = fill_block_header_response(blk, orphan, block_height, block_hash, block_header, !restricted);
+            bool response_filled = fill_block_header_response(blk, orphan, block_height, block_hash, block_header);
             if (!response_filled)
             {
                 error_resp.code = CORE_RPC_ERROR_CODE_INTERNAL_ERROR;
@@ -2160,7 +2164,7 @@ namespace cryptonote
                 return false;
             }
             res.headers.push_back(block_header_response());
-            bool response_filled = fill_block_header_response(blk, false, block_height, block_hash, res.headers.back(), !restricted);
+            bool response_filled = fill_block_header_response(blk, false, block_height, block_hash, res.headers.back());
             if (!response_filled)
             {
                 error_resp.code = CORE_RPC_ERROR_CODE_INTERNAL_ERROR;
@@ -2586,7 +2590,6 @@ namespace cryptonote
         if (use_bootstrap_daemon_if_necessary<COMMAND_RPC_GET_BASE_FEE_ESTIMATE>(invoke_http_mode::JON_RPC, "get_fee_estimate", req, res, r))
             return r;
 
-        CHECK_PAYMENT(req, res, COST_PER_FEE_ESTIMATE);
         res.fee = m_core.get_blockchain_storage().get_dynamic_base_fee_estimate(req.grace_blocks);
         res.quantization_mask = Blockchain::get_fee_quantization_mask();
         res.status = CORE_RPC_STATUS_OK;

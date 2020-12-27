@@ -1673,9 +1673,11 @@ namespace tools
             struct response_t
             {
                 bool good;
+                std::string signature_type;
 
                 BEGIN_KV_SERIALIZE_MAP()
                 KV_SERIALIZE(good);
+                KV_SERIALIZE(signature_type);
                 END_KV_SERIALIZE_MAP()
             };
             typedef epee::misc_utils::struct_init<response_t> response;

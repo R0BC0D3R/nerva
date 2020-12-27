@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2018, The Monero Project
+// Copyright (c) 2014-2020, The Monero Project
 //
 // All rights reserved.
 //
@@ -34,6 +34,9 @@
 
 #include <boost/program_options/options_description.hpp>
 #include <boost/program_options/variables_map.hpp>
+#if BOOST_VERSION >= 107400
+#include <boost/serialization/library_version_type.hpp>
+#endif
 #include <boost/serialization/list.hpp>
 #include <boost/serialization/vector.hpp>
 #include <boost/serialization/deque.hpp>
@@ -45,7 +48,7 @@
 #include "cryptonote_basic/account.h"
 #include "cryptonote_basic/account_boost_serialization.h"
 #include "cryptonote_basic/cryptonote_basic_impl.h"
-#include "net/http_client.h"
+#include "net/http.h"
 #include "storages/http_abstract_invoke.h"
 #include "rpc/core_rpc_server_commands_defs.h"
 #include "cryptonote_basic/cryptonote_format_utils.h"
@@ -57,7 +60,10 @@
 #include "ringct/rctTypes.h"
 #include "ringct/rctOps.h"
 #include "checkpoints/checkpoints.h"
+#include "serialization/crypto.h"
+#include "serialization/string.h"
 #include "serialization/pair.h"
+#include "serialization/containers.h"
 
 #include "wallet_errors.h"
 #include "common/password.h"
@@ -167,18 +173,6 @@ namespace tools
 
     private:
         wallet2 *wallet;
-    };
-
-    struct tx_dust_policy
-    {
-        uint64_t dust_threshold;
-        bool add_to_fee;
-        cryptonote::account_public_address addr_for_dust;
-
-        tx_dust_policy(uint64_t a_dust_threshold = 0, bool an_add_to_fee = true, cryptonote::account_public_address an_addr_for_dust = cryptonote::account_public_address())
-            : dust_threshold(a_dust_threshold), add_to_fee(an_add_to_fee), addr_for_dust(an_addr_for_dust)
-        {
-        }
     };
 
     class hashchain
@@ -960,17 +954,12 @@ namespace tools
         uint64_t unlocked_balance(uint32_t subaddr_index_major, bool strict, uint64_t *blocks_to_unlock = NULL);
         // locked & unlocked balance per subaddress of given or current subaddress account
         std::map<uint32_t, uint64_t> balance_per_subaddress(uint32_t subaddr_index_major, bool strict) const;
-        std::map<uint32_t, std::pair<uint64_t, std::pair<uint64_t, uint64_t>>> unlocked_balance_per_subaddress(uint32_t subaddr_index_major, bool strict);
+        std::map<uint32_t, std::pair<uint64_t, uint64_t>> unlocked_balance_per_subaddress(uint32_t subaddr_index_major, bool strict);
         // all locked & unlocked balances of all subaddress accounts
         uint64_t balance_all(bool strict) const;
         uint64_t unlocked_balance_all(bool strict, uint64_t *blocks_to_unlock = NULL);
-        template <typename T>
-        void transfer_selected(const std::vector<cryptonote::tx_destination_entry> &dsts, const std::vector<size_t> &selected_transfers, size_t fake_outputs_count,
-                               std::vector<std::vector<tools::wallet2::get_outs_entry>> &outs,
-                               uint64_t unlock_time, uint64_t fee, const std::vector<uint8_t> &extra, T destination_split_strategy, const tx_dust_policy &dust_policy, cryptonote::transaction &tx, pending_tx &ptx);
-        void transfer_selected_rct(std::vector<cryptonote::tx_destination_entry> dsts, const std::vector<size_t> &selected_transfers, size_t fake_outputs_count,
-                                   std::vector<std::vector<tools::wallet2::get_outs_entry>> &outs,
-                                   uint64_t unlock_time, uint64_t fee, const std::vector<uint8_t> &extra, cryptonote::transaction &tx, pending_tx &ptx);
+
+        void transfer_selected_rct(std::vector<cryptonote::tx_destination_entry> dsts, const std::vector<size_t> &selected_transfers, size_t fake_outputs_count, std::vector<std::vector<tools::wallet2::get_outs_entry>> &outs, uint64_t unlock_time, uint64_t fee, const std::vector<uint8_t> &extra, cryptonote::transaction &tx, pending_tx &ptx);
 
         void commit_tx(pending_tx &ptx_vector);
         void commit_tx(std::vector<pending_tx> &ptx_vector);
@@ -1196,7 +1185,6 @@ namespace tools
 
         uint8_t get_current_hard_fork();
         void get_hard_fork_info(uint8_t version, uint64_t &earliest_height);
-        int get_fee_algorithm();
 
         std::string get_wallet_file() const;
         std::string get_keys_file() const;
@@ -1211,7 +1199,7 @@ namespace tools
     */
         uint64_t get_approximate_blockchain_height() const;
         uint64_t estimate_blockchain_height();
-        std::vector<size_t> select_available_outputs_from_histogram(uint64_t count, bool atleast, bool unlocked, bool allow_rct);
+        std::vector<size_t> select_available_outputs_from_histogram(uint64_t count, bool atleast, bool unlocked);
         std::vector<size_t> select_available_outputs(const std::function<bool(const transfer_details &td)> &f);
         std::vector<size_t> select_available_unmixable_outputs();
         std::vector<size_t> select_available_mixable_outputs();
@@ -1316,8 +1304,8 @@ namespace tools
         std::vector<std::pair<uint64_t, uint64_t>> estimate_backlog(const std::vector<std::pair<double, double>> &fee_levels);
         std::vector<std::pair<uint64_t, uint64_t>> estimate_backlog(uint64_t min_tx_weight, uint64_t max_tx_weight, const std::vector<uint64_t> &fees);
 
-        uint64_t estimate_fee(bool use_per_byte_fee, bool use_rct, int n_inputs, int mixin, int n_outputs, size_t extra_size, bool bulletproof, bool clsag, uint64_t base_fee, uint64_t fee_multiplier, uint64_t fee_quantization_mask) const;
-        uint64_t get_fee_multiplier(uint32_t priority, int fee_algorithm = -1);
+        uint64_t estimate_fee(int n_inputs, int mixin, int n_outputs, size_t extra_size, uint64_t base_fee, uint64_t fee_multiplier, uint64_t fee_quantization_mask) const;
+        uint64_t get_fee_multiplier(uint32_t priority);
         uint64_t get_base_fee();
         uint64_t get_fee_quantization_mask();
 
@@ -1519,7 +1507,6 @@ namespace tools
         void throw_on_rpc_response_error(bool r, const epee::json_rpc::error &error, const std::string &status, const char *method) const;
 
         bool should_expand(const cryptonote::subaddress_index &index) const;
-        bool spends_one_of_ours(const cryptonote::transaction &tx) const;
 
         cryptonote::account_base m_account;
         boost::optional<epee::net_utils::http::login> m_daemon_login;
@@ -1875,4 +1862,3 @@ namespace tools
         }
     } // namespace detail
 } // namespace tools
- 

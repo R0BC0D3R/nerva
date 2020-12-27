@@ -765,7 +765,7 @@ namespace mms
         THROW_WALLET_EXCEPTION_IF(!success, tools::error::file_save_error, filename);
     }
 
-    void message_store::read_from_file(const multisig_wallet_state &state, const std::string &filename, bool load_deprecated_formats)
+    void message_store::read_from_file(const multisig_wallet_state &state, const std::string &filename)
     {
         boost::system::error_code ignored_ec;
         bool file_exists = boost::filesystem::exists(filename, ignored_ec);
@@ -795,22 +795,7 @@ namespace mms
         catch (...)
         {
         }
-        if (!loaded && load_deprecated_formats)
-        {
-            try
-            {
-                std::stringstream iss;
-                iss << buf;
-                boost::archive::portable_binary_iarchive ar(iss);
-                ar >> read_file_data;
-                loaded = true;
-            }
-            catch (const std::exception &e)
-            {
-                MERROR("MMS file " << filename << " has bad structure <iv,encrypted_data>: " << e.what());
-                THROW_WALLET_EXCEPTION_IF(true, tools::error::file_read_error, filename);
-            }
-        }
+
         if (!loaded)
         {
             MERROR("MMS file " << filename << " has bad structure <iv,encrypted_data>");
@@ -836,22 +821,7 @@ namespace mms
         catch (...)
         {
         }
-        if (!loaded && load_deprecated_formats)
-        {
-            try
-            {
-                std::stringstream iss;
-                iss << decrypted_data;
-                boost::archive::portable_binary_iarchive ar(iss);
-                ar >> *this;
-                loaded = true;
-            }
-            catch (const std::exception &e)
-            {
-                MERROR("MMS file " << filename << " has bad structure: " << e.what());
-                THROW_WALLET_EXCEPTION_IF(true, tools::error::file_read_error, filename);
-            }
-        }
+
         if (!loaded)
         {
             MERROR("MMS file " << filename << " has bad structure");

@@ -682,7 +682,7 @@ namespace nodetool
     }
     //-----------------------------------------------------------------------------------
     template <class t_payload_net_handler>
-    std::set<std::string> node_server<t_payload_net_handler>::get_seed_nodes(epee::net_utils::zone zone)
+    std::vector<std::string> node_server<t_payload_net_handler>::get_seed_nodes(epee::net_utils::zone zone)
     {
         switch (zone)
         {
@@ -947,7 +947,7 @@ namespace nodetool
 
         network_zone &zone = m_network_zones.at(context_.m_remote_address.get_zone());
         bool r = epee::net_utils::async_invoke_remote_command2<typename COMMAND_REQUEST_PEER_ID::response>(
-            context_.m_connection_id, COMMAND_REQUEST_PEER_ID::ID, arg, zone.m_net_server.get_config_object(),
+            context_, COMMAND_REQUEST_PEER_ID::ID, arg, zone.m_net_server.get_config_object(),
             [this, &ev, &hsh_result](int code, const typename COMMAND_REQUEST_PEER_ID::response &rsp, p2p_connection_context &context) {
                 epee::misc_utils::auto_scope_leave_caller scope_exit_handler = epee::misc_utils::create_scope_leave_handler([&]() { ev.raise(); });
 

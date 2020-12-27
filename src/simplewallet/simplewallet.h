@@ -143,7 +143,6 @@ namespace cryptonote
         bool set_refresh_from_block_height(const std::vector<std::string> &args = std::vector<std::string>());
         bool set_auto_low_priority(const std::vector<std::string> &args = std::vector<std::string>());
         bool set_subaddress_lookahead(const std::vector<std::string> &args = std::vector<std::string>());
-        bool set_ignore_fractional_outputs(const std::vector<std::string> &args = std::vector<std::string>());
         bool set_track_uses(const std::vector<std::string> &args = std::vector<std::string>());
         bool set_inactivity_lock_timeout(const std::vector<std::string> &args = std::vector<std::string>());
         bool set_setup_background_mining(const std::vector<std::string> &args = std::vector<std::string>());
@@ -165,6 +164,7 @@ namespace cryptonote
         bool transfer(const std::vector<std::string> &args);
         bool sweep_main(uint32_t account, uint64_t below, const std::vector<std::string> &args);
         bool sweep_all(const std::vector<std::string> &args);
+    bool sweep_account(const std::vector<std::string> &args);
         bool sweep_below(const std::vector<std::string> &args);
         bool sweep_single(const std::vector<std::string> &args);
         bool sweep_unmixable(const std::vector<std::string> &args);
@@ -326,7 +326,7 @@ namespace cryptonote
         void handle_transfer_exception(const std::exception_ptr &e, bool trusted_daemon);
         //----------------- i_wallet2_callback ---------------------
         virtual void on_new_block(uint64_t height, const cryptonote::block &block);
-        virtual void on_money_received(uint64_t height, const crypto::hash &txid, const cryptonote::transaction &tx, uint64_t amount, const cryptonote::subaddress_index &subaddr_index, bool is_change, uint64_t unlock_time);
+        virtual void on_money_received(uint64_t height, const crypto::hash &txid, const cryptonote::transaction &tx, uint64_t amount, const cryptonote::subaddress_index &subaddr_index);
         virtual void on_unconfirmed_money_received(uint64_t height, const crypto::hash &txid, const cryptonote::transaction &tx, uint64_t amount, const cryptonote::subaddress_index &subaddr_index);
         virtual void on_money_spent(uint64_t height, const crypto::hash &txid, const cryptonote::transaction &in_tx, uint64_t amount, const cryptonote::transaction &spend_tx, const cryptonote::subaddress_index &subaddr_index);
         virtual void on_skip_transaction(uint64_t height, const crypto::hash &txid, const cryptonote::transaction &tx);

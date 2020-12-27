@@ -198,7 +198,7 @@ namespace cryptonote
     {
 
         const int64_t T = static_cast<int64_t>(target_seconds);
-        size_t N = DIFFICULTY_WINDOW_V6;
+        size_t N = DIFFICULTY_WINDOW;
         int64_t FTL = static_cast<int64_t>(CRYPTONOTE_BLOCK_FUTURE_TIME_LIMIT);
 
         // Return a difficulty of 1 for first 3 blocks if it's the start of the chain.

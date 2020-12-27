@@ -78,12 +78,10 @@ namespace cryptonote
     {
         const uint64_t premine = PREMINE_AMOUNT;
         if (median_weight == 0 && current_block_weight == 0)
-        {
             reward = premine;
-            return true;
-        }
+        else
+            reward = FINAL_SUBSIDY_PER_MINUTE;
 
-        reward = FINAL_SUBSIDY_PER_MINUTE;
         return true;
     }
     //------------------------------------------------------------------------------------

@@ -39,6 +39,7 @@
 #include "cryptonote_core/cryptonote_core.h"
 #include "cryptonote_basic/difficulty.h"
 #include "cryptonote_basic/hardfork.h"
+#include "rpc/rpc_version_str.h"
 #include <boost/format.hpp>
 #include <ctime>
 #include <string>
@@ -67,13 +68,6 @@ namespace daemonize
             case epee::net_utils::address_type::tor:
                 return "Tor";
             }
-        }
-
-        std::string print_float(float f, int prec)
-        {
-            char buf[16];
-            snprintf(buf, sizeof(buf), "%*.*f", prec, prec, f);
-            return buf;
         }
 
         void print_peer(std::string const &prefix, cryptonote::peer const &peer, bool pruned_only, bool publicrpc_only)

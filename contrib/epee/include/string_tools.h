@@ -73,7 +73,7 @@ namespace epee
         }
         //----------------------------------------------------------------------------
         PUSH_WARNINGS
-        DISABLE_GCC_WARNING(maybe - uninitialized)
+        DISABLE_GCC_WARNING(maybe-uninitialized)
         template <class XType>
         inline bool get_xtype_from_string(OUT XType &val, const std::string &str_id)
         {

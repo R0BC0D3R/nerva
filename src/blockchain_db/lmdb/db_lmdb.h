@@ -426,9 +426,6 @@ namespace cryptonote
         uint64_t get_max_block_size();
         void add_max_block_size(uint64_t sz);
 
-        // fix up anything that may be wrong due to past bugs
-        virtual void fixup();
-
         void cleanup_batch();
 
     private:
