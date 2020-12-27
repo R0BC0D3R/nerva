@@ -17,15 +17,26 @@ aes_supported=$?
 
 build_dir=${BUILDER_DIR}/output/${NERVA_BUILD_OS}/${BUILD_TYPE}
 
+if [ ${aes_supported} == 1 ]; then
+    set_aes aes
+else
+    set_aes noaes
+fi
+
 print_env
 
 mkdir -p ${build_dir}
 cd ${build_dir}
 
-if [ ${aes_supported} == 1 ]; then
-    cmake_cmd aes
+if [ ${NERVA_BUILD_OS} == "linux" ]; then
+	cmake -D CMAKE_BUILD_TYPE=${BUILD_TYPE} -D STATIC=${STATIC} -D NO_AES=${NO_AES} -D BUILD_GUI_DEPS=${BUILD_GUI_DEPS} -D BUILD_TAG=${NERVA_BUILD_OS} -D BUILD_EXTRAS=${BUILD_EXTRAS} ../../../..
+elif [ ${NERVA_BUILD_OS} == "osx" ]; then
+	cmake -D CMAKE_BUILD_TYPE=${BUILD_TYPE} -D STATIC=ON -D NO_AES=${NO_AES} -D BUILD_TAG=${NERVA_BUILD_OS} -D BUILD_EXTRAS=${BUILD_EXTRAS} ../../../..
+elif [ ${NERVA_BUILD_OS} == "windows" ]; then
+	cmake -D CMAKE_BUILD_TYPE=${BUILD_TYPE} -D STATIC=ON -D NO_AES=${NO_AES} -D BUILD_TAG=${NERVA_BUILD_OS} -D BUILD_EXTRAS=${BUILD_EXTRAS} -D ARCH="x86-64" -G "MSYS Makefiles" ../../../..
 else
-    cmake_cmd noaes
+	echo "Unsupported build platform"
+	exit 1
 fi
 
 make -j${THREAD_COUNT}
