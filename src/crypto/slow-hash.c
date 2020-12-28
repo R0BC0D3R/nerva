@@ -202,7 +202,6 @@ void cn_slow_hash(cn_hash_context_t *context, const void *data, size_t length, c
         hash_process(&state.hs, data, length);
 
     memcpy(text, state.init, init_size_byte);
-    const uint64_t tweak1_2 = (state.hs.w[24] ^ (*((const uint64_t *)NONCE_POINTER)));
 
     aes_expand_key(state.hs.b, expandedKey);
     for (i = 0; i < CN_SCRATCHPAD_MEMORY / init_size_byte; i++)
@@ -219,7 +218,7 @@ void cn_slow_hash(cn_hash_context_t *context, const void *data, size_t length, c
     {
         pre_aes();
         _c = _mm_aesenc_si128(_c, _a);
-        post_aes_variant();
+        post_aes_novariant();
     }
 
     finalize_hash();

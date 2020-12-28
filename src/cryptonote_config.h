@@ -186,7 +186,7 @@ namespace config
     const unsigned char HASH_KEY_ENCRYPTED_PAYMENT_ID = 0x8d;
     const unsigned char HASH_KEY_WALLET = 0x8c;
     const unsigned char HASH_KEY_WALLET_CACHE = 0x8d;
-    const unsigned char HASH_KEY_RPC_PAYMENT_NONCE = 0x58;
+
     const unsigned char HASH_KEY_MEMORY = 'k';
     const unsigned char HASH_KEY_MULTISIG[] = {'M', 'u', 'l', 't', 'i', 's', 'i', 'g', 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     const unsigned char HASH_KEY_TXPROOF_V2[] = "TXPROOF_V2";

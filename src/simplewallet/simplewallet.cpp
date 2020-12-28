@@ -4304,15 +4304,18 @@ boost::optional<epee::wipeable_string> simple_wallet::new_wallet(const boost::pr
     }
     epee::wipeable_string password = rc.second.password();
 
+    if (password.empty())
+    {
+        fail_msg_writer() << tr("Error creating wallet: empty password");
+        return {};
+    }
+
     if (!m_subaddress_lookahead.empty())
     {
         auto lookahead = parse_subaddress_lookahead(m_subaddress_lookahead);
         assert(lookahead);
         m_wallet->set_subaddress_lookahead(lookahead->first, lookahead->second);
     }
-
-    bool was_deprecated_wallet = m_restore_deterministic_wallet && ((old_language == crypto::ElectrumWords::old_language_name) ||
-                                                                    crypto::ElectrumWords::get_is_old_style_seed(m_electrum_seed));
 
     std::string mnemonic_language = old_language;
 
@@ -4328,15 +4331,8 @@ boost::optional<epee::wipeable_string> simple_wallet::new_wallet(const boost::pr
     // a seed language is not already specified AND
     // (it is not a wallet restore OR if it was a deprecated wallet
     // that was earlier used before this restore)
-    if ((!two_random) && (mnemonic_language.empty() || mnemonic_language == crypto::ElectrumWords::old_language_name) && (!m_restore_deterministic_wallet || was_deprecated_wallet))
+    if ((!two_random) && mnemonic_language.empty() && !m_restore_deterministic_wallet)
     {
-        if (was_deprecated_wallet)
-        {
-            // The user had used an older version of the wallet with old style mnemonics.
-            message_writer(console_color_green, false) << "\n"
-                                                       << tr("You had been using "
-                                                             "a deprecated version of the wallet. Please use the new seed that we provide.\n");
-        }
         mnemonic_language = get_mnemonic_language();
         if (mnemonic_language.empty())
             return {};
@@ -4511,6 +4507,12 @@ boost::optional<epee::wipeable_string> simple_wallet::new_wallet(const boost::pr
     }
     epee::wipeable_string password = rc.second.password();
 
+    if (password.empty())
+    {
+        fail_msg_writer() << tr("Error creating wallet: empty password");
+        return {};
+    }
+
     if (!m_subaddress_lookahead.empty())
     {
         auto lookahead = parse_subaddress_lookahead(m_subaddress_lookahead);
@@ -4601,40 +4603,9 @@ boost::optional<epee::wipeable_string> simple_wallet::open_wallet(const boost::p
         {
             message_writer(console_color_white, true) << "Wallet is on device: " << m_wallet->get_account().get_device().get_name();
         }
-        // If the wallet file is deprecated, we should ask for mnemonic language again and store
-        // everything in the new format.
-        // NOTE: this is_deprecated() refers to the wallet file format before becoming JSON. It does not refer to the "old english" seed words form of "deprecated" used elsewhere.
-        if (m_wallet->is_deprecated())
-        {
-            bool is_deterministic;
-            {
-                SCOPED_WALLET_UNLOCK_ON_BAD_PASSWORD(return {};);
-                is_deterministic = m_wallet->is_deterministic();
-            }
-            if (is_deterministic)
-            {
-                message_writer(console_color_green, false) << "\n"
-                                                           << tr("You had been using "
-                                                                 "a deprecated version of the wallet. Please proceed to upgrade your wallet.\n");
-                std::string mnemonic_language = get_mnemonic_language();
-                if (mnemonic_language.empty())
-                    return {};
-                m_wallet->set_seed_language(mnemonic_language);
-                m_wallet->rewrite(m_wallet_file, password);
 
-                // Display the seed
-                epee::wipeable_string seed;
-                m_wallet->get_seed(seed);
-                print_seed(seed);
-            }
-            else
-            {
-                message_writer(console_color_green, false) << "\n"
-                                                           << tr("You had been using "
-                                                                 "a deprecated version of the wallet. Your wallet file format is being upgraded now.\n");
-                m_wallet->rewrite(m_wallet_file, password);
-            }
-        }
+        if (m_wallet->is_deprecated())
+            fail_msg_writer() << tr("m_wallet->is_deprecated() is true");
     }
     catch (const std::exception &e)
     {

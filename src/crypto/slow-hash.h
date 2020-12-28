@@ -196,6 +196,24 @@ BOOL SetLockPagesPrivilege(HANDLE hProcess, BOOL bEnable)
     VARIANT1_2(p + 1);                       \
     _b = _c;
 
+#define post_aes_novariant()                 \
+    _mm_store_si128(R128(c), _c);            \
+    _b = _mm_xor_si128(_b, _c);              \
+    _mm_store_si128(R128(&hp_state[j]), _b); \
+    j = state_index(c);                      \
+    p = U64(&hp_state[j]);                   \
+    b[0] = p[0];                             \
+    b[1] = p[1];                             \
+    __mul();                                 \
+    a[0] += hi;                              \
+    a[1] += lo;                              \
+    p = U64(&hp_state[j]);                   \
+    p[0] = a[0];                             \
+    p[1] = a[1];                             \
+    a[0] ^= b[0];                            \
+    a[1] ^= b[1];                            \
+    _b = _c;
+
 #define init_hash()                                                        \
     uint32_t init_size_byte = (init_size_blk * AES_BLOCK_SIZE);            \
     RDATA_ALIGN16 uint8_t expandedKey[240];                                \

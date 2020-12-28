@@ -9,7 +9,7 @@
             "args": [
                 "--data-dir", "${workspaceFolder}/db/1",
                 "--testnet",
-                "--log-level", "2",
+                "--log-level", "0",
                 "--allow-local-ip",
                 "--p2p-bind-port", "28080",
                 "--rpc-bind-port", "28081",
@@ -17,7 +17,7 @@
                 "--add-exclusive-node", "127.0.0.1:38080"
             ],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}",
+            "cwd": "${workspaceFolder}/builder/output/linux/debug/bin/",
             "environment": [],
             "externalConsole": false,
             "MIMode": "gdb",
@@ -37,7 +37,7 @@
             "args": [
                 "--data-dir", "${workspaceFolder}/db/2",
                 "--testnet",
-                "--log-level", "2",
+                "--log-level", "0",
                 "--allow-local-ip",
                 "--p2p-bind-port", "38080",
                 "--rpc-bind-port", "38081",
@@ -45,7 +45,7 @@
                 "--add-exclusive-node", "127.0.0.1:28080"
             ],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}",
+            "cwd": "${workspaceFolder}/builder/output/linux/debug/bin/",
             "environment": [],
             "externalConsole": false,
             "MIMode": "gdb",
@@ -65,12 +65,11 @@
             "args": [
                 "--testnet",
                 "--wallet-file", "${workspaceFolder}/db/wallets/premine",
-                "--daemon-port", "28081",
-                "--password", "''"
+                "--daemon-port", "28081"
             ],
             "stopAtEntry": false,
             
-            "cwd": "${workspaceFolder}",
+            "cwd": "${workspaceFolder}/builder/output/linux/debug/bin/",
             "environment": [],
             "externalConsole": false,
             "MIMode": "gdb",
@@ -89,13 +88,11 @@
             "program": "${workspaceFolder}/builder/output/linux/debug/bin/nerva-wallet-cli",
             "args": [
                 "--testnet",
-                "--wallet-file", "${workspaceFolder}/db/wallets/default-no-password",
-                "--daemon-port", "28081",
-                "--password", "''"
+                "--daemon-port", "28081"
             ],
             "stopAtEntry": false,
             
-            "cwd": "${workspaceFolder}",
+            "cwd": "${workspaceFolder}/builder/output/linux/debug/bin/",
             "environment": [],
             "externalConsole": false,
             "MIMode": "gdb",
@@ -121,7 +118,7 @@
                 "--prompt-for-password"
             ],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}",
+            "cwd": "${workspaceFolder}/builder/output/linux/debug/bin/",
             "environment": [],
             "externalConsole": false,
             "MIMode": "gdb",

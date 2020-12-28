@@ -614,14 +614,12 @@ namespace
             GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, seed, std::string, String, false, std::string());
             std::string old_language;
             crypto::secret_key recovery_key;
-            bool restore_deterministic_wallet = false;
             if (field_seed_found)
             {
                 if (!crypto::ElectrumWords::words_to_bytes(field_seed, recovery_key, old_language))
                 {
                     THROW_WALLET_EXCEPTION(tools::error::wallet_internal_error, tools::wallet2::tr("Electrum-style word list failed verification"));
                 }
-                restore_deterministic_wallet = true;
 
                 GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, seed_passphrase, std::string, String, false, std::string());
                 if (field_seed_passphrase_found)
@@ -680,11 +678,6 @@ namespace
                     }
                 }
             }
-
-            const bool deprecated_wallet = restore_deterministic_wallet && ((old_language == crypto::ElectrumWords::old_language_name) ||
-                                                                            crypto::ElectrumWords::get_is_old_style_seed(field_seed));
-            THROW_WALLET_EXCEPTION_IF(deprecated_wallet, tools::error::wallet_internal_error,
-                                      tools::wallet2::tr("Cannot generate deprecated wallets from JSON"));
 
             wallet.reset(make_basic(vm, unattended, opts, password_prompter).release());
             wallet->set_refresh_from_block_height(field_scan_from_height);
