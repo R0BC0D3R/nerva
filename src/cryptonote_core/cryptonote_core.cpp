@@ -734,10 +734,11 @@ namespace cryptonote
         }
         bad_semantics_txes_lock.unlock();
 
-        const size_t max_tx_version = TRANSACTION_VERSION_MAX;
-        if (tx.version == 0 || tx.version > max_tx_version)
+        //const size_t max_tx_version = TRANSACTION_VERSION_MAX;
+        //if (tx.version == 0 || tx.version > max_tx_version)
+        if (tx.version != TRANSACTION_VERSION)
         {
-            MERROR_VER("Bad tx version (" << tx.version << ", max is " << max_tx_version << ")");
+            MERROR_VER("Bad tx version (version: " << tx.version << ")");
             tvc.m_verifivation_failed = true;
             return false;
         }
@@ -978,6 +979,10 @@ namespace cryptonote
         {
             MERROR_VER("tx has money overflow, rejected for tx id= " << get_transaction_hash(tx));
             return false;
+        }
+
+        if (tx.version == 1)
+        {
         }
 
         // amount matching is handled by the ringct signatures check

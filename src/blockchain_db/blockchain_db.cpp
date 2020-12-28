@@ -192,14 +192,15 @@ namespace cryptonote
             LOG_PRINT_L3("null tx_hash_ptr - needed to compute: " << tx_hash);
         }
         else
-        {
             tx_hash = *tx_hash_ptr;
-        }
 
-        if (!tx_prunable_hash_ptr)
-            tx_prunable_hash = get_transaction_prunable_hash(tx, &txp.second);
-        else
-            tx_prunable_hash = *tx_prunable_hash_ptr;
+        if (tx.version == TRANSACTION_VERSION)
+        {
+            if (!tx_prunable_hash_ptr)
+                tx_prunable_hash = get_transaction_prunable_hash(tx, &txp.second);
+            else
+                tx_prunable_hash = *tx_prunable_hash_ptr;
+        }
 
         for (const txin_v &tx_input : tx.vin)
         {
@@ -218,9 +219,7 @@ namespace cryptonote
                 for (const txin_v &tx_input : tx.vin)
                 {
                     if (tx_input.type() == typeid(txin_to_key))
-                    {
                         remove_spent_key(boost::get<txin_to_key>(tx_input).k_image);
-                    }
                 }
                 return;
             }
@@ -236,7 +235,7 @@ namespace cryptonote
         {
             // miner v2 txes have their coinbase output in one single out to save space,
             // and we store them as rct outputs with an identity mask
-            if (miner_tx)
+            if (miner_tx && tx.version == TRANSACTION_VERSION)
             {
                 cryptonote::tx_out vout = tx.vout[i];
                 rct::key commitment = rct::zeroCommit(vout.amount);
@@ -245,9 +244,7 @@ namespace cryptonote
                                                       &commitment);
             }
             else
-            {
                 amount_output_indices[i] = add_output(tx_hash, tx.vout[i], i, tx.unlock_time, &tx.rct_signatures.outPk[i].mask);
-            }
         }
         add_tx_amount_output_indices(tx_id, amount_output_indices);
     }
@@ -274,7 +271,8 @@ namespace cryptonote
         uint64_t num_rct_outs = 0;
         blobdata miner_bd = tx_to_blob(blk.miner_tx);
         add_transaction(blk_hash, std::make_pair(blk.miner_tx, blobdata_ref(miner_bd)));
-        num_rct_outs += blk.miner_tx.vout.size();
+        if (blk.miner_tx.version == TRANSACTION_VERSION)
+            num_rct_outs += blk.miner_tx.vout.size();
         int tx_i = 0;
         crypto::hash tx_hash = crypto::null_hash;
         for (const std::pair<transaction, blobdata_ref> &tx : txs)

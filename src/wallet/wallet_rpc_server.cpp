@@ -77,7 +77,7 @@ namespace
         auto pwd_container = tools::password_container::prompt(verify, prompt);
         if (!pwd_container)
         {
-            MERROR("failed to read wallet password");
+            MERROR("Failed to read wallet password");
         }
         return pwd_container;
     }
@@ -3026,7 +3026,7 @@ namespace tools
                                                          }
                                                          if (addresses.empty())
                                                          {
-                                                             er.message = std::string("No Monero address found at ") + url;
+                                                             er.message = std::string("No Nerva address found at ") + url;
                                                              return {};
                                                          }
                                                          return addresses[0];
@@ -4572,7 +4572,7 @@ namespace tools
                     }
                     if (addresses.empty())
                     {
-                        er.message = std::string("No Monero address found at ") + url;
+                        er.message = std::string("No Nerva address found at ") + url;
                         return {};
                     }
                     address = addresses[0];

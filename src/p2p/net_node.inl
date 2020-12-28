@@ -2184,21 +2184,20 @@ namespace nodetool
 
         const epee::net_utils::network_address na = context.m_remote_address;
         std::string ip;
-        uint32_t ipv4_addr;
-        boost::asio::ip::address_v6 ipv6_addr;
-        bool is_ipv4;
+        epee::net_utils::network_address address;
         if (na.get_type_id() == epee::net_utils::ipv4_network_address::get_type_id())
         {
-            ipv4_addr = na.as<const epee::net_utils::ipv4_network_address>().ip();
+            uint32_t ipv4_addr = na.as<const epee::net_utils::ipv4_network_address>().ip();
             ip = epee::string_tools::get_ip_string_from_int32(ipv4_addr);
-            is_ipv4 = true;
+            address = epee::net_utils::network_address{epee::net_utils::ipv4_network_address(ipv4_addr, node_data.my_port)};
         }
         else
         {
-            ipv6_addr = na.as<const epee::net_utils::ipv6_network_address>().ip();
+            boost::asio::ip::address_v6 ipv6_addr = na.as<const epee::net_utils::ipv6_network_address>().ip();
             ip = ipv6_addr.to_string();
-            is_ipv4 = false;
+            address = epee::net_utils::network_address{epee::net_utils::ipv6_network_address(ipv6_addr, node_data.my_port)};
         }
+        
         network_zone &zone = m_network_zones.at(na.get_zone());
 
         if (!zone.m_peerlist.is_host_allowed(context.m_remote_address))
@@ -2206,15 +2205,6 @@ namespace nodetool
 
         std::string port = epee::string_tools::num_to_string_fast(node_data.my_port);
 
-        epee::net_utils::network_address address;
-        if (is_ipv4)
-        {
-            address = epee::net_utils::network_address{epee::net_utils::ipv4_network_address(ipv4_addr, node_data.my_port)};
-        }
-        else
-        {
-            address = epee::net_utils::network_address{epee::net_utils::ipv6_network_address(ipv6_addr, node_data.my_port)};
-        }
         peerid_type pr = node_data.peer_id;
         bool r = zone.m_net_server.connect_async(ip, port, zone.m_config.m_net_config.ping_connection_timeout, [cb, /*context,*/ address, pr, this](const typename net_server::t_connection_context &ping_context, const boost::system::error_code &ec) -> bool {
             if (ec)

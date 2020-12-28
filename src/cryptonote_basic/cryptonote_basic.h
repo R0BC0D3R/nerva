@@ -254,30 +254,67 @@ namespace cryptonote
         if (std::is_same<Archive<W>, binary_archive<W>>())
             prefix_size = getpos(ar) - start_pos;
 
-        ar.tag("rct_signatures");
-        if (!vin.empty())
+        if (version == 1)
         {
-            ar.begin_object();
-            bool r = rct_signatures.serialize_rctsig_base(ar, vin.size(), vout.size());
-            if (!r || !ar.stream().good())
-                return false;
-            ar.end_object();
-
             if (std::is_same<Archive<W>, binary_archive<W>>())
                 unprunable_size = getpos(ar) - start_pos;
 
+            ar.tag("signatures");
+            ar.begin_array();
+            PREPARE_CUSTOM_VECTOR_SERIALIZATION(vin.size(), signatures);
+            bool signatures_not_expected = signatures.empty();
+            if (!signatures_not_expected && vin.size() != signatures.size())
+                return false;
+
             if (!pruned)
+                for (size_t i = 0; i < vin.size(); ++i)
+                {
+                    size_t signature_size = get_signature_size(vin[i]);
+                    if (signatures_not_expected)
+                    {
+                        if (0 == signature_size)
+                            continue;
+                        else
+                            return false;
+                    }
+
+                    PREPARE_CUSTOM_VECTOR_SERIALIZATION(signature_size, signatures[i]);
+                    if (signature_size != signatures[i].size())
+                        return false;
+
+                    FIELDS(signatures[i]);
+
+                    if (vin.size() - i > 1)
+                        ar.delimit_array();
+                }
+            ar.end_array();
+        }
+        else
+        {
+            ar.tag("rct_signatures");
+            if (!vin.empty())
             {
-                ar.tag("rctsig_prunable");
                 ar.begin_object();
-                r = rct_signatures.p.serialize_rctsig_prunable(ar, vin.size(), vout.size(),
-                                                               vin.size() > 0 && vin[0].type() == typeid(txin_to_key) ? boost::get<txin_to_key>(vin[0]).key_offsets.size() - 1 : 0);
+                bool r = rct_signatures.serialize_rctsig_base(ar, vin.size(), vout.size());
                 if (!r || !ar.stream().good())
                     return false;
                 ar.end_object();
+
+                if (std::is_same<Archive<W>, binary_archive<W>>())
+                    unprunable_size = getpos(ar) - start_pos;
+
+                if (!pruned)
+                {
+                    ar.tag("rctsig_prunable");
+                    ar.begin_object();
+                    r = rct_signatures.p.serialize_rctsig_prunable(ar, vin.size(), vout.size(),
+                                                                   vin.size() > 0 && vin[0].type() == typeid(txin_to_key) ? boost::get<txin_to_key>(vin[0]).key_offsets.size() - 1 : 0);
+                    if (!r || !ar.stream().good())
+                        return false;
+                    ar.end_object();
+                }
             }
         }
-
         if (!typename Archive<W>::is_saving())
             pruned = false;
         END_SERIALIZE()
@@ -286,6 +323,10 @@ namespace cryptonote
         bool serialize_base(Archive<W> &ar)
         {
             FIELDS(*static_cast<transaction_prefix *>(this))
+
+            if (version == 1)
+            {
+            }
 
             ar.tag("rct_signatures");
             if (!vin.empty())

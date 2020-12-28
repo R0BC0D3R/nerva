@@ -74,11 +74,10 @@ namespace cryptonote
         return CRYPTONOTE_MAX_TX_SIZE;
     }
     //-----------------------------------------------------------------------------------------------
-    bool get_block_reward(size_t median_weight, size_t current_block_weight, uint64_t &reward)
+    bool get_block_reward(size_t median_weight, uint64_t &reward)
     {
-        const uint64_t premine = PREMINE_AMOUNT;
-        if (median_weight == 0 && current_block_weight == 0)
-            reward = premine;
+        if (median_weight == 0)
+            reward = PREMINE_AMOUNT;
         else
             reward = FINAL_SUBSIDY_PER_MINUTE;
 

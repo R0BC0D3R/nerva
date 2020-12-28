@@ -63,7 +63,7 @@ namespace daemonize
 
             const cryptonote::GetCheckpointsCallback &get_checkpoints = nullptr;
 
-            if (!m_core.init(m_vm_HACK, nullptr, get_checkpoints))
+            if (!m_core.init(m_vm_HACK, get_checkpoints))
             {
                 throw std::runtime_error("Failed to initialize core");
             }

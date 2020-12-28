@@ -46,11 +46,7 @@
 #undef MONERO_DEFAULT_LOG_CATEGORY
 #define MONERO_DEFAULT_LOG_CATEGORY "logging"
 
-#ifdef DEBUG_TERMINAL
-#define MLOG_BASE_FORMAT "%datetime{%Y-%M-%d %H:%m:%s.%g}\t%level\t%loc\t%msg"
-#else
 #define MLOG_BASE_FORMAT "%datetime{%Y-%M-%d %H:%m:%s.%g}\t%level\t%msg"
-#endif
 
 #define MLOG_LOG(x) CINFO(el::base::Writer, el::base::DispatchAction::FileOnlyLog, MONERO_DEFAULT_LOG_CATEGORY) << x
 
@@ -154,7 +150,7 @@ void mlog_configure(const std::string &filename_base, bool console, const std::s
     el::Configurations c;
     c.setGlobally(el::ConfigurationType::Filename, filename_base);
     c.setGlobally(el::ConfigurationType::ToFile, "true");
-    const char *log_format = getenv("MONERO_LOG_FORMAT");
+    const char *log_format = getenv("NERVA_LOG_FORMAT");
     if (!log_format)
         log_format = MLOG_BASE_FORMAT;
     c.setGlobally(el::ConfigurationType::Format, log_format);

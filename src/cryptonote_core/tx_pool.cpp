@@ -125,6 +125,7 @@ namespace cryptonote
         CRITICAL_REGION_LOCAL(m_transactions_lock);
 
         PERF_TIMER(add_tx);
+        //todo: do we want to forbid everything except tx.version 2?
         if (tx.version == 0)
         {
             // v0 never accepted
@@ -1341,15 +1342,13 @@ namespace cryptonote
         fee = 0;
 
         //baseline empty block
-        if (!get_block_reward(median_weight, total_weight, best_coinbase))
+        if (!get_block_reward(median_weight, best_coinbase))
         {
             MERROR("Failed to get block reward for empty block");
             return false;
         }
 
-        size_t max_total_weight_pre_v5 = (130 * median_weight) / 100 - CRYPTONOTE_COINBASE_BLOB_RESERVED_SIZE;
-        size_t max_total_weight_v5 = 2 * median_weight - CRYPTONOTE_COINBASE_BLOB_RESERVED_SIZE;
-        size_t max_total_weight = version >= 5 ? max_total_weight_v5 : max_total_weight_pre_v5;
+        size_t max_total_weight = 2 * median_weight - CRYPTONOTE_COINBASE_BLOB_RESERVED_SIZE;
         std::unordered_set<crypto::key_image> k_images;
 
         LOG_PRINT_L2("Filling block template, median weight " << median_weight << ", " << m_txs_by_fee_and_receive_time.size() << " txes in the pool");
@@ -1391,7 +1390,7 @@ namespace cryptonote
             // If we're getting lower coinbase tx,
             // stop including more tx
             uint64_t block_reward;
-            if (!get_block_reward(median_weight, total_weight + meta.weight, block_reward))
+            if (!get_block_reward(median_weight, block_reward))
             {
                 LOG_PRINT_L2("  would exceed maximum block weight");
                 continue;

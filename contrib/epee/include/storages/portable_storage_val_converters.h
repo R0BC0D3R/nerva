@@ -65,6 +65,7 @@ namespace epee
         {
             PUSH_WARNINGS
             DISABLE_VS_WARNINGS(4018)
+            DISABLE_GCC_AND_CLANG_WARNING(sign-compare)
             DISABLE_CLANG_WARNING(tautological-constant-out-of-range-compare)
             CHECK_AND_ASSERT_THROW_MES(from <= std::numeric_limits<to_type>::max(), "uint value overhead: try to set value " << from << " to type " << typeid(to_type).name() << " with max possible value = " << std::numeric_limits<to_type>::max());
             to = static_cast<to_type>(from);

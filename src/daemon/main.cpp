@@ -235,36 +235,28 @@ int main(int argc, char const *argv[])
         const bool testnet = command_line::get_arg(vm, cryptonote::arg_testnet_on);
         const bool noanalytics = command_line::get_arg(vm, daemon_args::arg_noanalytics);
 
-        uint64_t gb = command_line::get_arg(vm, daemon_args::arg_create_genesis_tx);
+        const bool genesis_tx = command_line::get_arg(vm, daemon_args::arg_create_genesis_tx);
 
-        if (gb)
+        if (genesis_tx)
         {
             cryptonote::transaction tx;
 
-            if (construct_genesis_tx(tx, gb))
+            if (construct_genesis_tx(tx, PREMINE_ADDR))
             {
                 std::stringstream ss;
                 binary_archive<true> ba(ss);
                 std::string tx_hex = string_tools::buff_to_hex_nodelimer(tx_to_blob(tx));
                 bool r = do_serialize(ba, tx);
                 if (r)
-                {
                     MGUSER_YELLOW(ENDL << "New Genesis TX:" << ENDL << tx_hex);
-                    return 1;
-                }
+                else
+                    MGUSER_RED("Could not create genesis TX");
             }
             else
-            {
                 MGUSER_RED("Could not create genesis TX");
-                return 1;
-            }
-        }
 
-        // data_dir
-        //   default: e.g. ~/.bitmonero/ or ~/.bitmonero/testnet
-        //   if data-dir argument given:
-        //     absolute path
-        //     relative path: relative to cwd
+            return 1;
+        }
 
         // Create data dir if it doesn't exist
         boost::filesystem::path data_dir = boost::filesystem::absolute(

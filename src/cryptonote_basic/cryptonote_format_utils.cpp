@@ -827,6 +827,11 @@ namespace cryptonote
         {
             CHECK_AND_ASSERT_MES(out.target.type() == typeid(txout_to_key), false, "wrong variant type: " << out.target.type().name() << ", expected " << typeid(txout_to_key).name() << ", in transaction id=" << get_transaction_hash(tx));
 
+            if (tx.version == 1)
+            {
+                CHECK_AND_NO_ASSERT_MES(0 < out.amount, false, "zero amount output in transaction id=" << get_transaction_hash(tx));
+            }
+
             if (!check_key(boost::get<txout_to_key>(out.target).key))
                 return false;
         }
@@ -1059,6 +1064,8 @@ namespace cryptonote
     //---------------------------------------------------------------
     bool calculate_transaction_prunable_hash(const transaction &t, const cryptonote::blobdata_ref *blob, crypto::hash &res)
     {
+        if (t.version == 1)
+            return false;
         const unsigned int unprunable_size = t.unprunable_size;
         if (blob && unprunable_size)
         {
@@ -1134,6 +1141,13 @@ namespace cryptonote
     bool calculate_transaction_hash(const transaction &t, crypto::hash &res, size_t *blob_size)
     {
         CHECK_AND_ASSERT_MES(!t.pruned, false, "Cannot calculate the hash of a pruned transaction");
+
+        // v1 transactions hash the entire blob
+        if (t.version == 1)
+        {
+            size_t ignored_blob_size, &blob_size_ref = blob_size ? *blob_size : ignored_blob_size;
+            return get_object_hash(t, res, blob_size_ref);
+        }
 
         // v2 transactions hash different parts together, than hash the set of those hashes
         crypto::hash hashes[3];

@@ -62,8 +62,8 @@ namespace daemon_args
         "log-level", "", ""};
     const command_line::arg_descriptor<std::vector<std::string>> arg_command = {
         "daemon_command", "Hidden"};
-    const command_line::arg_descriptor<std::uint64_t> arg_create_genesis_tx = {
-        "create-genesis-tx", "You shouldn't need help", 0};
+    const command_line::arg_descriptor<bool, false> arg_create_genesis_tx = {
+        "create-genesis-tx", "You shouldn't need help", false};
     const command_line::arg_descriptor<bool> arg_os_version = {
         "os-version", "OS for which this executable was compiled"};
     const command_line::arg_descriptor<unsigned> arg_max_concurrency = {

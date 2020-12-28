@@ -97,7 +97,7 @@ namespace cryptonote
         in.height = height;
 
         uint64_t block_reward;
-        if (!get_block_reward(median_weight, current_block_weight, block_reward))
+        if (!get_block_reward(median_weight, block_reward))
         {
             LOG_PRINT_L0("Block is too big");
             return false;
@@ -144,16 +144,18 @@ namespace cryptonote
         return true;
     }
     //---------------------------------------------------------------
-    bool construct_genesis_tx(transaction &tx, uint64_t amount)
+    bool construct_genesis_tx(transaction &tx, const std::string address_string)
     {
+        cryptonote::address_parse_info info;
+        if (!get_account_address_from_str(info, network_type::MAINNET, address_string))
+            return false;
+
         tx.vin.clear();
         tx.vout.clear();
         tx.extra.clear();
 
         hw::device &hwdev = hw::get_device("default");
         keypair txkey = keypair::generate(hwdev);
-        keypair sk = keypair::generate(hwdev);
-        keypair vk = keypair::generate(hwdev);
 
         txin_gen in;
         in.height = 0;
@@ -164,21 +166,21 @@ namespace cryptonote
 
         crypto::key_derivation derivation = AUTO_VAL_INIT(derivation);
         crypto::public_key out_eph_public_key = AUTO_VAL_INIT(out_eph_public_key);
-        bool r = crypto::generate_key_derivation(vk.pub, txkey.sec, derivation);
-        CHECK_AND_ASSERT_MES(r, false, "while creating outs: failed to generate_key_derivation(" << vk.pub << ", " << txkey.sec << ")");
+        bool r = crypto::generate_key_derivation(info.address.m_view_public_key, txkey.sec, derivation);
+        CHECK_AND_ASSERT_MES(r, false, "while creating outs: failed to generate_key_derivation(" << info.address.m_view_public_key << ", " << txkey.sec << ")");
 
-        r = crypto::derive_public_key(derivation, 0, sk.pub, out_eph_public_key);
-        CHECK_AND_ASSERT_MES(r, false, "while creating outs: failed to derive_public_key(" << derivation << ", " << sk.pub << ")");
+        r = crypto::derive_public_key(derivation, 0, info.address.m_spend_public_key, out_eph_public_key);
+        CHECK_AND_ASSERT_MES(r, false, "while creating outs: failed to derive_public_key(" << derivation << ", " << info.address.m_spend_public_key << ")");
 
         txout_to_key tk;
         tk.key = out_eph_public_key;
 
         tx_out out;
-        out.amount = amount;
+        out.amount = PREMINE_AMOUNT;
         out.target = tk;
         tx.vout.push_back(out);
 
-        tx.version = TRANSACTION_VERSION;
+        tx.version = GENESIS_TRANSACTION_VERSION;
 
         //lock
         tx.unlock_time = CRYPTONOTE_MINED_MONEY_UNLOCK_WINDOW;
@@ -463,6 +465,10 @@ namespace cryptonote
         if (zero_secret_key)
         {
             MDEBUG("Null secret key, skipping signatures");
+        }
+
+        if (tx.version == 1)
+        {
         }
 
         size_t n_total_outs = sources[0].outputs.size(); // only for non-simple rct

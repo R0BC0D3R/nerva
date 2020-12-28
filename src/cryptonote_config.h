@@ -44,7 +44,8 @@
 #define CRYPTONOTE_MAX_TX_SIZE 1000000000
 #define CRYPTONOTE_PUBLIC_ADDRESS_TEXTBLOB_VER 0
 #define CRYPTONOTE_MINED_MONEY_UNLOCK_WINDOW 20
-#define TRANSACTION_VERSION 1
+#define GENESIS_TRANSACTION_VERSION 1 //genesis block is the only time version 1 tx's are allowed
+#define TRANSACTION_VERSION 2
 #define TRANSACTION_VERSION_MAX TRANSACTION_VERSION
 #define CRYPTONOTE_DEFAULT_TX_SPENDABLE_AGE 20
 
@@ -123,11 +124,11 @@
 #define CRYPTONOTE_PRUNING_LOG_STRIPES 3
 #define CRYPTONOTE_PRUNING_TIP_BLOCKS 5500
 
-#define CRYPTONOTE_NAME "nerva"
+#define CRYPTONOTE_NAME "nerva_v2"
 #define CRYPTONOTE_POOLDATA_FILENAME "poolstate.bin"
 #define CRYPTONOTE_BLOCKCHAINDATA_FILENAME "data.mdb"
 #define CRYPTONOTE_BLOCKCHAINDATA_LOCK_FILENAME "lock.mdb"
-#define P2P_NET_DATA_FILENAME "p2pstate.nerva.v11.bin"
+#define P2P_NET_DATA_FILENAME "p2pstate.nerva.v2.bin"
 #define MINER_CONFIG_FILE_NAME "miner_conf.json"
 
 #define THREAD_STACK_SIZE 5 * 1024 * 1024
@@ -161,9 +162,10 @@
 
 #define CRYPTONOTE_MAX_FRAGMENTS 20
 
-#define DONATION_ADDR "NV1r8P6THPASAQX77re6hXTMJ1ykXXvtYXFXgMv4vFAQNYo3YatUvZ8LFNRu4dPQBjTwqJbMvqoeiipywmREPHpD2AgWnmG7Q"
+#define DONATION_ADDR "NV2RS6bgCjHNtUFnyA9MiYFNMwEwxVivfbKcH8DdM1UVfXQ3oAAFJvfiuDGidRbFgR2Pk6FaqkriRV565qhajcfv2SBcKM77o"
+#define PREMINE_ADDR DONATION_ADDR
 
-#define PREMINE_AMOUNT 180000000000000000U
+#define PREMINE_AMOUNT ((uint64_t)-1)
 
 struct hard_fork
 {
@@ -173,7 +175,6 @@ struct hard_fork
 
 namespace config
 {
-    std::string const P2P_REMOTE_DEBUG_TRUSTED_PUB_KEY = "0000000000000000000000000000000000000000000000000000000000000000";
     uint64_t const CRYPTONOTE_PUBLIC_ADDRESS_BASE58_PREFIX = 0x3800;
     uint64_t const CRYPTONOTE_PUBLIC_INTEGRATED_ADDRESS_BASE58_PREFIX = 0x7081;
     uint64_t const CRYPTONOTE_PUBLIC_SUBADDRESS_BASE58_PREFIX = 0x1080;
@@ -192,14 +193,14 @@ namespace config
     const unsigned char HASH_KEY_CLSAG_ROUND[] = "CLSAG_round";
     const unsigned char HASH_KEY_CLSAG_AGG_0[] = "CLSAG_agg_0";
     const unsigned char HASH_KEY_CLSAG_AGG_1[] = "CLSAG_agg_1";
-    const char HASH_KEY_MESSAGE_SIGNING[] = "MoneroMessageSignature";
+    const char HASH_KEY_MESSAGE_SIGNING[] = "NervaMessageSignature";
 
     namespace mainnet
     {
         uint16_t const P2P_DEFAULT_PORT = 17565;
         uint16_t const RPC_DEFAULT_PORT = 17566;
         boost::uuids::uuid const NETWORK_ID = {{0x2e, 0x4e, 0x45, 0x52, 0x56, 0x41, 0x20, 0x4d, 0x41, 0x49, 0x4e, 0x4e, 0x45, 0x54, 0x20, 0x32}};
-        std::string const GENESIS_TX = "";
+        std::string const GENESIS_TX = "011401ff0001ffffffffffffffffff0102ea27285d52cd88c5fe49ee9965cbc6dba30be29083eb971ec010d304ab7e035021018fe3d72570741b49dfad9888cbb51ea9dd1d78aa222a2af203cd6d1e56dd214b";
         uint32_t const GENESIS_NONCE = 10000;
 
         std::string const HF_MIN_VERSION = "0.2.0.0";
@@ -215,8 +216,8 @@ namespace config
         uint16_t const P2P_DEFAULT_PORT = 18565;
         uint16_t const RPC_DEFAULT_PORT = 18566;
         boost::uuids::uuid const NETWORK_ID = {{0x2e, 0x4e, 0x45, 0x52, 0x56, 0x41, 0x20, 0x54, 0x45, 0x53, 0x54, 0x4e, 0x45, 0x54, 0x20, 0x32}};
-        std::string const GENESIS_TX = "";
-        uint32_t const GENESIS_NONCE = 10001;
+        std::string const GENESIS_TX = "011401ff0001ffffffffffffffffff0102a83b64f6c1a3abf88af5761fb97603f765df1a09962d43a1effba137d7c02b6a2101797f012296afc9b0d8499cfc2f33775545d5620ef05900e7aabd0515045bcfb4";
+        uint32_t const GENESIS_NONCE = 20000;
 
         std::string const HF_MIN_VERSION = "0.2.0.0";
         std::string const MIN_VERSION = "0.2.0.0";

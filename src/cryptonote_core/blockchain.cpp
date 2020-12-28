@@ -1360,12 +1360,9 @@ bool Blockchain::validate_miner_transaction(const block &b, size_t cumulative_bl
     for (auto &o : b.miner_tx.vout)
         money_in_use += o.amount;
 
-    uint64_t median_weight = m_current_block_cumul_weight_median;
-    if (!get_block_reward(median_weight, cumulative_block_weight, base_reward))
-    {
-        MERROR_VER("block weight " << cumulative_block_weight << " is bigger than allowed for this blockchain");
+    if (!get_block_reward(m_current_block_cumul_weight_median, base_reward))
         return false;
-    }
+    
     if (base_reward + fee < money_in_use)
     {
         MERROR_VER("coinbase transaction spend too much money (" << print_money(money_in_use) << "). Block reward is " << print_money(base_reward + fee) << "(" << print_money(base_reward) << "+" << print_money(fee) << "), cumulative_block_weight " << cumulative_block_weight);
@@ -2721,6 +2718,10 @@ bool Blockchain::get_tx_outputs_gindexs(const crypto::hash &tx_id, std::vector<u
 // as a return-by-reference.
 bool Blockchain::check_tx_inputs(transaction &tx, uint64_t &max_used_block_height, crypto::hash &max_used_block_id, tx_verification_context &tvc, bool kept_by_block) const
 {
+    if (tx.version == 1)
+    {
+        
+    }
     LOG_PRINT_L3("Blockchain::" << __func__);
     CRITICAL_REGION_LOCAL(m_blockchain_lock);
 
@@ -2788,6 +2789,7 @@ bool Blockchain::have_tx_keyimges_as_spent(const transaction &tx) const
 bool Blockchain::expand_transaction(transaction &tx, const crypto::hash &tx_prefix_hash, const std::vector<std::vector<rct::ctkey>> &pubkeys) const
 {
     PERF_TIMER(expand_transaction);
+    CHECK_AND_ASSERT_MES(tx.version == 2, false, "Transaction version is not 2");
 
     rct::rctSig &rv = tx.rct_signatures;
 
@@ -2815,6 +2817,10 @@ bool Blockchain::expand_transaction(transaction &tx, const crypto::hash &tx_pref
 //        using threads, etc.)
 bool Blockchain::check_tx_inputs(transaction &tx, tx_verification_context &tvc, uint64_t *pmax_used_block_height) const
 {
+    if (tx.version == 1)
+    {
+
+    }
     PERF_TIMER(check_tx_inputs);
     LOG_PRINT_L3("Blockchain::" << __func__);
     size_t sig_index = 0;
@@ -3076,7 +3082,7 @@ uint64_t Blockchain::get_dynamic_base_fee_estimate(uint64_t grace_blocks) const
         median = min_block_weight;
 
     uint64_t base_reward;
-    if (!get_block_reward(m_current_block_cumul_weight_limit / 2, 1, base_reward))
+    if (!get_block_reward(m_current_block_cumul_weight_limit / 2, base_reward))
     {
         MERROR("Failed to determine block reward, using placeholder " << print_money(BLOCK_REWARD_OVERESTIMATE) << " as a high bound");
         base_reward = BLOCK_REWARD_OVERESTIMATE;
@@ -3166,6 +3172,9 @@ bool Blockchain::check_tx_input(size_t tx_version, const txin_to_key &txin, cons
     {
         MERROR_VER("Output keys for tx with amount = " << txin.amount << " and count indexes " << txin.key_offsets.size() << " returned wrong keys count " << output_keys.size());
         return false;
+    }
+    if (tx_version == 1) {
+        CHECK_AND_ASSERT_MES(sig.size() == output_keys.size(), false, "internal error: tx signatures count=" << sig.size() << " mismatch with outputs keys count for inputs=" << output_keys.size());
     }
     // rct_signatures will be expanded after this
     return true;
@@ -3663,6 +3672,9 @@ uint64_t Blockchain::get_next_long_term_block_weight(uint64_t block_weight) cons
 
     const uint64_t db_height = m_db->height();
     const uint64_t nblocks = std::min<uint64_t>(m_long_term_block_weights_window, db_height);
+
+    if (nblocks == 0)
+        return block_weight;
 
     uint64_t long_term_median = get_long_term_block_weight_median(db_height - nblocks, nblocks);
     uint64_t long_term_effective_median_block_weight = std::max<uint64_t>(CRYPTONOTE_BLOCK_GRANTED_FULL_REWARD_ZONE, long_term_median);
