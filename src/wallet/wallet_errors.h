@@ -271,6 +271,15 @@ namespace tools
 
             std::string to_string() const { return wallet_logic_error::to_string(); }
         };
+        struct empty_password : public wallet_logic_error
+        {
+            explicit empty_password(std::string &&loc)
+                : wallet_logic_error(std::move(loc), "empty password")
+            {
+            }
+
+            std::string to_string() const { return wallet_logic_error::to_string(); }
+        };
         struct invalid_priority : public wallet_logic_error
         {
             explicit invalid_priority(std::string &&loc)

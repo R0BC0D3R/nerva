@@ -69,6 +69,7 @@
 #include <stdexcept>
 #include "wallet/message_store.h"
 #include "cryptonote_config.h"
+#include "wallet/wallet_errors.h"
 
 #ifdef WIN32
 #include <boost/locale.hpp>
@@ -292,7 +293,7 @@ namespace
         auto pwd_container = tools::password_container::prompt(verify, prompt);
         if (!pwd_container)
         {
-            tools::fail_msg_writer() << sw::tr("failed to read wallet password");
+            tools::fail_msg_writer() << sw::tr("Failed to read wallet password");
         }
         return pwd_container;
     }
@@ -4576,6 +4577,9 @@ boost::optional<epee::wipeable_string> simple_wallet::open_wallet(const boost::p
         auto rc = tools::wallet2::make_from_file(vm, false, "", password_prompter);
         m_wallet = std::move(rc.first);
         password = std::move(std::move(rc.second).password());
+
+        THROW_WALLET_EXCEPTION_IF(password.empty(), tools::error::empty_password);
+
         if (!m_wallet)
         {
             return {};
@@ -4634,7 +4638,7 @@ boost::optional<epee::wipeable_string> simple_wallet::open_wallet(const boost::p
     }
     catch (const std::exception &e)
     {
-        fail_msg_writer() << tr("failed to load wallet: ") << e.what();
+        fail_msg_writer() << tr("Failed to load wallet: ") << e.what();
         if (m_wallet)
         {
             // only suggest removing cache if the password was actually correct
@@ -4717,7 +4721,7 @@ bool simple_wallet::save_watch_only(const std::vector<std::string> &args /* = st
 
     if (!pwd_container)
     {
-        fail_msg_writer() << tr("failed to read wallet password");
+        fail_msg_writer() << tr("Failed to read wallet password");
         return true;
     }
 

@@ -2057,7 +2057,7 @@ namespace tools
                                 td.m_mask = tx_scan_info[o].mask;
                                 td.m_rct = true;
                             }
-                            else if (miner_tx)
+                            else if (miner_tx && tx.version == TRANSACTION_VERSION)
                             {
                                 td.m_mask = rct::identity();
                                 td.m_rct = true;
@@ -2136,7 +2136,7 @@ namespace tools
                                 td.m_mask = tx_scan_info[o].mask;
                                 td.m_rct = true;
                             }
-                            else if (miner_tx)
+                            else if (miner_tx && tx.version == TRANSACTION_VERSION)
                             {
                                 td.m_mask = rct::identity();
                                 td.m_rct = true;
@@ -2246,6 +2246,8 @@ namespace tools
                     }
             }
         }
+
+        THROW_WALLET_EXCEPTION_IF(tx.version != TRANSACTION_VERSION, error::wallet_internal_error, "TX version 1 forbidden");
 
         uint64_t fee = miner_tx ? 0 : tx.rct_signatures.txnFee;
 
@@ -2396,6 +2398,8 @@ namespace tools
     //----------------------------------------------------------------------------------------------------
     void wallet2::process_outgoing(const crypto::hash &txid, const cryptonote::transaction &tx, uint64_t height, uint64_t ts, uint64_t spent, uint64_t received, uint32_t subaddr_account, const std::set<uint32_t> &subaddr_indices)
     {
+        THROW_WALLET_EXCEPTION_IF(tx.version != TRANSACTION_VERSION, error::wallet_internal_error, "TX version 1 forbidden");
+
         std::pair<std::unordered_map<crypto::hash, confirmed_transfer_details>::iterator, bool> entry = m_confirmed_txs.insert(std::make_pair(txid, confirmed_transfer_details()));
         // fill with the info we know, some info might already be there
         if (entry.second)
@@ -9951,6 +9955,8 @@ namespace tools
     {
         received = 0;
 
+        THROW_WALLET_EXCEPTION_IF(tx.version != TRANSACTION_VERSION, error::wallet_internal_error, "TX version 1 forbidden");
+
         for (size_t n = 0; n < tx.vout.size(); ++n)
         {
             const cryptonote::txout_to_key *const out_key = boost::get<cryptonote::txout_to_key>(std::addressof(tx.vout[n].target));
@@ -12366,7 +12372,7 @@ namespace tools
         state.num_transfer_details = m_transfers.size();
         if (state.multisig)
         {
-            THROW_WALLET_EXCEPTION_IF(!m_original_keys_available, error::wallet_internal_error, "MMS use not possible because own original Monero address not available");
+            THROW_WALLET_EXCEPTION_IF(!m_original_keys_available, error::wallet_internal_error, "MMS use not possible because own original Nerva address not available");
             state.address = m_original_address;
             state.view_secret_key = m_original_view_secret_key;
         }

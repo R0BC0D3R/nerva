@@ -72,19 +72,6 @@ namespace tools
     {
         login() = default;
 
-        /*!
-       Extracts username and password from the format `username:password`. A
-       blank username or password is allowed. If the `:` character is not
-       present, `password_container::prompt` will be called by forwarding the
-       `verify` and `message` arguments.
-
-       \param userpass Is "consumed", and the memory contents are wiped.
-       \param verify is passed to `password_container::prompt` if necessary.
-       \param message is passed to `password_container::prompt` if necessary.
-
-       \return The username and password, or boost::none if
-         `password_container::prompt` fails.
-     */
         static boost::optional<login> parse(std::string &&userpass, bool verify, const std::function<boost::optional<password_container>(bool)> &prompt);
 
         login(const login &) = delete;
