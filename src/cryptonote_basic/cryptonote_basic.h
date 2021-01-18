@@ -169,7 +169,7 @@ namespace cryptonote
 
         BEGIN_SERIALIZE()
         VARINT_FIELD(version)
-        if (version == 0 || TRANSACTION_VERSION_MAX < version)
+        if (version == 0 || TRANSACTION_VERSION < version)
             return false;
         VARINT_FIELD(unlock_time)
         FIELD(vin)
@@ -303,11 +303,11 @@ namespace cryptonote
                 if (std::is_same<Archive<W>, binary_archive<W>>())
                     unprunable_size = getpos(ar) - start_pos;
 
-                if (!pruned)
+                if (!pruned && rct_signatures.type != rct::RCTTypeNull)
                 {
                     ar.tag("rctsig_prunable");
                     ar.begin_object();
-                    r = rct_signatures.p.serialize_rctsig_prunable(ar, vin.size(), vout.size(),
+                    r = rct_signatures.p.serialize_rctsig_prunable(ar, rct_signatures.type, vin.size(), vout.size(),
                                                                    vin.size() > 0 && vin[0].type() == typeid(txin_to_key) ? boost::get<txin_to_key>(vin[0]).key_offsets.size() - 1 : 0);
                     if (!r || !ar.stream().good())
                         return false;
@@ -417,6 +417,7 @@ namespace cryptonote
     {
         transaction_prefix::set_null();
         signatures.clear();
+        rct_signatures.type = rct::RCTTypeNull;
         set_hash_valid(false);
         set_prunable_hash_valid(false);
         set_blob_size_valid(false);

@@ -9,7 +9,6 @@
             "args": [
                 "--data-dir", "${workspaceFolder}/db/1",
                 "--testnet",
-                "--log-level", "0",
                 "--allow-local-ip",
                 "--p2p-bind-port", "28080",
                 "--rpc-bind-port", "28081",
@@ -42,7 +41,8 @@
                 "--p2p-bind-port", "38080",
                 "--rpc-bind-port", "38081",
                 "--rpc-restricted-bind-port", "38083",
-                "--add-exclusive-node", "127.0.0.1:28080"
+                "--add-exclusive-node", "127.0.0.1:28080",
+                "--start-mining", "NV2RS6bgCjHNtUFnyA9MiYFNMwEwxVivfbKcH8DdM1UVfXQ3oAAFJvfiuDGidRbFgR2Pk6FaqkriRV565qhajcfv2SBcKM77o"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/builder/output/linux/debug/bin/",
@@ -88,7 +88,8 @@
             "program": "${workspaceFolder}/builder/output/linux/debug/bin/nerva-wallet-cli",
             "args": [
                 "--testnet",
-                "--daemon-port", "28081"
+                "--daemon-port", "28081",
+                "--wallet-file", "${workspaceFolder}/db/wallets/default",
             ],
             "stopAtEntry": false,
             

@@ -76,8 +76,10 @@
 
 #define DIFFICULTY_BLOCKS_ESTIMATE_TIMESPAN DIFFICULTY_TARGET
 
-#define DIFFICULTY_WINDOW 60
-#define DIFFICULTY_BLOCKS_COUNT DIFFICULTY_WINDOW + 1
+#define DIFFICULTY_WINDOW 720
+#define DIFFICULTY_LAG 15
+#define DIFFICULTY_CUT 60
+#define DIFFICULTY_BLOCKS_COUNT DIFFICULTY_WINDOW + DIFFICULTY_LAG
 
 #define CRYPTONOTE_LOCKED_TX_ALLOWED_DELTA_SECONDS_V1 DIFFICULTY_TARGET *CRYPTONOTE_LOCKED_TX_ALLOWED_DELTA_BLOCKS
 #define CRYPTONOTE_LOCKED_TX_ALLOWED_DELTA_BLOCKS 1
@@ -141,12 +143,12 @@
 
 #define CRYPTONOTE_SHORT_TERM_BLOCK_WEIGHT_SURGE_FACTOR 50
 
-#define CRYPTONOTE_DANDELIONPP_STEMS              2 // number of outgoing stem connections per epoch
+#define CRYPTONOTE_DANDELIONPP_STEMS 2              // number of outgoing stem connections per epoch
 #define CRYPTONOTE_DANDELIONPP_FLUFF_PROBABILITY 10 // out of 100
-#define CRYPTONOTE_DANDELIONPP_MIN_EPOCH         10 // minutes
-#define CRYPTONOTE_DANDELIONPP_EPOCH_RANGE       30 // seconds
-#define CRYPTONOTE_DANDELIONPP_FLUSH_AVERAGE      5 // seconds average for poisson distributed fluff flush
-#define CRYPTONOTE_DANDELIONPP_EMBARGO_AVERAGE  173 // seconds (see tx_pool.cpp for more info)
+#define CRYPTONOTE_DANDELIONPP_MIN_EPOCH 10         // minutes
+#define CRYPTONOTE_DANDELIONPP_EPOCH_RANGE 30       // seconds
+#define CRYPTONOTE_DANDELIONPP_FLUSH_AVERAGE 5      // seconds average for poisson distributed fluff flush
+#define CRYPTONOTE_DANDELIONPP_EMBARGO_AVERAGE 173  // seconds (see tx_pool.cpp for more info)
 
 #define CRYPTONOTE_NOISE_MIN_EPOCH 5
 #define CRYPTONOTE_NOISE_EPOCH_RANGE 30
@@ -209,7 +211,7 @@ namespace config
         static const hard_fork hard_forks[] = {
             {1, 1},
             {2, 257}};
-    }
+    } // namespace mainnet
 
     namespace testnet
     {

@@ -194,7 +194,7 @@ namespace cryptonote
         else
             tx_hash = *tx_hash_ptr;
 
-        if (tx.version == TRANSACTION_VERSION)
+        if (tx.version >= 2)
         {
             if (!tx_prunable_hash_ptr)
                 tx_prunable_hash = get_transaction_prunable_hash(tx, &txp.second);
@@ -235,7 +235,7 @@ namespace cryptonote
         {
             // miner v2 txes have their coinbase output in one single out to save space,
             // and we store them as rct outputs with an identity mask
-            if (miner_tx && tx.version == TRANSACTION_VERSION)
+            if (miner_tx && tx.version == 2)
             {
                 cryptonote::tx_out vout = tx.vout[i];
                 rct::key commitment = rct::zeroCommit(vout.amount);
@@ -244,7 +244,10 @@ namespace cryptonote
                                                       &commitment);
             }
             else
-                amount_output_indices[i] = add_output(tx_hash, tx.vout[i], i, tx.unlock_time, &tx.rct_signatures.outPk[i].mask);
+            {
+                amount_output_indices[i] = add_output(tx_hash, tx.vout[i], i, tx.unlock_time,
+                                                      tx.version > 1 ? &tx.rct_signatures.outPk[i].mask : NULL);
+            }
         }
         add_tx_amount_output_indices(tx_id, amount_output_indices);
     }
@@ -271,7 +274,7 @@ namespace cryptonote
         uint64_t num_rct_outs = 0;
         blobdata miner_bd = tx_to_blob(blk.miner_tx);
         add_transaction(blk_hash, std::make_pair(blk.miner_tx, blobdata_ref(miner_bd)));
-        if (blk.miner_tx.version == TRANSACTION_VERSION)
+        if (blk.miner_tx.version == 2)
             num_rct_outs += blk.miner_tx.vout.size();
         int tx_i = 0;
         crypto::hash tx_hash = crypto::null_hash;

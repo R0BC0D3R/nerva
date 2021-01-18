@@ -308,27 +308,31 @@ namespace rct
         hashes.push_back(hash2rct(h));
 
         keyV kv;
-
-        kv.reserve((6 * 2 + 9) * rv.p.bulletproofs.size());
-        for (const auto &p : rv.p.bulletproofs)
+        if (rv.type == RCTTypeCLSAG)
         {
-            // V are not hashed as they're expanded from outPk.mask
-            // (and thus hashed as part of rctSigBase above)
-            kv.push_back(p.A);
-            kv.push_back(p.S);
-            kv.push_back(p.T1);
-            kv.push_back(p.T2);
-            kv.push_back(p.taux);
-            kv.push_back(p.mu);
-            for (size_t n = 0; n < p.L.size(); ++n)
-                kv.push_back(p.L[n]);
-            for (size_t n = 0; n < p.R.size(); ++n)
-                kv.push_back(p.R[n]);
-            kv.push_back(p.a);
-            kv.push_back(p.b);
-            kv.push_back(p.t);
+            kv.reserve((6 * 2 + 9) * rv.p.bulletproofs.size());
+            for (const auto &p : rv.p.bulletproofs)
+            {
+                // V are not hashed as they're expanded from outPk.mask
+                // (and thus hashed as part of rctSigBase above)
+                kv.push_back(p.A);
+                kv.push_back(p.S);
+                kv.push_back(p.T1);
+                kv.push_back(p.T2);
+                kv.push_back(p.taux);
+                kv.push_back(p.mu);
+                for (size_t n = 0; n < p.L.size(); ++n)
+                    kv.push_back(p.L[n]);
+                for (size_t n = 0; n < p.R.size(); ++n)
+                    kv.push_back(p.R[n]);
+                kv.push_back(p.a);
+                kv.push_back(p.b);
+                kv.push_back(p.t);
+            }
         }
-
+        else
+        {
+        }
         hashes.push_back(cn_fast_hash(kv));
         hwdev.mlsag_prehash(ss.str(), inputs, outputs, hashes, rv.outPk, prehash);
         return prehash;
@@ -549,6 +553,7 @@ namespace rct
         }
 
         rctSig rv;
+        rv.type = RCTTypeCLSAG;
 
         rv.message = message;
         rv.outPk.resize(destinations.size());

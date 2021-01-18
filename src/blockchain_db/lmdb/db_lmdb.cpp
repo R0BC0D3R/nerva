@@ -823,7 +823,7 @@ namespace cryptonote
             throw1(DB_ERROR(lmdb_error("Failed to add removal of block info to db transaction: ", result).c_str()));
     }
 
-uint64_t BlockchainLMDB::add_transaction_data(const crypto::hash& blk_hash, const std::pair<transaction, blobdata_ref>& txp, const crypto::hash& tx_hash, const crypto::hash& tx_prunable_hash)
+    uint64_t BlockchainLMDB::add_transaction_data(const crypto::hash &blk_hash, const std::pair<transaction, blobdata_ref> &txp, const crypto::hash &tx_hash, const crypto::hash &tx_prunable_hash)
     {
         LOG_PRINT_L3("BlockchainLMDB::" << __func__);
         check_open();
@@ -900,10 +900,13 @@ uint64_t BlockchainLMDB::add_transaction_data(const crypto::hash& blk_hash, cons
                 throw0(DB_ERROR(lmdb_error("Failed to add prunable tx id to db transaction: ", result).c_str()));
         }
 
-        MDB_val_set(val_prunable_hash, tx_prunable_hash);
-        result = mdb_cursor_put(m_cur_txs_prunable_hash, &val_tx_id, &val_prunable_hash, MDB_APPEND);
-        if (result)
-            throw0(DB_ERROR(lmdb_error("Failed to add prunable tx prunable hash to db transaction: ", result).c_str()));
+        if (tx.version > 1)
+        {
+            MDB_val_set(val_prunable_hash, tx_prunable_hash);
+            result = mdb_cursor_put(m_cur_txs_prunable_hash, &val_tx_id, &val_prunable_hash, MDB_APPEND);
+            if (result)
+                throw0(DB_ERROR(lmdb_error("Failed to add prunable tx prunable hash to db transaction: ", result).c_str()));
+        }
 
         return tx_id;
     }
@@ -958,11 +961,14 @@ uint64_t BlockchainLMDB::add_transaction_data(const crypto::hash& blk_hash, cons
                 throw1(DB_ERROR(lmdb_error("Error adding removal of tx id to db transaction", result).c_str()));
         }
 
-        if ((result = mdb_cursor_get(m_cur_txs_prunable_hash, &val_tx_id, NULL, MDB_SET)))
-            throw1(DB_ERROR(lmdb_error("Failed to locate prunable hash tx for removal: ", result).c_str()));
-        result = mdb_cursor_del(m_cur_txs_prunable_hash, 0);
-        if (result)
-            throw1(DB_ERROR(lmdb_error("Failed to add removal of prunable hash tx to db transaction: ", result).c_str()));
+        if (tx.version > 1)
+        {
+            if ((result = mdb_cursor_get(m_cur_txs_prunable_hash, &val_tx_id, NULL, MDB_SET)))
+                throw1(DB_ERROR(lmdb_error("Failed to locate prunable hash tx for removal: ", result).c_str()));
+            result = mdb_cursor_del(m_cur_txs_prunable_hash, 0);
+            if (result)
+                throw1(DB_ERROR(lmdb_error("Failed to add removal of prunable hash tx to db transaction: ", result).c_str()));
+        }
 
         remove_tx_outputs(tip->data.tx_id, tx);
 
@@ -1087,7 +1093,7 @@ uint64_t BlockchainLMDB::add_transaction_data(const crypto::hash& blk_hash, cons
                 throw0(DB_ERROR("tx has outputs, but no output indices found"));
         }
 
-        bool is_pseudo_rct = tx.vin.size() == 1 && tx.vin[0].type() == typeid(txin_gen);
+        bool is_pseudo_rct = tx.version >= 2 && tx.vin.size() == 1 && tx.vin[0].type() == typeid(txin_gen);
         for (size_t i = tx.vout.size(); i-- > 0;)
         {
             uint64_t amount = is_pseudo_rct ? 0 : tx.vout[i].amount;

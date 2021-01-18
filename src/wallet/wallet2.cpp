@@ -2050,7 +2050,7 @@ namespace tools
                                 td.m_mask = tx_scan_info[o].mask;
                                 td.m_rct = true;
                             }
-                            else if (miner_tx && tx.version == TRANSACTION_VERSION)
+                            else if (miner_tx && tx.version == 2)
                             {
                                 td.m_mask = rct::identity();
                                 td.m_rct = true;
@@ -2129,7 +2129,7 @@ namespace tools
                                 td.m_mask = tx_scan_info[o].mask;
                                 td.m_rct = true;
                             }
-                            else if (miner_tx && tx.version == TRANSACTION_VERSION)
+                            else if (miner_tx && tx.version == 2)
                             {
                                 td.m_mask = rct::identity();
                                 td.m_rct = true;

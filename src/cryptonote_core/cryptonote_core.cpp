@@ -801,16 +801,36 @@ namespace cryptonote
                 continue;
             }
 
+            if (tx_info[n].tx->version < 2)
+                continue;
             const rct::rctSig &rv = tx_info[n].tx->rct_signatures;
-            if (!is_canonical_bulletproof_layout(rv.p.bulletproofs))
+            switch (rv.type)
             {
-                MERROR_VER("Bulletproof does not have canonical form");
+            case rct::RCTTypeNull:
+                // coinbase should not come here, so we reject for all other types
+                MERROR_VER("Unexpected Null rctSig type");
                 set_semantics_failed(tx_info[n].tx_hash);
                 tx_info[n].tvc.m_verifivation_failed = true;
                 tx_info[n].result = false;
-            }
-            else
+                break;
+            case rct::RCTTypeCLSAG:
+                if (!is_canonical_bulletproof_layout(rv.p.bulletproofs))
+                {
+                    MERROR_VER("Bulletproof does not have canonical form");
+                    set_semantics_failed(tx_info[n].tx_hash);
+                    tx_info[n].tvc.m_verifivation_failed = true;
+                    tx_info[n].result = false;
+                    break;
+                }
                 rvv.push_back(&rv); // delayed batch verification
+                break;
+            default:
+                MERROR_VER("Unknown rct type: " << rv.type);
+                set_semantics_failed(tx_info[n].tx_hash);
+                tx_info[n].tvc.m_verifivation_failed = true;
+                tx_info[n].result = false;
+                break;
+            }
         }
         if (!rvv.empty() && !rct::verRctSemanticsSimple(rvv))
         {
@@ -821,7 +841,8 @@ namespace cryptonote
             {
                 if (!tx_info[n].result)
                     continue;
-
+                if (tx_info[n].tx->rct_signatures.type != rct::RCTTypeCLSAG)
+                    continue;
                 if (assumed_bad || !rct::verRctSemanticsSimple(tx_info[n].tx->rct_signatures))
                 {
                     set_semantics_failed(tx_info[n].tx_hash);

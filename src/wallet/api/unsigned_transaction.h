@@ -1,21 +1,21 @@
 // Copyright (c) 2014-2020, The Monero Project
-// 
+//
 // All rights reserved.
-// 
+//
 // Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
-// 
+//
 // 1. Redistributions of source code must retain the above copyright notice, this list of
 //    conditions and the following disclaimer.
-// 
+//
 // 2. Redistributions in binary form must reproduce the above copyright notice, this list
 //    of conditions and the following disclaimer in the documentation and/or other
 //    materials provided with the distribution.
-// 
+//
 // 3. Neither the name of the copyright holder nor the names of its contributors may be
 //    used to endorse or promote products derived from this software without specific
 //    prior written permission.
-// 
+//
 // THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
 // EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
 // MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
@@ -25,39 +25,49 @@
 // INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-// 
+//
 // Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
-#pragma once
+#include "wallet/api/wallet2_api.h"
+#include "wallet/wallet2.h"
 
-#include <cstdint>
-#include <vector>
 #include <string>
-#include <boost/multiprecision/cpp_int.hpp>
-#include "crypto/hash.h"
+#include <vector>
 
-namespace cryptonote
+
+namespace Monero {
+
+class WalletImpl;
+class UnsignedTransactionImpl : public UnsignedTransaction
 {
-    typedef boost::multiprecision::uint128_t difficulty_type;
+public:
+    UnsignedTransactionImpl(WalletImpl &wallet);
+    ~UnsignedTransactionImpl();
+    int status() const override;
+    std::string errorString() const override;
+    std::vector<uint64_t> amount() const override;
+    std::vector<uint64_t> fee() const override;
+    std::vector<uint64_t> mixin() const override;
+    std::vector<std::string> paymentId() const override;
+    std::vector<std::string> recipientAddress() const override;
+    uint64_t txCount() const override;
+    // sign txs and save to file
+    bool sign(const std::string &signedFileName) override;
+    std::string confirmationMessage() const override {return m_confirmationMessage;}
+    uint64_t minMixinCount() const override;
 
-    /**
-     * @brief checks if a hash fits the given difficulty
-     *
-     * The hash passes if (hash * difficulty) < 2^256.
-     * Phrased differently, if (hash * difficulty) fits without overflow into
-     * the least significant 256 bits of the 320 bit multiplication result.
-     *
-     * @param hash the hash to check
-     * @param difficulty the difficulty to check against
-     *
-     * @return true if valid, else false
-     */
-    bool check_hash_64(const crypto::hash &hash, uint64_t difficulty);
-    uint64_t next_difficulty_64(std::vector<std::uint64_t> timestamps, std::vector<uint64_t> cumulative_difficulties, size_t target_seconds);
+private:
+    // Callback function to check all loaded tx's and generate confirmationMessage
+    bool checkLoadedTx(const std::function<size_t()> get_num_txes, const std::function<const tools::wallet2::tx_construction_data&(size_t)> &get_tx, const std::string &extra_message);
+    
+    friend class WalletImpl;
+    WalletImpl &m_wallet;
 
-    bool check_hash_128(const crypto::hash &hash, difficulty_type difficulty);
-    bool check_hash(const crypto::hash &hash, difficulty_type difficulty);
-    difficulty_type next_difficulty(std::vector<std::uint64_t> timestamps, std::vector<difficulty_type> cumulative_difficulties, size_t target_seconds);
+    int  m_status;
+    std::string m_errorString;
+    tools::wallet2::unsigned_tx_set m_unsigned_tx_set;
+    std::string m_confirmationMessage;
+};
 
-    std::string hex(difficulty_type v);
+
 }

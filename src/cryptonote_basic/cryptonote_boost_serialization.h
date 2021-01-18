@@ -166,11 +166,12 @@ namespace boost
             a &x.vout;
             a &x.extra;
             if (x.version == 1)
-                a & x.signatures;
+                a &x.signatures;
             else
             {
-                a & (rct::rctSigBase&)x.rct_signatures;
-                a & x.rct_signatures.p;
+                a &(rct::rctSigBase &)x.rct_signatures;
+                if (x.rct_signatures.type != rct::RCTTypeNull)
+                    a &x.rct_signatures.p;
             }
         }
 
@@ -274,8 +275,12 @@ namespace boost
         template <class Archive>
         inline void serialize(Archive &a, rct::rctSigBase &x, const boost::serialization::version_type ver)
         {
-            //if (x.type == rct::RCTTypeSimple)
-            a &x.pseudoOuts;
+            a &x.type;
+            if (x.type == rct::RCTTypeNull)
+                return;
+
+            //if (x.type == rct::RCTTypeSimple) // moved to prunable with bulletproofs
+            //    a &x.pseudoOuts;
             a &x.ecdhInfo;
             serializeOutPk(a, x.outPk, ver);
             a &x.txnFee;
@@ -292,6 +297,12 @@ namespace boost
         template <class Archive>
         inline void serialize(Archive &a, rct::rctSig &x, const boost::serialization::version_type ver)
         {
+            a &x.type;
+            if (x.type == rct::RCTTypeNull)
+                return;
+
+            //if (x.type == rct::RCTTypeSimple)
+                a &x.pseudoOuts;
             a &x.ecdhInfo;
             serializeOutPk(a, x.outPk, ver);
             a &x.txnFee;

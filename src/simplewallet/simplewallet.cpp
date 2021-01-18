@@ -4304,11 +4304,11 @@ boost::optional<epee::wipeable_string> simple_wallet::new_wallet(const boost::pr
     }
     epee::wipeable_string password = rc.second.password();
 
-    if (password.empty())
+    /*if (password.empty())
     {
         fail_msg_writer() << tr("Error creating wallet: empty password");
         return {};
-    }
+    }*/
 
     if (!m_subaddress_lookahead.empty())
     {
@@ -4507,11 +4507,11 @@ boost::optional<epee::wipeable_string> simple_wallet::new_wallet(const boost::pr
     }
     epee::wipeable_string password = rc.second.password();
 
-    if (password.empty())
+    /*if (password.empty())
     {
         fail_msg_writer() << tr("Error creating wallet: empty password");
         return {};
-    }
+    }*/
 
     if (!m_subaddress_lookahead.empty())
     {
@@ -4580,7 +4580,7 @@ boost::optional<epee::wipeable_string> simple_wallet::open_wallet(const boost::p
         m_wallet = std::move(rc.first);
         password = std::move(std::move(rc.second).password());
 
-        THROW_WALLET_EXCEPTION_IF(password.empty(), tools::error::empty_password);
+        //THROW_WALLET_EXCEPTION_IF(password.empty(), tools::error::empty_password);
 
         if (!m_wallet)
         {

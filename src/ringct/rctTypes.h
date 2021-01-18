@@ -214,8 +214,15 @@ namespace rct
     size_t n_bulletproof_amounts(const std::vector<Bulletproof> &proofs);
     size_t n_bulletproof_max_amounts(const std::vector<Bulletproof> &proofs);
 
+    enum
+    {
+        RCTTypeNull = 0,
+        RCTTypeCLSAG = 1,
+    };
+
     struct rctSigBase
     {
+        uint8_t type;
         key message;
         ctkeyM mixRing; //the set of all pubkeys / copy
         //pairs that you mix with
@@ -224,9 +231,13 @@ namespace rct
         ctkeyV outPk;
         xmr_amount txnFee; // contains b
 
+        //todo: check this is only called by non-coinbase transactions
         template <bool W, template <bool> class Archive>
         bool serialize_rctsig_base(Archive<W> &ar, size_t inputs, size_t outputs)
         {
+            FIELD(type)
+            if (type == RCTTypeNull)
+                return ar.stream().good();
             VARINT_FIELD(txnFee)
 
             ar.tag("ecdhInfo");
@@ -236,13 +247,19 @@ namespace rct
                 return false;
             for (size_t i = 0; i < outputs; ++i)
             {
-                ar.begin_object();
-                if (!typename Archive<W>::is_saving())
-                    memset(ecdhInfo[i].amount.bytes, 0, sizeof(ecdhInfo[i].amount.bytes));
-                crypto::hash8 &amount = (crypto::hash8 &)ecdhInfo[i].amount;
-                FIELD(amount);
-                ar.end_object();
-
+                if (type == RCTTypeCLSAG)
+                {
+                    ar.begin_object();
+                    if (!typename Archive<W>::is_saving())
+                        memset(ecdhInfo[i].amount.bytes, 0, sizeof(ecdhInfo[i].amount.bytes));
+                    crypto::hash8 &amount = (crypto::hash8 &)ecdhInfo[i].amount;
+                    FIELD(amount);
+                    ar.end_object();
+                }
+                else
+                {
+                    FIELDS(ecdhInfo[i])
+                }
                 if (outputs - i > 1)
                     ar.delimit_array();
             }
@@ -264,6 +281,7 @@ namespace rct
         }
 
         BEGIN_SERIALIZE_OBJECT()
+        FIELD(type)
         FIELD(message)
         FIELD(mixRing)
         FIELD(pseudoOuts)
@@ -280,17 +298,23 @@ namespace rct
 
         // when changing this function, update cryptonote::get_pruned_transaction_weight
         template <bool W, template <bool> class Archive>
-        bool serialize_rctsig_prunable(Archive<W> &ar, size_t inputs, size_t outputs, size_t mixin)
+        bool serialize_rctsig_prunable(Archive<W> &ar, uint8_t type, size_t inputs, size_t outputs, size_t mixin)
         {
+            //todo: check this is only called by non-coinbase transactions
             if (inputs >= 0xffffffff)
                 return false;
             if (outputs >= 0xffffffff)
                 return false;
             if (mixin >= 0xffffffff)
                 return false;
+            if (type == RCTTypeNull)
+                return ar.stream().good();
 
             uint32_t nbp = bulletproofs.size();
-            VARINT_FIELD(nbp)
+            if (type == RCTTypeCLSAG)
+                VARINT_FIELD(nbp)
+            else
+                FIELD(nbp)
             ar.tag("bp");
             ar.begin_array();
             if (nbp > outputs)
@@ -313,9 +337,6 @@ namespace rct
                 return false;
             for (size_t i = 0; i < inputs; ++i)
             {
-                // we save the CLSAGs contents directly, because we want it to save its
-                // arrays without the size prefixes, and the load can't know what size
-                // to expect if it's not in the data
                 ar.begin_object();
                 ar.tag("s");
                 ar.begin_array();
@@ -333,7 +354,6 @@ namespace rct
                 ar.tag("c1");
                 FIELDS(CLSAGs[i].c1)
 
-                // CLSAGs[i].I not saved, it can be reconstructed
                 ar.tag("D");
                 FIELDS(CLSAGs[i].D)
                 ar.end_object();
@@ -372,12 +392,12 @@ namespace rct
 
         keyV &get_pseudo_outs()
         {
-            return p.pseudoOuts;
+            return type == RCTTypeCLSAG ? p.pseudoOuts : pseudoOuts;
         }
 
         keyV const &get_pseudo_outs() const
         {
-            return p.pseudoOuts;
+            return type == RCTTypeCLSAG ? p.pseudoOuts : pseudoOuts;
         }
 
         BEGIN_SERIALIZE_OBJECT()

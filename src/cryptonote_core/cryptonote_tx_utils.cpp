@@ -47,6 +47,7 @@ using namespace epee;
 #include "crypto/hash.h"
 #include "ringct/rctSigs.h"
 #include "multisig/multisig.h"
+#include "cryptonote_basic/difficulty.h"
 
 using namespace crypto;
 
@@ -112,7 +113,24 @@ namespace cryptonote
             [&out_amounts](uint64_t a_dust) { out_amounts.push_back(a_dust); });
 
         CHECK_AND_ASSERT_MES(1 <= max_outs, false, "max_out must be non-zero");
-        CHECK_AND_ASSERT_MES(max_outs >= out_amounts.size(), false, "max_out exceeded");
+        
+        //if (height == 0)
+        {
+            // the genesis block was not decomposed, for unknown reasons
+            while (max_outs < out_amounts.size())
+            {
+                //out_amounts[out_amounts.size() - 2] += out_amounts.back();
+                //out_amounts.resize(out_amounts.size() - 1);
+                out_amounts[1] += out_amounts[0];
+                for (size_t n = 1; n < out_amounts.size(); ++n)
+                out_amounts[n - 1] = out_amounts[n];
+                out_amounts.pop_back();
+            }
+        }
+        //else
+        //{
+        //    CHECK_AND_ASSERT_MES(max_outs >= out_amounts.size(), false, "max_out exceeded");
+        //}
 
         uint64_t summary_amounts = 0;
         for (size_t no = 0; no < out_amounts.size(); no++)
@@ -418,7 +436,7 @@ namespace cryptonote
         size_t output_index = 0;
         for (const tx_destination_entry &dst_entr : destinations)
         {
-            CHECK_AND_ASSERT_MES(dst_entr.amount > 0, false, "Destination with wrong amount: " << dst_entr.amount);
+            CHECK_AND_ASSERT_MES(dst_entr.amount > 0 || tx.version > 1, false, "Destination with wrong amount: " << dst_entr.amount);
             crypto::public_key out_eph_public_key;
 
             hwdev.generate_output_ephemeral_keys(tx.version, sender_account_keys, txkey_pub, tx_key,
@@ -632,12 +650,40 @@ namespace cryptonote
     bool get_block_longhash(crypto::cn_hash_context_t *context, BlockchainDB &db, const uint8_t major_version, const blobdata &blob, crypto::hash &res, const uint64_t height)
     {
         if (major_version < 2)
-        {
             crypto::cn_slow_hash(context, blob.data(), blob.size(), res);
-            return true;
+        else
+        {
+            // Guard against chain splits by only taking data from blocks with at least
+            // 256 ancestors.
+            assert(height > 257);
+            uint64_t stable_height = height - 256;
+
+            // Make the hashing context unique per nonce by seeding it with a hash
+            // of the hashing blob for a given nonce.
+            crypto::hash h;
+            get_blob_hash(blob, h);
+
+            HC128_State rng_state;
+            HC128_Init(&rng_state, (unsigned char *)h.data, (unsigned char *)h.data + 16);
+
+            db.get_cna_v5_data(context->salt, &rng_state, stable_height);
+
+            HC128_NextKeys(&rng_state);
+            size_t rng_key_idx = 0;
+            // xx: [4, 8]
+            const uint32_t xx = (uint32_t)4U + HC128_U32(&rng_state, &rng_key_idx, 5U);
+            // yy: [4, 8]
+            const uint32_t yy = (uint32_t)4U + HC128_U32(&rng_state, &rng_key_idx, 5U);
+            // init_size_blk: 2, 4, or 8  (2 << [0, 2])
+            const uint8_t init_size_blk = (uint8_t)2U << ((uint8_t)HC128_U32(&rng_state, &rng_key_idx, 3U));
+            // iters_divisor: [1, 64]
+            const uint32_t iters_divisor = (uint32_t)1U + HC128_U32(&rng_state, &rng_key_idx, 64U);
+            const uint32_t iters = ((height + 1) % iters_divisor);
+
+            crypto::cn_slow_hash_v11(context, blob.data(), blob.size(), res, iters, init_size_blk, xx, yy);
         }
 
-        return get_block_longhash_v11(context, db, blob, res, height);
+        return true;
     }
     //---------------------------------------------------------------
     crypto::hash get_block_longhash(crypto::cn_hash_context_t *context, Blockchain *bc, const block &b, const uint64_t height)
@@ -645,39 +691,5 @@ namespace cryptonote
         crypto::hash p = crypto::null_hash;
         get_block_longhash(context, bc, b, p, height);
         return p;
-    }
-    //---------------------------------------------------------------
-    bool get_block_longhash_v11(crypto::cn_hash_context_t *context, BlockchainDB &db, const blobdata &blob, crypto::hash &res, uint64_t height)
-    {
-        // Guard against chain splits by only taking data from blocks with at least
-        // 256 ancestors.
-        assert(height > 257);
-        uint64_t stable_height = height - 256;
-
-        // Make the hashing context unique per nonce by seeding it with a hash
-        // of the hashing blob for a given nonce.
-        crypto::hash h;
-        get_blob_hash(blob, h);
-
-        HC128_State rng_state;
-        HC128_Init(&rng_state, (unsigned char *)h.data, (unsigned char *)h.data + 16);
-
-        db.get_cna_v5_data(context->salt, &rng_state, stable_height);
-
-        HC128_NextKeys(&rng_state);
-        size_t rng_key_idx = 0;
-        // xx: [4, 8]
-        const uint32_t xx = (uint32_t)4U + HC128_U32(&rng_state, &rng_key_idx, 5U);
-        // yy: [4, 8]
-        const uint32_t yy = (uint32_t)4U + HC128_U32(&rng_state, &rng_key_idx, 5U);
-        // init_size_blk: 2, 4, or 8  (2 << [0, 2])
-        const uint8_t init_size_blk = (uint8_t)2U << ((uint8_t)HC128_U32(&rng_state, &rng_key_idx, 3U));
-        // iters_divisor: [1, 64]
-        const uint32_t iters_divisor = (uint32_t)1U + HC128_U32(&rng_state, &rng_key_idx, 64U);
-        const uint32_t iters = ((height + 1) % iters_divisor);
-
-        crypto::cn_slow_hash_v11(context, blob.data(), blob.size(), res, iters, init_size_blk, xx, yy);
-
-        return true;
     }
 } // namespace cryptonote

@@ -149,7 +149,6 @@ namespace cryptonote
     bool get_block_longhash(crypto::cn_hash_context_t *context, cryptonote::BlockchainDB &db, const uint8_t major_version, const blobdata &blob, crypto::hash &res, const uint64_t height);
     crypto::hash get_block_longhash(crypto::cn_hash_context_t *context, Blockchain *bc, const block &b, const uint64_t height);
 
-    bool get_block_longhash_v11(crypto::cn_hash_context_t *context, cryptonote::BlockchainDB &db, const blobdata &blob, crypto::hash &res, uint64_t height);
 } // namespace cryptonote
 
 namespace boost
