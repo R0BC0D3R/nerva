@@ -1,67 +1,27 @@
 # NERVA
 
-Copyright (c) 2021 The NERVA Project.   
-Copyright (c) 2014-2021 The Monero Project.   
-Copyright (c) 2017-2018 The Masari Project.   
-Portions Copyright (c) 2012-2013 The Cryptonote developers.
+Copyright (c) 2018 - 2024 The NERVA Project. Copyright (c) 2014-2024 The Monero Project. Copyright (c) 2017-2018 The Masari Project. Portions Copyright (c) 2012-2013 The Cryptonote developers.
 
 
+# Compiling Nerva from source 
+Nerva used build scripts in the past that are inside `nerva/builder/` but we discontinued that in favor of just using `make`. If you prefer that way of building see `nerva/builder/build` script and the other files in there and make appropriate changes to work for your OS.
 
-## License 
+When using `make` to compile, executable files will be created in a directory similar to this:
 
-See [LICENSE](LICENSE). 
-
-
-
-## Compiling Nerva from source 
-Nerva can be compiled by running build script inside `nerva/builder/` 
-
-By default, it checks if your processor has AES support and builds based on that.  It calls default() function.  There is also release() function that creates both AES and non-AES files.  If you'd like to use that, call it at the end of build script instead of default function. 
-
-In the same build directory, there is also environment script file that controls some aspects of the build.  By default, it will build in Release mode and will not build extras.  You can change that behavior by editing those flags so to build extras, change the flag from OFF to ON: `BUILD_EXTRAS=ON`. 
-
-If you run default build, files are created under: `nerva/build/output/windows/release/bin/` 
-
-If you run production build, files are created under: `nerva/build/output/`. Those files are automatically zipped so you need zip: 
-Linux: `sudo apt install zip` 
-Windows: `pacman -S zip` 
-
-Inside `nerva/builder/environment`, there is THREAD_COUNT variable that's set to 8.  You can increase or decrease it based on your system.  If you're building on low end system and seeing errors, change it to 1 or something lower than 8. 
+`nerva/build/[YOUR_SYSTEM]/[YOUR_BRANCH]/release/bin/`
 
 
+## Dependencies
+First you'll need to install required dependencies for your operating system.
 
-## Compiling on Linux 
-
-### Install NERVA dependencies on Debian/Ubuntu 
+### Debian/Ubuntu
 ```bash
 sudo apt update && sudo apt install build-essential cmake pkg-config libboost-all-dev libssl-dev libzmq3-dev libpgm-dev libunbound-dev libsodium-dev git
 ```
 
-### Clone NERVA repository 
-```bash
-git clone --recursive https://github.com/nerva-project/nerva.git
-```
-This will create `nerva` directory. 
+### Windows
 
-To clone specific branch add `--branch` at the end of git command: 
-```bash
-git clone --recursive https://github.com/nerva-project/nerva.git --branch your-branch-name
-```
-
-### Build on Linux 
-Go to builder directory and start build process: 
-```bash
-cd nerva/builder
-```
-```bash
-sudo ./build
-```
-
-
-
-## Compiling on Windows 
-
-### Install MSYS2 
+#### Install MSYS2 
 Install MSYS2 (Software Distribution and Building Platform for Windows): 
 [MSYS2 Website][msys2-link]
 
@@ -70,8 +30,8 @@ Open MSYS2 Shell and run below to update:
 pacman -Syu
 ```
 
-### Install NERVA dependancies 
-You'll need below dependencies to build nerva.  Run command for your target Windows version. 
+#### Install NERVA dependancies 
+You'll need below dependencies to build Nerva.  Run command for your target Windows version. 
 Windows 64-bit:
 ```bash
 pacman -S mingw-w64-x86_64-toolchain make mingw-w64-x86_64-cmake mingw-w64-x86_64-boost mingw-w64-x86_64-openssl mingw-w64-x86_64-zeromq mingw-w64-x86_64-libsodium mingw-w64-x86_64-hidapi mingw-w64-x86_64-unbound git
@@ -82,8 +42,31 @@ Windows 32-bit:
 pacman -S mingw-w64-i686-toolchain make mingw-w64-i686-cmake mingw-w64-i686-boost mingw-w64-i686-openssl mingw-w64-i686-zeromq mingw-w64-i686-libsodium mingw-w64-i686-hidapi mingw-w64-i686-unbound git
 ```
 
-### Clone NERVA repository 
-In MSYS2 shell, go to directory where you want to clone nerva (ex: `/c/msys64/usr/local`) and clone repository: 
+### macOS
+If you do not have it already, install Xcode, command line tools first: 
+```bash
+xcode-select --install
+```
+You won't be able to do this through SSH as when you run it, you get pop-up box where you need to press Install and agree to license. 
+
+Now install Homebrew: 
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
+```
+After installation, follow instructions to add brew to your PATH.
+
+Once you have brew, you can install dependencies using provided Brewfile located under: 
+`nerva\contrib\brew\Brewfile` 
+
+```bash
+brew update && brew bundle --file=contrib/brew/Brewfile
+```
+You need to be in `/nerva/` directory and nerva project needs to be cloned arlready so see Cloning repository below
+
+
+## Clone NERVA repository
+
+In terminal/MSYS2 shell, go to directory where you want to clone NERVA (ex: `/home/USER_NAME` or `/c/msys64/usr/local`) and clone repository:
 ```bash
 git clone --recursive https://github.com/nerva-project/nerva.git
 ```
@@ -94,60 +77,30 @@ To clone specific branch add `--branch` at the end of git command:
 git clone --recursive https://github.com/nerva-project/nerva.git --branch your-branch-name
 ```
 
-### Build on Windows 
-Go to builder directory and start build process: 
+
+## Build Nerva project
+Make sure you're in `nerva` directory and start build process: 
+
+### Linux/macOS
 ```bash
-cd nerva/builder
-```
-```bash
-./build
-```
-
-
-
-## Compiling on macOS 
-
-### Install Homebrew 
-Install Xcode, command line tools first: 
-```bash
-xcode-select --install
-```
-You won't be able to do this through SSH as when you run it, you get pop-up box where you need to press Install and agree to license. 
-
-Now install Homebrew: 
-```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
-```
-After installation, follow instructions to add brew to your PATH. 
-
-### Clone NERVA repository 
-```bash
-sudo git clone --recursive https://github.com/nerva-project/nerva.git
-```
-This will create `nerva` directory. 
-
-To clone specific branch add `--branch` at the end of git command: 
-```bash
-sudo git clone --recursive https://github.com/nerva-project/nerva.git --branch your-branch-name
+make
 ```
 
-### Install NERVA dependencies 
-Install all macOS dependencies using Brewfile located under: 
-`nerva\contrib\brew\Brewfile` 
-
+### Windows 
 ```bash
-brew update && brew bundle --file=contrib/brew/Brewfile
+make release-static-win64
+```
+or
+```bash
+make release-static-win32
 ```
 
-### Build on macOS 
-Go to builder directory and start build process: 
+If your CPU does not support AES instructions, you can build using:
 ```bash
-cd nerva/builder
-```
-```bash
-sudo ./build
+make release-noaes
 ```
 
+See Makefile for other options
 
 
 ## Help Me! 
