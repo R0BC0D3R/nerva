@@ -31,6 +31,7 @@ pacman -Syu
 
 #### Install Nerva dependencies 
 You'll need below dependencies to build Nerva.  Run command for your target Windows version. 
+
 Windows 64-bit:
 ```bash
 pacman -S mingw-w64-x86_64-toolchain make mingw-w64-x86_64-cmake mingw-w64-x86_64-boost mingw-w64-x86_64-openssl mingw-w64-x86_64-zeromq mingw-w64-x86_64-libsodium mingw-w64-x86_64-hidapi mingw-w64-x86_64-unbound git
@@ -76,6 +77,11 @@ To clone specific branch add `--branch` at the end of git command:
 git clone --recursive https://github.com/nerva-project/nerva.git --branch your-branch-name
 ```
 
+If you already have the repository cloned, initialize update:
+```bash
+cd nerva && git submodule init && git submodule update
+```
+
 
 ## Build Nerva project
 Make sure you're in `nerva` directory and start build process: 
@@ -99,7 +105,7 @@ If your CPU does not support AES instructions, you can build using:
 make release-noaes
 ```
 
-See Makefile for other options
+See Makefile for other options.
 
 
 ## Help Me! 
