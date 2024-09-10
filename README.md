@@ -60,12 +60,12 @@ Once you have brew, you can install dependencies using provided Brewfile located
 ```bash
 brew update && brew bundle --file=contrib/brew/Brewfile
 ```
-You need to be in `/nerva/` directory and nerva project needs to be cloned arlready so see Cloning repository below
+You need to be in `/nerva/` directory and nerva project needs to be cloned already so see Clone Nerva repository below.
 
 
 ## Clone Nerva repository
 
-In terminal/MSYS2 shell, go to directory where you want to clone NERVA (ex: `/home/USER_NAME` or `/c/msys64/usr/local`) and clone repository:
+In Terminal or MSYS2 Shell, go to directory where you want to clone NERVA (ex: `/home/USER_NAME` or `/c/msys64/usr/local`) and clone repository:
 ```bash
 git clone --recursive https://github.com/nerva-project/nerva.git
 ```
