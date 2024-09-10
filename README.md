@@ -116,6 +116,11 @@ make release-noaes
 
 See Makefile for other options.
 
+You can also pass -j# to build using multiple threads. Below would use 8 CPU threads:
+```bash
+make release-static-win64 -j8
+```
+
 
 ## Help Me
 
