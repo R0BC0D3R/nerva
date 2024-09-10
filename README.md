@@ -109,6 +109,6 @@ See Makefile for other options
 
 
 <!-- Reference links -->
-[nerva-discord-link]: https://discord.gg/jsdbEns
+[nerva-discord-link]: https://discord.gg/ufysfvcFwe
 [nerva-docs-link]: https://docs.nerva.one
 [msys2-link]: https://www.msys2.org
