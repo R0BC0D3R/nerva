@@ -29,7 +29,7 @@ Open MSYS2 Shell and run below to update:
 pacman -Syu
 ```
 
-#### Install Nerva dependancies 
+#### Install Nerva dependencies 
 You'll need below dependencies to build Nerva.  Run command for your target Windows version. 
 Windows 64-bit:
 ```bash
@@ -60,7 +60,7 @@ Once you have brew, you can install dependencies using provided Brewfile located
 ```bash
 brew update && brew bundle --file=contrib/brew/Brewfile
 ```
-You need to be in `/nerva/` directory and nerva project needs to be cloned already so see Clone Nerva repository below.
+You need to be in `/nerva/` directory and Nerva project needs to be cloned already so see Clone Nerva repository below.
 
 
 ## Clone Nerva repository
