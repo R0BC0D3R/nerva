@@ -41,12 +41,12 @@ pacman -Syu
 #### Install Nerva dependencies 
 You'll need below dependencies to build Nerva.  Run command for your target Windows version. 
 
-Windows 64-bit:
+Windows 64-bit (MSYS2 MINGW64):
 ```bash
 pacman -S mingw-w64-x86_64-toolchain make mingw-w64-x86_64-cmake mingw-w64-x86_64-boost mingw-w64-x86_64-openssl mingw-w64-x86_64-zeromq mingw-w64-x86_64-libsodium mingw-w64-x86_64-hidapi mingw-w64-x86_64-unbound git
 ```
 
-Windows 32-bit: 
+Windows 32-bit (MSYS2 MINGW32): 
 ```bash
 pacman -S mingw-w64-i686-toolchain make mingw-w64-i686-cmake mingw-w64-i686-boost mingw-w64-i686-openssl mingw-w64-i686-zeromq mingw-w64-i686-libsodium mingw-w64-i686-hidapi mingw-w64-i686-unbound git
 ```
