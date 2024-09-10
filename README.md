@@ -3,7 +3,16 @@
 Copyright (c) 2018 - 2024 The Nerva Project. Copyright (c) 2014-2024 The Monero Project. Copyright (c) 2017-2018 The Masari Project. Portions Copyright (c) 2012-2013 The Cryptonote developers.
 
 
-# Compiling Nerva from source 
+## Table of Contents
+
+- [Compiling Nerva from Source ](#compiling-nerva-from-source)
+- [Install Dependencies](#install-dependencies)
+- [Clone Nerva Repository](#clone-nerva-repository)
+- [Build Nerva Project](#build-nerva-project)
+- [Help Me](#help-me)
+
+
+# Compiling Nerva from Source 
 Nerva used build scripts in the past that are inside `nerva/builder/` but we discontinued that in favor of just using `make`. If you prefer that way of building see `nerva/builder/build` script and make appropriate changes to work for your OS.
 
 We will compile using CMake build system. When using `make` to compile, executable files will be created in a directory similar to this:
@@ -11,7 +20,7 @@ We will compile using CMake build system. When using `make` to compile, executab
 `nerva/build/[YOUR_SYSTEM]/[YOUR_BRANCH]/release/bin/`
 
 
-## Dependencies
+## Install Dependencies
 First you'll need to install required dependencies for your operating system.
 
 ### Debian/Ubuntu
@@ -64,7 +73,7 @@ brew update && brew bundle --file=contrib/brew/Brewfile
 You need to be in `/nerva/` directory and Nerva project needs to be cloned already so see Clone Nerva repository below.
 
 
-## Clone Nerva repository
+## Clone Nerva Repository
 
 In Terminal or MSYS2 Shell, go to directory where you want to clone NERVA (ex: `/home/USER_NAME` or `/c/msys64/usr/local`) and clone repository:
 ```bash
@@ -83,7 +92,7 @@ cd nerva && git submodule init && git submodule update
 ```
 
 
-## Build Nerva project
+## Build Nerva Project
 Make sure you're in `nerva` directory and start build process: 
 
 ### Linux/macOS
@@ -108,7 +117,7 @@ make release-noaes
 See Makefile for other options.
 
 
-## Help Me! 
+## Help Me
 
 [GitHub docs][nerva-docs-link] is your friend, or head to [Discord][nerva-discord-link] to talk to a person. 
 
