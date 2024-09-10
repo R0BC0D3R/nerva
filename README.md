@@ -1,12 +1,12 @@
-# NERVA
+# Nerva
 
-Copyright (c) 2018 - 2024 The NERVA Project. Copyright (c) 2014-2024 The Monero Project. Copyright (c) 2017-2018 The Masari Project. Portions Copyright (c) 2012-2013 The Cryptonote developers.
+Copyright (c) 2018 - 2024 The Nerva Project. Copyright (c) 2014-2024 The Monero Project. Copyright (c) 2017-2018 The Masari Project. Portions Copyright (c) 2012-2013 The Cryptonote developers.
 
 
 # Compiling Nerva from source 
-Nerva used build scripts in the past that are inside `nerva/builder/` but we discontinued that in favor of just using `make`. If you prefer that way of building see `nerva/builder/build` script and the other files in there and make appropriate changes to work for your OS.
+Nerva used build scripts in the past that are inside `nerva/builder/` but we discontinued that in favor of just using `make`. If you prefer that way of building see `nerva/builder/build` script and make appropriate changes to work for your OS.
 
-When using `make` to compile, executable files will be created in a directory similar to this:
+We will compile using CMake build system. When using `make` to compile, executable files will be created in a directory similar to this:
 
 `nerva/build/[YOUR_SYSTEM]/[YOUR_BRANCH]/release/bin/`
 
@@ -21,7 +21,6 @@ sudo apt update && sudo apt install build-essential cmake pkg-config libboost-al
 
 ### Windows
 
-#### Install MSYS2 
 Install MSYS2 (Software Distribution and Building Platform for Windows): 
 [MSYS2 Website][msys2-link]
 
@@ -30,7 +29,7 @@ Open MSYS2 Shell and run below to update:
 pacman -Syu
 ```
 
-#### Install NERVA dependancies 
+#### Install Nerva dependancies 
 You'll need below dependencies to build Nerva.  Run command for your target Windows version. 
 Windows 64-bit:
 ```bash
@@ -64,7 +63,7 @@ brew update && brew bundle --file=contrib/brew/Brewfile
 You need to be in `/nerva/` directory and nerva project needs to be cloned arlready so see Cloning repository below
 
 
-## Clone NERVA repository
+## Clone Nerva repository
 
 In terminal/MSYS2 shell, go to directory where you want to clone NERVA (ex: `/home/USER_NAME` or `/c/msys64/usr/local`) and clone repository:
 ```bash
