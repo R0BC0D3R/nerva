@@ -31,6 +31,7 @@
 
 #include "hash-ops.h"
 #include "slow-hash.h"
+#include "cnx_vm.h"
 
 #pragma pack(push, 1)
 union cn_slow_hash_state {
@@ -98,6 +99,11 @@ cn_hash_context_t *cn_hash_context_create(void)
         cn_hash_context_free(ctx);
         return NULL;
     }
+    ctx->cnx_scratchpad_is_mapped = allocate_hugepage(CN_SCRATCHPAD_MEMORY_V13, (void **)&(ctx->cnx_scratchpad));
+    if (ctx->cnx_scratchpad == NULL) {
+        cn_hash_context_free(ctx);
+        return NULL;
+    }
     ctx->salt_is_mapped = allocate_hugepage(CN_SALT_MEMORY, (void **)&(ctx->salt));
     if (ctx->salt == NULL) {
         cn_hash_context_free(ctx);
@@ -122,7 +128,12 @@ void cn_hash_context_free(cn_hash_context_t *context)
         free_hugepage(context->scratchpad, CN_SCRATCHPAD_MEMORY, context->scratchpad_is_mapped);
         context->scratchpad = NULL;
     }
-    
+
+    if (context->cnx_scratchpad != NULL) {
+        free_hugepage(context->cnx_scratchpad, CN_SCRATCHPAD_MEMORY_V13, context->cnx_scratchpad_is_mapped);
+        context->cnx_scratchpad = NULL;
+    }
+
     if (context->salt != NULL) {
         free_hugepage(context->salt, CN_SALT_MEMORY, context->salt_is_mapped);
         context->salt = NULL;
@@ -334,6 +345,108 @@ void cn_slow_hash(cn_hash_context_t *context, const void *data, size_t length, c
     finalize_hash();
 }
 
+// CryptoNight-NX (v13) — hardware AES path
+void cn_slow_hash_v13(cn_hash_context_t *context, const void *data, size_t length, char *hash, const uint8_t *seed)
+{
+    uint8_t * const hp_state = context->cnx_scratchpad;  // 4 MB
+    char * const salt = context->salt;
+    const uint8_t init_size_blk = INIT_SIZE_BLK;
+    const uint32_t init_size_byte = (uint32_t)(init_size_blk * AES_BLOCK_SIZE);
+
+    RDATA_ALIGN16 uint8_t expandedKey[240];
+    uint8_t *text = (uint8_t *)malloc(init_size_byte);
+    union cn_slow_hash_state state;
+    size_t i;
+
+    static void (*const extra_hashes[4])(const void *, size_t, char *) = {
+        hash_extra_blake, hash_extra_groestl, hash_extra_jh, hash_extra_skein};
+
+    // Keccak the blob, then AES-fill the 4 MB scratchpad.
+    hash_process(&state.hs, data, length);
+    memcpy(text, state.init, init_size_byte);
+    aes_expand_key(state.hs.b, expandedKey);
+    for (i = 0; i < CN_SCRATCHPAD_MEMORY_V13 / init_size_byte; i++)
+    {
+        aes_pseudo_round(text, text, expandedKey, init_size_blk);
+        memcpy(&hp_state[i * init_size_byte], text, init_size_byte);
+    }
+
+    // XOR chain salt into every 4th byte of scratchpad (wraps 256 KB salt
+    // across 4 MB — 16 full passes).  Binds scratchpad to blockchain history.
+    {
+        uint32_t s_off = 0;
+        for (uint32_t si = 0; si < CN_SCRATCHPAD_MEMORY_V13; si += 4)
+        {
+            hp_state[si] ^= ((const uint8_t *)salt)[s_off];
+            if (++s_off >= (uint32_t)CN_SALT_MEMORY)
+                s_off = 0;
+        }
+    }
+
+    // Apply per-height random perturbations from the DB (context->random_values).
+    {
+        const cn_random_values_t rv = context->random_values;
+        int ri;
+        for (ri = 0; ri < CN_RANDOM_VALUES; ri++)
+        {
+            switch (rv.operators[ri])
+            {
+            case ADD:  hp_state[rv.indices[ri]] += (uint8_t)rv.values[ri]; break;
+            case SUB:  hp_state[rv.indices[ri]] -= (uint8_t)rv.values[ri]; break;
+            case XOR:  hp_state[rv.indices[ri]] ^= (uint8_t)rv.values[ri]; break;
+            case OR:   hp_state[rv.indices[ri]] |= (uint8_t)rv.values[ri]; break;
+            case AND:  hp_state[rv.indices[ri]] &= (uint8_t)rv.values[ri]; break;
+            case COMP: hp_state[rv.indices[ri]] = ~(uint8_t)rv.values[ri]; break;
+            case EQ:   hp_state[rv.indices[ri]] =  (uint8_t)rv.values[ri]; break;
+            default: break;
+            }
+        }
+    }
+
+    // Seed VM registers from the first 64 bytes of the Keccak state.
+    uint64_t regs[CNX_REG_COUNT];
+    {
+        int r;
+        for (r = 0; r < CNX_REG_COUNT; r++)
+            memcpy(&regs[r], &state.k[r * sizeof(uint64_t)], sizeof(uint64_t));
+    }
+
+    // Generate a deterministic random program from the chain+nonce seed.
+    cnx_program_t prog;
+    cnx_generate_program(&prog, seed);
+
+    // Execute the program CNX_ITERATIONS times, accumulating scratchpad mutations.
+    {
+        int iter;
+        for (iter = 0; iter < CNX_ITERATIONS; iter++)
+            cnx_execute(&prog, hp_state, regs);
+    }
+
+    // Mix final register state back into the Keccak state before finalization
+    // so that the output hash commits to the full scratchpad traversal.
+    {
+        int r;
+        for (r = 0; r < CNX_REG_COUNT; r++)
+        {
+            uint64_t tmp;
+            memcpy(&tmp, &state.k[r * sizeof(uint64_t)], sizeof(uint64_t));
+            tmp ^= regs[r];
+            memcpy(&state.k[r * sizeof(uint64_t)], &tmp, sizeof(uint64_t));
+        }
+    }
+
+    // AES-XOR scratchpad back into text, then Keccak permute + extra hash.
+    memcpy(text, state.init, init_size_byte);
+    aes_expand_key(&state.hs.b[32], expandedKey);
+    for (i = 0; i < CN_SCRATCHPAD_MEMORY_V13 / init_size_byte; i++)
+        aes_pseudo_round_xor(text, text, expandedKey, &hp_state[i * init_size_byte], init_size_blk);
+    memcpy(state.init, text, init_size_byte);
+    hash_permutation(&state.hs);
+    extra_hashes[state.hs.b[0] & 3](&state, 200, hash);
+
+    free(text);
+}
+
 #else
 
 void cn_slow_hash_v11(cn_hash_context_t *context, const void *data, size_t length, char *hash, size_t iters, uint8_t init_size_blk, uint16_t xx, uint16_t yy)
@@ -502,6 +615,113 @@ void cn_slow_hash(cn_hash_context_t *context, const void *data, size_t length, c
     }
 
     finalize_hash();
+}
+
+// CryptoNight-NX (v13) — software AES path
+void cn_slow_hash_v13(cn_hash_context_t *context, const void *data, size_t length, char *hash, const uint8_t *seed)
+{
+    uint8_t * const hp_state = context->cnx_scratchpad;  // 4 MB
+    char * const salt = context->salt;
+    const uint8_t init_size_blk = INIT_SIZE_BLK;
+    const uint32_t init_size_byte = (uint32_t)(init_size_blk * AES_BLOCK_SIZE);
+
+    uint8_t *text = (uint8_t *)malloc(init_size_byte);
+    union cn_slow_hash_state state;
+    uint8_t aes_key[AES_KEY_SIZE];
+    oaes_ctx * const aes_ctx = (oaes_ctx *)context->oaes_ctx;
+    size_t i, j;
+
+    static void (*const extra_hashes[4])(const void *, size_t, char *) = {
+        hash_extra_blake, hash_extra_groestl, hash_extra_jh, hash_extra_skein};
+
+    // Keccak the blob, then AES-fill the 4 MB scratchpad.
+    hash_process(&state.hs, data, length);
+    memcpy(text, state.init, init_size_byte);
+    memcpy(aes_key, state.hs.b, AES_KEY_SIZE);
+    oaes_key_import_data(aes_ctx, aes_key, AES_KEY_SIZE);
+    for (i = 0; i < CN_SCRATCHPAD_MEMORY_V13 / init_size_byte; i++)
+    {
+        for (j = 0; j < init_size_blk; j++)
+            aesb_pseudo_round(&text[AES_BLOCK_SIZE * j], &text[AES_BLOCK_SIZE * j], aes_ctx->key->exp_data);
+        memcpy(&hp_state[i * init_size_byte], text, init_size_byte);
+    }
+
+    // XOR chain salt into scratchpad.
+    {
+        uint32_t s_off = 0;
+        for (uint32_t si = 0; si < CN_SCRATCHPAD_MEMORY_V13; si += 4)
+        {
+            hp_state[si] ^= ((const uint8_t *)salt)[s_off];
+            if (++s_off >= (uint32_t)CN_SALT_MEMORY)
+                s_off = 0;
+        }
+    }
+
+    // Apply per-height random perturbations.
+    {
+        const cn_random_values_t rv = context->random_values;
+        int ri;
+        for (ri = 0; ri < CN_RANDOM_VALUES; ri++)
+        {
+            switch (rv.operators[ri])
+            {
+            case ADD:  hp_state[rv.indices[ri]] += (uint8_t)rv.values[ri]; break;
+            case SUB:  hp_state[rv.indices[ri]] -= (uint8_t)rv.values[ri]; break;
+            case XOR:  hp_state[rv.indices[ri]] ^= (uint8_t)rv.values[ri]; break;
+            case OR:   hp_state[rv.indices[ri]] |= (uint8_t)rv.values[ri]; break;
+            case AND:  hp_state[rv.indices[ri]] &= (uint8_t)rv.values[ri]; break;
+            case COMP: hp_state[rv.indices[ri]] = ~(uint8_t)rv.values[ri]; break;
+            case EQ:   hp_state[rv.indices[ri]] =  (uint8_t)rv.values[ri]; break;
+            default: break;
+            }
+        }
+    }
+
+    // Seed VM registers from Keccak state.
+    uint64_t regs[CNX_REG_COUNT];
+    {
+        int r;
+        for (r = 0; r < CNX_REG_COUNT; r++)
+            memcpy(&regs[r], &state.k[r * sizeof(uint64_t)], sizeof(uint64_t));
+    }
+
+    cnx_program_t prog;
+    cnx_generate_program(&prog, seed);
+
+    {
+        int iter;
+        for (iter = 0; iter < CNX_ITERATIONS; iter++)
+            cnx_execute(&prog, hp_state, regs);
+    }
+
+    // Mix registers back into Keccak state.
+    {
+        int r;
+        for (r = 0; r < CNX_REG_COUNT; r++)
+        {
+            uint64_t tmp;
+            memcpy(&tmp, &state.k[r * sizeof(uint64_t)], sizeof(uint64_t));
+            tmp ^= regs[r];
+            memcpy(&state.k[r * sizeof(uint64_t)], &tmp, sizeof(uint64_t));
+        }
+    }
+
+    // Finalize.
+    memcpy(text, state.init, init_size_byte);
+    oaes_key_import_data(aes_ctx, &state.hs.b[32], AES_KEY_SIZE);
+    for (i = 0; i < CN_SCRATCHPAD_MEMORY_V13 / init_size_byte; i++)
+    {
+        for (j = 0; j < init_size_blk; j++)
+        {
+            xor_blocks(&text[j * AES_BLOCK_SIZE], &hp_state[i * init_size_byte + j * AES_BLOCK_SIZE]);
+            aesb_pseudo_round(&text[AES_BLOCK_SIZE * j], &text[AES_BLOCK_SIZE * j], aes_ctx->key->exp_data);
+        }
+    }
+    memcpy(state.init, text, init_size_byte);
+    hash_permutation(&state.hs);
+    extra_hashes[state.hs.b[0] & 3](&state, 200, hash);
+
+    free(text);
 }
 
 #endif // !defined(CN_USE_SOFTWARE_AES)

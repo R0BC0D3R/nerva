@@ -210,7 +210,8 @@ namespace config
         { 9, 240500},
         {10, 341000},
         {11, 500000},
-        {12, 930000}
+        {12, 930000},
+        {13, 1100000}   // CryptoNight-NX: 4 MB scratchpad + random VM program
     };
 
     namespace testnet

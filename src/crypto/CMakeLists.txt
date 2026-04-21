@@ -31,6 +31,7 @@ set(crypto_sources
   aesb.c
   blake256.c
   chacha.c
+  cnx_vm.c
   crypto-ops-data.c
   crypto-ops.c
   crypto.cpp
@@ -55,6 +56,7 @@ set(crypto_headers)
 set(crypto_private_headers
   blake256.h
   chacha.h
+  cnx_vm.h
   crypto-ops.h
   crypto.h
   generic-ops.h
