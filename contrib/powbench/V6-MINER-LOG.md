@@ -184,6 +184,72 @@ that was really a startup transient, and an apparent regime mismatch where the
 core benchmark looked slower than a whole nonce. Both came from comparing
 against a contended run.
 
+## Stage 2: eight-lane AVX2 HC-128 salt
+
+### The eight-lane init works and is faster than the report expected
+
+`HC128_Init` vectorizes cleanly across eight nonces. The salt loop reseeds on a
+fixed cadence that does not depend on the data, so eight inits always run in
+lockstep, which is what makes this possible at all. The pick loop between
+reseeds does **not** run in lockstep, because `HC128_U32` uses rejection
+sampling and consumes a data-dependent number of keystream words.
+
+[t_hc128_x8.c](t_hc128_x8.c) builds it and checks it against the scalar
+`HC128_Init` from the tree, not against a reimplementation. **Bit-identical
+over 320,000 inits**, in both lookup forms.
+
+```
+scalar x8            2.06 us per init
+x8 scalar lookup     1.36 us per init   1.51x
+x8 gather lookup     0.81 us per init   2.55x
+```
+
+The h-function table lookups are the hard part, since each lane indexes its own
+table with its own byte. The report measured `vpgatherdd` as the *slower* of
+the two options on Zen 3 and recommended scalar extraction. **On this Zen 4
+machine gather wins decisively, 2.55x against 1.51x.** Worth knowing before
+copying his conclusion: the right lookup form is machine-dependent, so both are
+built and selected at run time.
+
+The benchmark varies its key every iteration. With a fixed key the whole call is
+loop-invariant and the compiler may hoist it, which would time an empty loop and
+report a spectacular speedup.
+
+### The Amdahl gate: init is only 38.6% of the salt
+
+[t_salt_profile.c](t_salt_profile.c) reproduces the salt loop faithfully against
+a synthetic block cache of the real size (4.42M entries, 236 MB) and puts rdtsc
+accumulators around the three components.
+
+```
+component   share     cycles/salt       count  cycles each
+init        38.6%         2360832         257       9186
+picks       19.3%         1183625       16384         72
+encrypt     37.4%         2292665        4097        560
+unattributed 4.7%          286042
+total                     6123164
+```
+
+**So a 2.55x init buys only 1.31x on the salt**, and with the salt at roughly
+40% of a nonce that is about +10% overall. Real, and more than Stage 0 gave,
+but nothing like the 2.9x the report headlines for this work.
+
+The gap is explained by `encrypt`, which is another 37.4% and is almost entirely
+`HC128_NextKeys`: 4097 calls per salt, the same sixteen-step update the init
+runs sixty-four times. It is vectorizable by the same code. The obstacle is that
+lanes consume keystream at different rates, so they cannot share a refill point,
+and the way around it is that **generating keystream ahead is free**: the stream
+is deterministic and consumed in order, so all eight lanes can be refilled in
+lockstep whenever the hungriest one runs dry, and the lanes that did not need it
+simply carry a longer buffer.
+
+With init and encrypt both vectorized the salt should reach roughly 1.8x, which
+is about +22% on the nonce. That is the real target for this stage.
+
+This check is the reason the stage is worth doing at the size it is, rather
+than being abandoned after the init turned out to be a third of the problem. It
+cost one harness and ran while the machine was busy.
+
 ## What has already failed
 
 **Computed-goto dispatch in `cn_vm_execute`: +0.5%, i.e. nothing.** Predicted 5
