@@ -450,55 +450,75 @@ pipeline, and by rule 3 that is the expected direction: screening removes a
 share of what varies, so the less the fixed costs have been cut, the smaller
 that share is. Finishing the memory work should move our figure toward his.
 
-### Screening moves the optimal thread count, and that is worth another 17%
+### Screening moves the optimal thread count, and that is most of its value
 
-Measured live through NervaOne on the 7950X (16 cores, 32 threads), screening
-enabled at threshold 37:
+Measured on the offline rig, **a fresh daemon per point on both sides**, every
+run on huge pages with no fallback warning.
 
 ```
-12 threads   1.52 - 1.62 kH/s      <- the optimum for stock v6
-14 threads   1.61 - 1.67
-18 threads   1.71 - 1.78
-20 threads   1.74 - 1.83
-24 threads   1.82 - 1.89           <- new optimum
-30 threads   1.83 - 1.89           <- no further gain
+ threads   unscreened    screened   ratio
+      12        733.4      1598.8   2.18x
+      16        684.6      1706.2   2.49x
+      20        641.4      1787.6   2.79x
+      24        600.4      1842.7   3.07x
+      28        572.7      1860.2   3.25x
+      32        564.4      1876.0   3.32x
 ```
 
-Stock v6 peaks at 12 to 14 threads because every nonce drags an 8 MB pad
-through the cache hierarchy, so past about twelve threads the extra workers only
-fight each other for L3 and memory bandwidth.
+**Unscreened peaks at 12 threads and falls monotonically. Screened climbs all
+the way to 32** and is still climbing where the machine runs out of logical
+cores.
 
-**Screening changes what a thread mostly does.** At 2.2% acceptance roughly 98%
-of nonces end at the estimate, which touches one salt iteration and walks 512
-program slots with no registers, no memory and no pad. That work is small and
-cache-light, so it scales with core count the way the full hash does not. The
-machine stops being bandwidth-bound and starts being compute-bound, and the
-optimum moves from 12 threads to 24.
+The mechanism: stock v6 drags an 8 MB pad through the cache hierarchy on every
+nonce, so past about twelve threads the extra workers only contend for L3 and
+memory bandwidth. At 2.2% acceptance roughly 98% of nonces end at the estimate,
+which touches one salt iteration and walks 512 program slots with no registers,
+no memory and no pad. Screening converts a bandwidth-bound workload into a
+compute-bound one, and compute-bound work scales with cores.
 
-The 12-thread live figure, 1.52 to 1.62 kH/s, agrees with the 1605 H/s measured
-on the offline rig, so the two environments line up before the thread sweep
-diverges from it.
+Best against best: **733.4 to 1876.0, 2.56x**, against 2.18x if both are held at
+twelve threads. So **roughly a sixth of screening's value is unavailable unless
+the thread count is retuned.**
 
-**The lesson, and it generalises past this one case: an optimisation that
-changes a workload's resource profile also changes its optimal configuration,
-and measuring it at the old configuration understates it.** Every number in this
-log above this line was taken at 12 threads because that was right for stock v6.
-The screening figure of 2.17x is therefore a floor, not the result.
+Two independent cross-checks, both clean:
 
-For v8: when a defence is evaluated against an attack, the attack must be
-measured at **the attacker's** best configuration, not the defender's. An
-attacker retunes; a design gate that holds the thread count fixed will report a
-smaller threat than exists.
+- The 12-thread ratio here is 2.18x; the separate interleaved threshold sweep
+  measured 2.17x for the same configuration.
+- Live NervaOne on the same machine reported 1.82 to 1.89 kH/s at 24 threads
+  and 1.83 to 1.89 at 30; this rig gives 1842.7 at 24 and 1860.2 at 28.
 
-**Open risk at high thread counts.** Each thread wants its own 8 MB pad on huge
-pages, and at 24 to 30 threads that is 192 to 240 MB of large-page allocations
-on top of the 236 MB block cache. `allocate_hugepage` falls back to malloc
-silently per thread, and the miner logs the tier for **thread 0 only**
-(`miner.cpp`, guarded by `th_local_index == 0`); the per-thread detail is at
-debug level. So some threads could be on normal pages at high counts with
-nothing visible saying so. Worth confirming before trusting a high-thread
-number, and worth fixing by reporting the worst tier across threads rather than
-thread 0's.
+**The rule for v8: measure an attack at the attacker's best configuration, not
+the defender's.** An attacker retunes. A design gate that holds thread count
+fixed at the stock optimum would have reported 2.18x for an attack worth 2.56x.
+
+#### A method error worth keeping, because it nearly stood
+
+The first version of this sweep changed thread count with
+`stop_mining`/`start_mining` inside one daemon, to avoid restart variance. That
+introduced a worse bias:
+
+```
+unscreened, fresh daemon          709.3 H/s
+unscreened, after mining restart  613.1        -13.6%
+screened,  fresh daemon          1388.6
+screened,  after mining restart  1392.2         -0.3%
+```
+
+The penalty lands on pad-heavy work and not on screened work, so the
+denominators were depressed and the numerators were not, inflating every ratio.
+It also moved the apparent unscreened peak from 12 threads to 16. Both report
+huge pages and neither warns, so it is not a page-tier fallback; reallocated
+pads simply do not perform like the originals, which is worth knowing
+independently.
+
+What exposed it was a 15% disagreement between this sweep's 12-thread baseline
+and earlier sweeps' 733 to 739. That gap was within shouting distance of
+"drift", and calling it drift would have shipped the wrong table.
+
+**Rule 6: an optimisation to the measurement method is a change that needs
+measuring, exactly like a change to the thing being measured.** Removing a
+safeguard because it looks unnecessary is the same class of mistake as keeping
+a workaround after its cause is gone.
 
 ### Where this leaves the project
 
@@ -506,12 +526,15 @@ Each row at its own best thread count, which is the only fair way to compare
 once the optimum moves:
 
 ```
-stock, 12 threads                     597.6 H/s
-+ fused pad init, 12 threads            661.0      1.11x
-+ run-ahead salt, 12 threads            711.0      1.19x
-+ screening at 2.2%, 12 threads        1605.3      2.69x
-+ retuned to 24 threads                ~1855       3.10x
+stock, 12 threads                      597.6 H/s
++ fused pad init, 12 threads             661.0      1.11x
++ run-ahead salt, 12 threads             711.0      1.19x
++ screening at 2.2%, 12 threads         1605.3      2.69x
++ retuned to 32 threads                 1876.0      3.14x
 ```
+
+Live through NervaOne on the same machine, 24 to 30 threads: 1.82 to 1.89 kH/s,
+which agrees with the rig.
 
 Against the published v6 progression on a comparable machine (his 5900X stock
 558 H/s against this 7950X's 597.6), his figure after the same two steps,
