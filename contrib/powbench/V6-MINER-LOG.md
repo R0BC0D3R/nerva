@@ -652,6 +652,65 @@ fell. All harnesses now pass `--fixed-difficulty 100000000`.
 **The plan file written at the start of this project said to do exactly that.**
 It was not done, and was not noticed for a full day.
 
+### Second machine: an i7-7700HQ laptop, 4 cores, 256 KB L2
+
+Measured live through NervaOne against a synced mainnet node, so a different
+CPU, a different generation and a real chain rather than the offline copy.
+
+```
+stock v0.3.0.0        2t 47.5   4t 73.0   6t 88.0   7t 93.0
+final, threshold 4    2t 144.5  4t 263.5  6t 325.0  7t 373.0   8t 394.0
+
+7 threads, threshold sweep
+  thr  0    105.0     (fused pad init + run-ahead salt only)
+  thr  2    344.5
+  thr  4    373.0
+  thr  8    385.5     best of those tested, still rising
+  thr  8 + --mining-screen-batch   400.5
+```
+
+```
+stock, 7 threads                     93.0 H/s
++ fused pad init, run-ahead salt    105.0     1.13x
++ screening (thr 8)                 385.5     4.15x
++ eight-wide screen                 400.5     4.31x
+```
+
+**4.31x on the laptop against 3.82x on the 7950X.** Screening alone is 3.67x
+there (105 to 385.5) against 3.11x here.
+
+#### A prediction that was half wrong, and the model it fixes
+
+Written before the data: *the optimum threshold will be tighter than 4 on the
+laptop, and screening will be worth more.*
+
+The second half holds. **The first half is wrong: the optimum is looser, 8 or
+above.**
+
+The error was treating the screen as pure compute. It is not: the salt prefix
+does **four random reads into a 236 MB block cache**, which are DRAM-latency
+bound. The laptop has worse latency and far less cache, so the screen is
+relatively *more* expensive there, and screening harder stops paying sooner.
+The hash's bandwidth sensitivity was modelled correctly and the screen's memory
+component was left out of the model entirely.
+
+Consequence worth carrying: **the optimal threshold is a machine property and
+has to be swept per machine.** It is not a constant of the algorithm, and the
+default in the help text is right only for the machine it was measured on.
+
+#### The eight-wide screen is vindicated on low core counts
+
+`--mining-screen-batch` gives **+3.9%** here (385.5 to 400.5), matching the +5%
+at 8 threads measured on the 7950X and dismissed at the time as one
+uncontrolled point. Two machines, two generations, same direction.
+
+So the earlier negative result stands as stated but is incomplete: the eight-
+wide screen is worth nothing at 30 threads and worth about 4% at 7 to 8. The
+transposed per-lane state costs roughly what the vectorisation saves, and which
+side wins depends on how much cache pressure the machine is already under. Off
+by default remains right for the 7950X and wrong for the laptop, which is what
+the flag is for.
+
 ### Where this leaves the project
 
 Each row at its own best thread count, which is the only fair way to compare
