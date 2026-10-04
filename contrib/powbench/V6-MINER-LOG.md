@@ -667,6 +667,10 @@ final, threshold 4    2t 144.5  4t 263.5  6t 325.0  7t 373.0   8t 394.0
   thr  4    373.0
   thr  8    385.5     best of those tested, still rising
   thr  8 + --mining-screen-batch   400.5
+
+8 threads, with --mining-screen-batch
+  thr 14    413.5     peak
+  thr 24    388.5
 ```
 
 ```
@@ -674,7 +678,13 @@ stock, 7 threads                     93.0 H/s
 + fused pad init, run-ahead salt    105.0     1.13x
 + screening (thr 8)                 385.5     4.15x
 + eight-wide screen                 400.5     4.31x
++ thr 14, 8 threads                 413.5     4.45x
 ```
+
+**The optimum threshold is 14 on the laptop against 4 on the 7950X**, 3.5x
+looser, which is the machine dependence the corrected model above predicts: the
+screen's four random block-cache reads cost more on a machine with worse latency
+and less cache, so screening hard stops paying sooner.
 
 **4.31x on the laptop against 3.82x on the 7950X.** Screening alone is 3.67x
 there (105 to 385.5) against 3.11x here.
