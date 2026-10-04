@@ -87,8 +87,13 @@ void cn_vm_execute(cn_vm_program_t *prog, uint8_t *scratchpad, uint64_t regs[CN_
 
 /* Cheap estimate of what a nonce's program will cost, without registers, memory
  * or a pad. Mining only: it chooses which nonces to hash and never affects a
- * hash that is computed. Lower is cheaper. See the comment on the definition. */
-uint32_t cn_vm_screen_cost(const uint8_t seed[32]);
+ * hash that is computed. Lower is cheaper.
+ *
+ * Stops early once the count passes `limit` and returns something above it,
+ * since the count cannot come back down; the result is then a verdict rather
+ * than a measurement. Pass UINT32_MAX for the exact count. See the comment on
+ * the definition. */
+uint32_t cn_vm_screen_cost(const uint8_t seed[32], uint32_t limit);
 
 #ifdef __cplusplus
 }

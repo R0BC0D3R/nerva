@@ -176,7 +176,8 @@ int main(int argc, char **argv)
     char h[HASH_SIZE];
     uint32_t *est;
     double *ht;
-    double t0, t_screen_total = 0.0, t_saltfull_total = 0.0;
+    double t0, t_screen_total = 0.0, t_screen_ee_total = 0.0, t_saltfull_total = 0.0;
+    const uint32_t ee_limit = 37;   /* the measured optimum threshold */
     uint64_t i;
     int n, bad = 0;
 
@@ -204,7 +205,23 @@ int main(int argc, char **argv)
     for (n = 0; n < 2000; n++)
     {
         for (i = 0; i < 32; i++) seed[i] = (unsigned char)(n * 31 + i * 7 + 1);
-        if (cn_vm_screen_cost(seed) != screen_reference(seed)) { bad = 1; break; }
+        {
+            const uint32_t exact = cn_vm_screen_cost(seed, UINT32_MAX);
+            if (exact != screen_reference(seed)) { bad = 1; break; }
+            /* Early exit must not change the verdict at any threshold: the
+             * count only rises, so (early <= T) must equal (exact <= T). */
+            {
+                static const uint32_t thr[6] = { 0, 14, 37, 130, 200, 400 };
+                int t;
+                for (t = 0; t < 6; t++)
+                {
+                    const uint32_t early = cn_vm_screen_cost(seed, thr[t]);
+                    if ((early <= thr[t]) != (exact <= thr[t])) { bad = 2; break; }
+                    if (early <= thr[t] && early != exact) { bad = 3; break; }
+                }
+                if (bad) break;
+            }
+        }
     }
     if (bad) { printf("MISMATCH: lazy screen disagrees with full generation at %d\n", n); return 1; }
     printf("lazy screen matches full generation over 2000 programs\n");
@@ -222,8 +239,18 @@ int main(int argc, char **argv)
         HC128_Init(&rng, bh, bh + 16);
         salt_prefix(&rng, prefix);
         for (i = 0; i < 32; i++) seed[i] = bh[i] ^ prefix[i];
-        est[n] = cn_vm_screen_cost(seed);
+        est[n] = cn_vm_screen_cost(seed, UINT32_MAX);
         t_screen_total += now_s() - t0;
+
+        /* The same screen as a miner would really run it, stopping as soon as
+         * the verdict is settled. Same fixed prefix work, so the difference is
+         * the walk and the slot generation it drives. */
+        t0 = now_s();
+        HC128_Init(&rng, bh, bh + 16);
+        salt_prefix(&rng, prefix);
+        for (i = 0; i < 32; i++) seed[i] = bh[i] ^ prefix[i];
+        (void)cn_vm_screen_cost(seed, ee_limit);
+        t_screen_ee_total += now_s() - t0;
 
         t0 = now_s();
         HC128_Init(&rng, bh, bh + 16);
@@ -237,7 +264,8 @@ int main(int argc, char **argv)
     }
 
     {
-        const double t_screen = t_screen_total / nonces;
+        const double t_screen = t_screen_ee_total / nonces;
+        const double t_screen_full = t_screen_total / nonces;
         const double t_salt   = t_saltfull_total / nonces;
         double sum = 0.0;
         uint32_t *sorted = (uint32_t *)malloc(sizeof(uint32_t) * nonces);
@@ -247,7 +275,9 @@ int main(int argc, char **argv)
         memcpy(sorted, est, sizeof(uint32_t) * nonces);
         qsort(sorted, nonces, sizeof(uint32_t), cmp_u32);
 
-        printf("\nscreen        %7.1f us   (keccak + init + one salt iteration + walk)\n", t_screen * 1e6);
+        printf("\nscreen, full walk    %7.1f us   (keccak + init + one salt iteration + walk)\n", t_screen_full * 1e6);
+        printf("screen, early exit   %7.1f us   at limit %u, %.0f%% cheaper\n",
+               t_screen * 1e6, ee_limit, 100.0 * (1.0 - t_screen / t_screen_full));
         printf("full salt     %7.1f us\n", t_salt * 1e6);
         printf("hash          %7.2f ms mean\n", sum / nonces * 1e3);
         printf("estimate      min %u  p50 %u  p99 %u  max %u\n",

@@ -520,18 +520,85 @@ measuring, exactly like a change to the thing being measured.** Removing a
 safeguard because it looks unnecessary is the same class of mistake as keeping
 a workaround after its cause is gone.
 
+### Early exit in the screen: +21%, mostly by moving the optimum
+
+His section 2 notes "early exit once predicted memops pass the threshold (~40%
+fewer slots)". The walk's count only ever rises, so once it passes the caller's
+limit the verdict is settled and the rest of the walk, and the lazy slot
+generation it drives, is wasted. Rejected nonces are the overwhelming majority,
+so that is where the screen's cost lives.
+
+Measured: **screen 11.3 us to 7.9 us, 30% cheaper.**
+
+Verified rather than argued: over 2000 programs, early exit gives the same
+accept/reject verdict at every threshold tested and the same exact count
+whenever the nonce is accepted.
+
+The throughput gain is larger than the screen saving, because **a cheaper screen
+moves the optimum**. Before early exit, tighter thresholds lost on estimate
+overhead: threshold 14 scored 1392 against 1599 at threshold 37. After it, the
+whole curve shifts left.
+
+Threshold sweep, 30 threads, baseline interleaved between every point:
+
+```
+  threshold   acceptance      H/s
+          3       0.34%     2274.0
+          4       0.41%     2280.2    <- peak
+          6       0.56%     2267.4
+          8       0.71%     2238.3
+         14       1.07%     2137.3
+         24       1.63%     2011.7
+         37       2.12%     1883.4
+         60       2.57%     1774.2
+```
+
+**1876 to 2280 H/s, +21%**, from a change that only made the estimate 30%
+cheaper. The optimum moved from threshold 37 at 2.1% acceptance to threshold 4
+at 0.41%.
+
+The 30-thread cap costs nothing: threshold 8 reads 2238.3 at 30 threads against
+2233.8 at 32. The machine is a workstation, not a mining rig, so harnesses are
+capped at 30 of 32 logical threads.
+
+#### What this says about where the cost now sits
+
+The curve is flat between thresholds 3 and 6, which means the screen itself has
+become the wall. At 0.41% acceptance a miner runs about **244 screens per
+accepted nonce**, so at 7.9 us each that is ~1.9 ms of screening against roughly
+3 ms for the accepted hash. **Screening is now about 40% of the work.**
+
+That reverses an earlier judgement in this log. When the screen was 5% of the
+time, cutting its cost looked worth about 4% and was deprioritised. At 0.41%
+acceptance the same work is worth far more, and it compounds, because each
+reduction moves the optimum tighter again. The published figures for the screen
+path are 43k to 8.6k cycles, about 5x, via four-way AVX2 Keccak, eight-lane
+AVX2 HC-128 init, a faster lazy generator and prefetched picks.
+
+**The eight-lane init is already built and verified here at 2.55x**, and
+batching the *screen* eight-wide is far less invasive than batching the hash:
+the screen is a pure function of the blob and never touches the pad, so the hash
+path can stay scalar.
+
 ### Where this leaves the project
 
 Each row at its own best thread count, which is the only fair way to compare
 once the optimum moves:
 
+Each row at its own best configuration, with the thread count stated, because
+the optimum moves as the work changes:
+
 ```
-stock, 12 threads                      597.6 H/s
-+ fused pad init, 12 threads             661.0      1.11x
-+ run-ahead salt, 12 threads             711.0      1.19x
-+ screening at 2.2%, 12 threads         1605.3      2.69x
-+ retuned to 32 threads                 1876.0      3.14x
+stock,                     12 threads            597.6 H/s
++ fused pad init,          12 threads              661.0      1.11x
++ run-ahead salt,          12 threads              711.0      1.19x
++ screening (thr 37),      12 threads             1605.3      2.69x
++ retuned,                 32 threads             1876.0      3.14x
++ screen early exit (thr 4), 30 threads           2280.2      3.82x
 ```
+
+Best unscreened is 733.4 H/s at 12 threads, so screening and its retuning are
+worth **3.11x** on their own.
 
 Live through NervaOne on the same machine, 24 to 30 threads: 1.82 to 1.89 kH/s,
 which agrees with the rig.

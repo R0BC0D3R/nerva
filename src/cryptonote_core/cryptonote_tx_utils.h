@@ -158,8 +158,8 @@ namespace cryptonote
    * Mining only. It never produces or alters a hash: it decides which nonces
    * are worth hashing, and a miner may try whatever nonces it likes. The
    * verification path must never use it. */
-  uint32_t screen_block_nonce_v13(crypto::cn_hash_context_t *context, cryptonote::BlockchainDB &db, const blobdata &blob, uint64_t height);
-  uint32_t screen_block_nonce_v13(crypto::cn_hash_context_t *context, cryptonote::Blockchain *bc, const block &b, uint64_t height);
+  uint32_t screen_block_nonce_v13(crypto::cn_hash_context_t *context, cryptonote::BlockchainDB &db, const blobdata &blob, uint64_t height, uint32_t limit);
+  uint32_t screen_block_nonce_v13(crypto::cn_hash_context_t *context, cryptonote::Blockchain *bc, const block &b, uint64_t height, uint32_t limit);
 
   bool get_block_longhash_v11(crypto::cn_hash_context_t *context, cryptonote::BlockchainDB &db, const blobdata &blob, crypto::hash &res, uint64_t height);
   bool get_block_longhash_v10(crypto::cn_hash_context_t *context, cryptonote::BlockchainDB &db, const blobdata &blob, crypto::hash &res, uint64_t height);

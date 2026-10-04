@@ -901,7 +901,7 @@ namespace cryptonote
       // 1/4096 of a salt plus a register-free walk of the program.
       if (m_screen_threshold != 0 && b.major_version == 13)
       {
-        if (screen_block_nonce_v13(hash_context, m_pbc, b, height) > m_screen_threshold)
+        if (screen_block_nonce_v13(hash_context, m_pbc, b, height, m_screen_threshold) > m_screen_threshold)
         {
           ++m_screened_out;
           nonce += m_threads_total;

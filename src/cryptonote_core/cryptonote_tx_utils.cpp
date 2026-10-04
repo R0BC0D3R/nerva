@@ -669,15 +669,15 @@ namespace cryptonote
   static constexpr uint64_t CN_SEED_MIN_HEIGHT = CN_SEED_STABLE_DEPTH + CN_SEED_BACKREACH;
   //---------------------------------------------------------------
   //---------------------------------------------------------------
-  uint32_t screen_block_nonce_v13(crypto::cn_hash_context_t *context, Blockchain *bc, const block &b, uint64_t height)
+  uint32_t screen_block_nonce_v13(crypto::cn_hash_context_t *context, Blockchain *bc, const block &b, uint64_t height, uint32_t limit)
   {
     if (b.major_version != 13)
       return 0;                               // not screenable, so never skipped
     const blobdata blob = get_block_hashing_blob(b);
-    return screen_block_nonce_v13(context, bc->get_db(), blob, height);
+    return screen_block_nonce_v13(context, bc->get_db(), blob, height, limit);
   }
   //---------------------------------------------------------------
-  uint32_t screen_block_nonce_v13(crypto::cn_hash_context_t *context, BlockchainDB &db, const blobdata &blob, uint64_t height)
+  uint32_t screen_block_nonce_v13(crypto::cn_hash_context_t *context, BlockchainDB &db, const blobdata &blob, uint64_t height, uint32_t limit)
   {
     if (height < CN_SEED_MIN_HEIGHT)
       return UINT32_MAX;                      // unavailable, so do not skip
@@ -701,7 +701,7 @@ namespace cryptonote
     for (int i = 0; i < 32; i++)
       seed[i] = hash_bytes[i] ^ salt_bytes[i];
 
-    return cn_vm_screen_cost(seed);
+    return cn_vm_screen_cost(seed, limit);
   }
   //---------------------------------------------------------------
   bool get_block_longhash_v13(crypto::cn_hash_context_t *context, BlockchainDB &db, const blobdata &blob, crypto::hash &res, uint64_t height)

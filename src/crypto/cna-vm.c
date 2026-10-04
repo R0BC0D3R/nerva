@@ -114,10 +114,11 @@ void cn_vm_generate_program(cn_vm_program_t *prog, const uint8_t seed[32])
  * about 67 of 512 slots, so generating only as far as the highest slot it
  * actually needs is where most of the saving is.
  *
- * Returns the number of scratchpad operations the walk lands on. Lower is
+ * Returns the number of scratchpad operations the walk lands on, or stops and
+ * returns a value above `limit` as soon as the count passes it. Lower is
  * cheaper. contrib/powbench/screen.c measures the correlation against real
  * hash cost at r = 0.88 to 0.95. */
-uint32_t cn_vm_screen_cost(const uint8_t seed[32])
+uint32_t cn_vm_screen_cost(const uint8_t seed[32], uint32_t limit)
 {
     const int pc_mask = CN_PROGRAM_SIZE - 1;
     cn_vm_instruction_t slots[CN_PROGRAM_SIZE];
@@ -145,7 +146,15 @@ uint32_t cn_vm_screen_cost(const uint8_t seed[32])
         ins = &slots[slot];
 
         if (ins->op == CN_OP_SP_READ || ins->op == CN_OP_SP_WRITE)
-            memops++;
+        {
+            /* The count only ever rises, so once it passes the caller's limit
+             * the verdict is already settled and the rest of the walk, and the
+             * slot generation it would drive, is wasted. Rejected nonces are
+             * the overwhelming majority, so this is where the screen's cost
+             * actually goes. Pass UINT32_MAX to get the exact count. */
+            if (++memops > limit)
+                return memops;
+        }
 
         if (ins->op == CN_OP_CBRANCH)
             pc = (pc + (int)((int8_t)ins->shift) + CN_PROGRAM_SIZE) & pc_mask;
