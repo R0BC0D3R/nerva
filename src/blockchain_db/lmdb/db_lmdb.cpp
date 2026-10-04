@@ -33,6 +33,9 @@
 #include <boost/circular_buffer.hpp>
 #include <memory>  // std::unique_ptr
 #include <cstring>  // memcpy
+#include <cstdlib> // getenv, for the salt self-check
+#include <atomic>
+#include <vector>
 
 #include "string_tools.h"
 #include "file_io_utils.h"
@@ -2752,66 +2755,56 @@ void BlockchainLMDB::get_cna_v5_data(char *out, HC128_State *rng_state, uint64_t
   }
 }
 
-void BlockchainLMDB::get_cna_v6_data(char *out, HC128_State *rng_state, uint64_t height)
+/* The salt loop exactly as it stood before the run-ahead rewrite, kept so the
+ * rewrite can be checked against it on real chain data rather than only in a
+ * standalone harness. Set NERVA_SALT_SELFCHECK=1 and the first calls compute
+ * both and compare all 256 KB plus the final cipher state. Off by default and
+ * then costs one predictable branch per salt. */
+static void cna_v6_data_reference(const block_cache_data *cache, uint64_t height,
+                                  uint64_t window_size, uint64_t window_base,
+                                  HC128_State *rng_state, char *out)
 {
-  CHECK_AND_ASSERT_MES(height > 0, , "get_cna_v6_data called with height == 0");
-  // Sliding window variant of get_cna_v5_data: 95% of block reads are biased
-  // to the most recent CNA_V6_WINDOW_BLOCKS blocks (~5.6 MB), which fits in L3
-  // and reduces post-HF13 sync time regardless of chain length.  The remaining
-  // ~5% draw from the full history to preserve pool resistance.
-  build_block_cache(height);
-  boost::shared_lock<boost::shared_mutex> cache_lock(m_block_cache_lock);
-  const uint64_t window_size = (height > (uint64_t)CNA_V6_WINDOW_BLOCKS) ? (uint64_t)CNA_V6_WINDOW_BLOCKS : height;
-  const uint64_t window_base = height - window_size;
-
-  const block_cache_data *bi;
   size_t rng_key_idx = 0;
-
-  // A dedicated selector byte precedes each index pick; consecutive HC128
-  // outputs are cryptographically independent so selector and index are uncorrelated.
   auto pick_index = [&]() -> uint64_t {
     if (HC128_U32(rng_state, &rng_key_idx, 256) < CNA_V6_FULL_HISTORY_ODDS)
       return HC128_U32(rng_state, &rng_key_idx, height);
     return window_base + HC128_U32(rng_state, &rng_key_idx, window_size);
   };
+  const block_cache_data *bi;
   unsigned char msg[64];
   size_t msgpos;
   unsigned char *optr = (unsigned char*)out;
   uint64_t count = 0;
-  while (count < 2048)
-  {
-    HC128_NextKeys(rng_state);
 
-    for (size_t k = 0; k < 16; k++) {
-        bi = &m_block_cache[pick_index()];
-        std::memcpy(msg, bi->hash.data, sizeof(crypto::hash));
-        msgpos = sizeof(crypto::hash);
-
-        bi = &m_block_cache[pick_index()];
-        std::memcpy(msg + msgpos, &(bi->timestamp), sizeof(uint64_t));
-        msgpos += sizeof(uint64_t);
-
-        bi = &m_block_cache[pick_index()];
-        std::memcpy(msg + msgpos, &(bi->diff_lo), sizeof(uint64_t));
-        msgpos += sizeof(uint64_t);
-
-        bi = &m_block_cache[pick_index()];
-        std::memcpy(msg + msgpos, &(bi->coins), sizeof(uint64_t));
-        msgpos += sizeof(uint64_t);
-
-        std::memcpy(msg + msgpos, &count, sizeof(uint64_t));
-
-        HC128_EncryptMessage(rng_state, msg, optr, sizeof(msg));
-        optr += 16 * sizeof(uint32_t);
-
-        count++;
-    }
-
-    // Reseed, but don't reset the RNG key index, making the next used key
-    // effectively random at the start of each loop iteration (except the first)
+  auto body = [&]() {
+    bi = &cache[pick_index()];
+    std::memcpy(msg, bi->hash.data, sizeof(crypto::hash));
+    msgpos = sizeof(crypto::hash);
+    bi = &cache[pick_index()];
+    std::memcpy(msg + msgpos, &(bi->timestamp), sizeof(uint64_t));
+    msgpos += sizeof(uint64_t);
+    bi = &cache[pick_index()];
+    std::memcpy(msg + msgpos, &(bi->diff_lo), sizeof(uint64_t));
+    msgpos += sizeof(uint64_t);
+    bi = &cache[pick_index()];
+    std::memcpy(msg + msgpos, &(bi->coins), sizeof(uint64_t));
+    msgpos += sizeof(uint64_t);
+    std::memcpy(msg + msgpos, &count, sizeof(uint64_t));
+    HC128_EncryptMessage(rng_state, msg, optr, sizeof(msg));
+    optr += 16 * sizeof(uint32_t);
+    count++;
+  };
+  auto reseed = [&]() {
     unsigned char *iv = optr - (8 * 16 * sizeof(uint32_t)) + HC128_U32(rng_state, &rng_key_idx, (8 * 16 * sizeof(uint32_t)) - 16);
     unsigned char *key = optr - (16 * 16 * sizeof(uint32_t)) + HC128_U32(rng_state, &rng_key_idx, (8 * 16 * sizeof(uint32_t)) - 16);
     HC128_Init(rng_state, key, iv);
+  };
+
+  while (count < 2048)
+  {
+    HC128_NextKeys(rng_state);
+    for (size_t k = 0; k < 16; k++) body();
+    reseed();
   }
 
   std::memcpy(msg, optr - 131072 + HC128_U32(rng_state, &rng_key_idx, 131072U - 16U), 16);
@@ -2824,30 +2817,118 @@ void BlockchainLMDB::get_cna_v6_data(char *out, HC128_State *rng_state, uint64_t
   while (count < 4096)
   {
     HC128_NextKeys(rng_state);
+    for (size_t k = 0; k < 16; k++) body();
+    reseed();
+  }
+}
 
-    for (size_t k = 0; k < 16; k++) {
-        bi = &m_block_cache[pick_index()];
-        std::memcpy(msg, bi->hash.data, sizeof(crypto::hash));
-        msgpos = sizeof(crypto::hash);
 
-        bi = &m_block_cache[pick_index()];
-        std::memcpy(msg + msgpos, &(bi->timestamp), sizeof(uint64_t));
-        msgpos += sizeof(uint64_t);
+void BlockchainLMDB::get_cna_v6_data(char *out, HC128_State *rng_state, uint64_t height)
+{
+  CHECK_AND_ASSERT_MES(height > 0, , "get_cna_v6_data called with height == 0");
+  // Sliding window variant of get_cna_v5_data: 95% of block reads are biased
+  // to the most recent CNA_V6_WINDOW_BLOCKS blocks (~5.6 MB), which fits in L3
+  // and reduces post-HF13 sync time regardless of chain length.  The remaining
+  // ~5% draw from the full history to preserve pool resistance.
+  build_block_cache(height);
+  boost::shared_lock<boost::shared_mutex> cache_lock(m_block_cache_lock);
+  const uint64_t window_size = (height > (uint64_t)CNA_V6_WINDOW_BLOCKS) ? (uint64_t)CNA_V6_WINDOW_BLOCKS : height;
+  const uint64_t window_base = height - window_size;
 
-        bi = &m_block_cache[pick_index()];
-        std::memcpy(msg + msgpos, &(bi->diff_lo), sizeof(uint64_t));
-        msgpos += sizeof(uint64_t);
+  size_t rng_key_idx = 0;
 
-        bi = &m_block_cache[pick_index()];
-        std::memcpy(msg + msgpos, &(bi->coins), sizeof(uint64_t));
-        msgpos += sizeof(uint64_t);
+  // A dedicated selector byte precedes each index pick; consecutive HC128
+  // outputs are cryptographically independent so selector and index are uncorrelated.
+  auto pick_index = [&]() -> uint64_t {
+    if (HC128_U32(rng_state, &rng_key_idx, 256) < CNA_V6_FULL_HISTORY_ODDS)
+      return HC128_U32(rng_state, &rng_key_idx, height);
+    return window_base + HC128_U32(rng_state, &rng_key_idx, window_size);
+  };
 
-        std::memcpy(msg + msgpos, &count, sizeof(uint64_t));
+  static const bool selfcheck = (getenv("NERVA_SALT_SELFCHECK") != NULL);
+  static std::atomic<int> selfcheck_left(64);
+  HC128_State rng_before, rng_after_ref;
+  std::vector<char> ref_out;
+  const bool do_check = selfcheck && selfcheck_left.fetch_sub(1) > 0;
+  if (do_check)
+  {
+    rng_before = *rng_state;
+    ref_out.resize(CN_SALT_MEMORY);
+    cna_v6_data_reference(m_block_cache.data(), height, window_size, window_base,
+                          rng_state, ref_out.data());
+    rng_after_ref = *rng_state;
+    *rng_state = rng_before;
+  }
 
-        HC128_EncryptMessage(rng_state, msg, optr, sizeof(msg));
-        optr += 16 * sizeof(uint32_t);
+  unsigned char msg[64];
+  size_t msgpos;
+  unsigned char *optr = (unsigned char*)out;
+  uint64_t count = 0;
 
-        count++;
+  /* Run-ahead over a sixteen-count block.
+   *
+   * HC128_NextKeys advances the cipher independently of the message being
+   * encrypted, and the keystream HC128_U32 consumes is likewise
+   * data-independent, so every pick index and every encrypting keystream for a
+   * block can be produced before a single block-cache entry is read. The reads
+   * then carry no dependency on each other and issue together, instead of one
+   * at a time as they did when this loop interleaved them with the cipher.
+   * That interleaving also evicted P and Q from L1 on every message, which is
+   * why HC128_EncryptMessage used to cost several times what the same sixteen
+   * steps cost inside HC128_Init.
+   *
+   * Only the reseed depends on data that was fetched, because it keys
+   * HC128_Init from the output buffer. That is what sets the block as the
+   * limit of the run-ahead.
+   *
+   * Byte-for-byte identical to the loop it replaces; contrib/powbench has the
+   * harness that shows it, and NERVA_SALT_SELFCHECK below re-checks it here
+   * against real chain data. Measured 1.57x on the salt. Almost all of that is
+   * the restructuring: with prefetching removed entirely it is still 1.53x. */
+  uint64_t idx[16][4];
+  uint32_t ks[16][16];
+
+  auto run_block = [&]() {
+    HC128_NextKeys(rng_state);
+    for (size_t k = 0; k < 16; k++)
+    {
+      for (size_t j = 0; j < 4; j++)
+      {
+        idx[k][j] = pick_index();
+#if defined(__GNUC__)
+        __builtin_prefetch(&m_block_cache[idx[k][j]]);
+#endif
+      }
+      HC128_NextKeys(rng_state);
+      std::memcpy(ks[k], rng_state->keystream, sizeof(ks[k]));
+    }
+    for (size_t k = 0; k < 16; k++)
+    {
+      const block_cache_data *b0 = &m_block_cache[idx[k][0]];
+      const block_cache_data *b1 = &m_block_cache[idx[k][1]];
+      const block_cache_data *b2 = &m_block_cache[idx[k][2]];
+      const block_cache_data *b3 = &m_block_cache[idx[k][3]];
+      std::memcpy(msg, b0->hash.data, sizeof(crypto::hash));
+      msgpos = sizeof(crypto::hash);
+      std::memcpy(msg + msgpos, &(b1->timestamp), sizeof(uint64_t));
+      msgpos += sizeof(uint64_t);
+      std::memcpy(msg + msgpos, &(b2->diff_lo), sizeof(uint64_t));
+      msgpos += sizeof(uint64_t);
+      std::memcpy(msg + msgpos, &(b3->coins), sizeof(uint64_t));
+      msgpos += sizeof(uint64_t);
+      std::memcpy(msg + msgpos, &count, sizeof(uint64_t));
+
+      /* what HC128_EncryptMessage does for a 64-byte message, with the
+       * keystream taken from the run-ahead instead of generated here */
+      for (size_t j = 0; j < 16; j++)
+      {
+        uint32_t w;
+        std::memcpy(&w, msg + j * sizeof(uint32_t), sizeof(uint32_t));
+        w ^= ks[k][j];
+        std::memcpy(optr + j * sizeof(uint32_t), &w, sizeof(uint32_t));
+      }
+      optr += 16 * sizeof(uint32_t);
+      count++;
     }
 
     // Reseed, but don't reset the RNG key index, making the next used key
@@ -2855,6 +2936,33 @@ void BlockchainLMDB::get_cna_v6_data(char *out, HC128_State *rng_state, uint64_t
     unsigned char *iv = optr - (8 * 16 * sizeof(uint32_t)) + HC128_U32(rng_state, &rng_key_idx, (8 * 16 * sizeof(uint32_t)) - 16);
     unsigned char *key = optr - (16 * 16 * sizeof(uint32_t)) + HC128_U32(rng_state, &rng_key_idx, (8 * 16 * sizeof(uint32_t)) - 16);
     HC128_Init(rng_state, key, iv);
+  };
+
+  while (count < 2048)
+    run_block();
+
+  std::memcpy(msg, optr - 131072 + HC128_U32(rng_state, &rng_key_idx, 131072U - 16U), 16);
+  std::memcpy(msg, optr - 131072 + HC128_U32(rng_state, &rng_key_idx, 131072U - 16U), 16);
+  std::memcpy(msg, optr - 131072 + HC128_U32(rng_state, &rng_key_idx, 131072U - 16U), 16);
+  std::memcpy(msg, optr - 131072 + HC128_U32(rng_state, &rng_key_idx, 131072U - 16U), 16);
+  HC128_EncryptMessage(rng_state, msg, optr, sizeof(msg));
+  HC128_Init(rng_state, optr, optr+16);
+
+  while (count < 4096)
+    run_block();
+
+  if (do_check)
+  {
+    if (std::memcmp(ref_out.data(), out, CN_SALT_MEMORY) != 0)
+    {
+      size_t d = 0;
+      while (d < (size_t)CN_SALT_MEMORY && ref_out[d] == out[d]) d++;
+      throw0(DB_ERROR(("get_cna_v6_data run-ahead disagrees with the reference at byte "
+                       + boost::lexical_cast<std::string>(d)).c_str()));
+    }
+    if (std::memcmp(&rng_after_ref, rng_state, sizeof(HC128_State)) != 0)
+      throw0(DB_ERROR("get_cna_v6_data run-ahead leaves a different cipher state"));
+    MGINFO("salt self-check passed at height " << height);
   }
 }
 

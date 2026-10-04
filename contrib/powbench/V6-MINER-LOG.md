@@ -250,6 +250,69 @@ This check is the reason the stage is worth doing at the size it is, rather
 than being abandoned after the init turned out to be a third of the problem. It
 cost one harness and ran while the machine was busy.
 
+### Run-ahead: measured +7.6% on the daemon, and a prediction that missed
+
+```
+A1  stage 0            n=11  mean  659.4  min  651  max  666 H/s   [huge pages]
+B1  + run-ahead salt   n=12  mean  712.5  min  706  max  722 H/s   [huge pages]
+B2  + run-ahead salt   n=12  mean  709.5  min  698  max  720 H/s   [huge pages]
+A2  stage 0            n=12  mean  662.6  min  655  max  668 H/s   [huge pages]
+
+A drift +0.5%   stage 0 661.0 H/s   with run-ahead 711.0 H/s   delta +7.6%
+```
+
+No overlap between the two groups, drift well inside tolerance, every run on
+huge pages, one daemon per run enforced.
+
+**The prediction was +17% and the result was +7.6%.** The error was not in the
+salt measurement, which stands at 1.57x, but in the share of a nonce the salt
+occupies. That was taken as 40%, derived by subtracting a core benchmark from a
+daemon nonce time of 39.6 ms. **That 39.6 ms came from the contended run**, the
+one where two daemons were splitting the machine. With a correct baseline of
+about 660 H/s at twelve threads the nonce is 18.2 ms, and working backwards
+from the measured +7.6% the salt is **about 19% of a nonce, not 40%**.
+
+That reconciles independently: the standalone harness puts one salt at 1333 us,
+and against a single-threaded nonce of roughly 8 ms that is 17%.
+
+A bad number does not stop being bad when you stop looking at it. The contended
+run was identified and corrected hours earlier, but a figure derived from it had
+already been written down and kept being used.
+
+### What this does to the rest of stage 2
+
+The eight-lane init would take the salt from 1.57x to about 2.48x. At a 19%
+share that is worth:
+
+| | salt | nonce |
+|---|---|---|
+| run-ahead only (done) | 1.57x | +7.6% measured |
+| run-ahead + x8 init | 2.48x | about +12.8% |
+
+So the eight-lane init adds roughly **+5% on top of what is already banked**,
+and it is the change that requires the miner to compute eight nonces at once:
+a restructuring of the miner loop and `get_block_longhash_v13`, with the
+verification path keeping a scalar version. That is the largest integration in
+the project for the smallest measured return in it.
+
+**Recommendation: do not build the eight-nonce batching.** The eight-lane init
+stays in the tree as a verified harness, and if the salt ever becomes a larger
+share of the nonce it is ready.
+
+### Where the time actually is
+
+The salt is 19% of a nonce, so **the hash core is the other 81%**, and that is
+where anything further has to come from. It also means the two stages still
+unbuilt are better targets than the one that was supposed to be the big one:
+
+- Non-temporal stores on the 8 MB fill, which is core work.
+- K-way nonce interleaving of the VM, which targets the dependent pointer
+  chase and is core work.
+
+The report's ordering put the salt first because on his already-optimized miner
+the salt was 59.5% of the nonce. On a stock miner it is 19%. His proportions
+are not ours, and the stage order should follow our profile, not his.
+
 ## What has already failed
 
 **Computed-goto dispatch in `cn_vm_execute`: +0.5%, i.e. nothing.** Predicted 5
