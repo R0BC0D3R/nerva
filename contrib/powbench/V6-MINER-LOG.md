@@ -414,6 +414,51 @@ than one of twelve. Most likely the synthetic 236 MB cache evicts the pad harder
 than the real block cache does, which would inflate both the mean and the spread
 the screen feeds on. The daemon sweep settles it.
 
+### Measured on the daemon: 2.17x
+
+Nine runs, threshold 0 interleaved between every screened run so each one is
+compared against its own neighbours. Every run on huge pages, one daemon
+enforced, acceptance read back from the daemon's own log.
+
+```
+  threshold   acceptance    H/s     local baseline   vs baseline   bracket drift
+          0            -    739.1            -             -
+         14        1.12%   1392.4          740.0         1.88x           0.3%
+         37        2.21%   1605.3          741.1         2.17x           0.1%
+        130        3.96%   1397.5          733.1         1.91x           2.1%
+        200        9.98%   1098.1          732.4         1.50x           1.9%
+```
+
+The five baselines came back 738.8, 741.3, 740.9, 725.3, 739.4, so the machine
+was stable throughout and the brackets are tight.
+
+**Peak 2.17x at 2.2% acceptance**, where the estimate's cost and the saving it
+buys balance. The curve has a maximum rather than rising forever, because at
+tighter thresholds the miner pays `1/q` estimates per accepted nonce: at 1.12%
+acceptance the estimate overhead has already pulled the result back down to
+1.88x.
+
+**The standalone harness said 3.88x at the same acceptance and was wrong by
+1.8x**, exactly as suspected when its single-threaded nonce time came out slower
+than the daemon's per-thread time. Its synthetic 236 MB cache evicts the pad
+harder than the real block cache does, which inflates both the mean hash time
+and the spread the screen feeds on. Recorded because the harness was right about
+the shape and wrong about the size, which is the more dangerous kind of wrong.
+
+The published figure for this step is 3.06x. Ours is 2.17x on a less optimised
+pipeline, and by rule 3 that is the expected direction: screening removes a
+share of what varies, so the less the fixed costs have been cut, the smaller
+that share is. Finishing the memory work should move our figure toward his.
+
+### Where this leaves the project
+
+```
+stock (this morning)                597.6 H/s
++ fused pad init                      661.0      1.11x
++ run-ahead salt                      711.0      1.19x
++ nonce screening at 2.2% accept     1605.3      2.69x
+```
+
 ## Lessons for v8
 
 The point of the v6 work. Written as rules, so a future change to v8 can be
@@ -498,6 +543,58 @@ So v8's exposure to that toolkit is roughly the 1.4x of engineering, which rule
 offload of the fill, which does not predict cost but pays it elsewhere, so the
 draw ordering does nothing against it. See F43, and note `CN_SALT_MEMORY` is
 load-bearing there and is not documented as such.
+
+## Measurement rules
+
+Earned the hard way on this project. Each one is here because ignoring it
+produced a confident wrong number.
+
+### Rule 1. When a measurement is invalidated, re-derive everything built on it
+
+Deleting a bad number does not delete what was computed from it. This has now
+cost twice in one day:
+
+- A nonce time of 39.6 ms came from a contended run. The run was identified and
+  discarded, but the salt's 40% share of a nonce, derived from it, stayed in use
+  and produced a prediction of +17% against a measured +7.6%. The true share is
+  19%.
+- An early daemon appeared to read high and then step down, which was the same
+  contention episode. The cause was corrected; the 150-second settle built to
+  work around it was not, and silently cost two minutes per run for the rest of
+  the day. A calibration run later showed the rate is flat from the first
+  sample, 717 to 747 H/s with no trend.
+
+**When a measurement is withdrawn, list what was justified by it and re-check
+each one.** The derived belief outlives the number and is harder to see.
+
+### Rule 2. A measurement whose key diagnostic is missing cannot be debugged
+
+The first screening sweep was uninterpretable because the screened-nonce counter
+existed but was never logged, so there was no acceptance rate to check the
+throughput against. A measurement needs the number being reported *and* the
+number that says whether the mechanism did what it claims.
+
+### Rule 3. Measure the settle, do not inherit it
+
+See rule 1. Settle time is a parameter like any other and costs nothing to
+calibrate once: one cold run sampled every 10 seconds says what it should be.
+
+### Rule 4. Do not touch the machine during a run, including locking it
+
+Locking a Windows session and unlocking it changes power and scheduling state,
+and a run spanning that transition is not comparing like with like. One sweep
+here alternated high and low across runs in a way that tracked run order rather
+than the parameter being swept, and a lock/unlock during it is the most likely
+explanation. The session now stays unlocked for the duration of any
+measurement.
+
+### Rule 5. Know the shape the result should have before reading it
+
+Screened throughput is not monotonic in the threshold: a tighter threshold
+accepts cheaper nonces but pays the estimate more times per accepted nonce, so
+the effective rate has a peak. Calling a non-monotonic result "impossible" was
+wrong; what was actually anomalous was one point, not the shape. Predict the
+shape first, then the deviations stand out instead of the noise.
 
 ## Environment traps
 

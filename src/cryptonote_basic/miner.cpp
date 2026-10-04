@@ -473,6 +473,18 @@ namespace cryptonote
         std::cout << "hashrate: " << std::setprecision(4) << std::fixed << hr << std::setiosflags(flags) << std::setprecision(precision) << ENDL;
       }
     }
+    /* With screening on, the hashrate alone cannot be interpreted: it counts
+     * nonces actually hashed, so it has to be read against how many were
+     * skipped to get it. Logged every merge interval, and only when screening
+     * is enabled. */
+    if (m_screen_threshold != 0)
+    {
+      const uint64_t skipped = m_screened_out.exchange(0, std::memory_order_relaxed);
+      const uint64_t hashed = m_hashes;
+      const uint64_t seen = skipped + hashed;
+      MGINFO("screen: " << hashed << " hashed, " << skipped << " skipped, acceptance "
+             << (seen ? (100.0 * (double)hashed / (double)seen) : 0.0) << "%");
+    }
     m_last_hr_merge_time = misc_utils::get_tick_count();
     m_hashes = 0;
   }
