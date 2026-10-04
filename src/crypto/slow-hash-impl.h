@@ -258,22 +258,31 @@ void cn_slow_hash_v13(cn_hash_context_t *context, const void *data, size_t lengt
     for (i = 0; i < CN_SCRATCHPAD_MEMORY_V13 / init_size_byte; i++)
     {
         aes_pseudo_round(text, text, expandedKey, init_size_blk);
-        memcpy(&hp_state[i * init_size_byte], text, init_size_byte);
-    }
-
-    {
-        uint32_t s_off = 0;
-        uint32_t si;
-        for (si = 0; si < CN_SCRATCHPAD_MEMORY_V13; si += 4)
         {
-            uint32_t sv, sp;
-            memcpy(&sv, (const uint8_t *)salt + s_off, 4);
-            memcpy(&sp, hp_state + si, 4);
-            sp ^= sv;
-            memcpy(hp_state + si, &sp, 4);
-            s_off += 4;
-            if (s_off >= (uint32_t)CN_SALT_MEMORY)
-                s_off = 0;
+            /* Salt folded into the fill's store. The separate pass this
+             * replaces read and wrote all 8 MB a second time purely to XOR the
+             * salt in, so removing it takes 16 MB of traffic off every nonce.
+             * The fold is exact: that pass walked the salt offset forward in
+             * lockstep with the pad offset and wrapped at CN_SALT_MEMORY, so
+             * the salt offset was always the pad offset mod CN_SALT_MEMORY and
+             * depended on nothing else. CN_SALT_MEMORY is 2^18 and
+             * init_size_byte is 128, which divides it, so a block never
+             * straddles the wrap.
+             *
+             * text is left alone on purpose: the AES round above feeds it
+             * back to the next iteration, so it carries the chain. */
+            const uint32_t p_off = (uint32_t)(i * init_size_byte);
+            const uint8_t * const sp = (const uint8_t *)salt + (p_off & (CN_SALT_MEMORY - 1));
+            uint8_t * const dp = &hp_state[p_off];
+            uint32_t k;
+            for (k = 0; k < init_size_byte; k += 8)
+            {
+                uint64_t t, sv;
+                memcpy(&t, text + k, 8);
+                memcpy(&sv, sp + k, 8);
+                t ^= sv;
+                memcpy(dp + k, &t, 8);
+            }
         }
     }
 
@@ -528,22 +537,31 @@ void cn_slow_hash_v13(cn_hash_context_t *context, const void *data, size_t lengt
     {
         for (j = 0; j < init_size_blk; j++)
             aesb_pseudo_round(&text[AES_BLOCK_SIZE * j], &text[AES_BLOCK_SIZE * j], aes_ctx->key->exp_data);
-        memcpy(&hp_state[i * init_size_byte], text, init_size_byte);
-    }
-
-    {
-        uint32_t s_off = 0;
-        uint32_t si;
-        for (si = 0; si < CN_SCRATCHPAD_MEMORY_V13; si += 4)
         {
-            uint32_t sv, sp;
-            memcpy(&sv, (const uint8_t *)salt + s_off, 4);
-            memcpy(&sp, hp_state + si, 4);
-            sp ^= sv;
-            memcpy(hp_state + si, &sp, 4);
-            s_off += 4;
-            if (s_off >= (uint32_t)CN_SALT_MEMORY)
-                s_off = 0;
+            /* Salt folded into the fill's store. The separate pass this
+             * replaces read and wrote all 8 MB a second time purely to XOR the
+             * salt in, so removing it takes 16 MB of traffic off every nonce.
+             * The fold is exact: that pass walked the salt offset forward in
+             * lockstep with the pad offset and wrapped at CN_SALT_MEMORY, so
+             * the salt offset was always the pad offset mod CN_SALT_MEMORY and
+             * depended on nothing else. CN_SALT_MEMORY is 2^18 and
+             * init_size_byte is 128, which divides it, so a block never
+             * straddles the wrap.
+             *
+             * text is left alone on purpose: the AES round above feeds it
+             * back to the next iteration, so it carries the chain. */
+            const uint32_t p_off = (uint32_t)(i * init_size_byte);
+            const uint8_t * const sp = (const uint8_t *)salt + (p_off & (CN_SALT_MEMORY - 1));
+            uint8_t * const dp = &hp_state[p_off];
+            uint32_t k;
+            for (k = 0; k < init_size_byte; k += 8)
+            {
+                uint64_t t, sv;
+                memcpy(&t, text + k, 8);
+                memcpy(&sv, sp + k, 8);
+                t ^= sv;
+                memcpy(dp + k, &t, 8);
+            }
         }
     }
 
