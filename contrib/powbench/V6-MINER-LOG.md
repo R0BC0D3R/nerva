@@ -835,6 +835,88 @@ offload of the fill, which does not predict cost but pays it elsewhere, so the
 draw ordering does nothing against it. See F43, and note `CN_SALT_MEMORY` is
 load-bearing there and is not documented as such.
 
+## Current state, and how to pick this up cold
+
+Branch `perf/v13-fused-pad-init` on remote `robcoder` (R0BC0D3R/nerva). Nothing
+here is proposed for nerva-project.
+
+### Best known configurations
+
+```
+7950X, 16C/32T, 1 MB L2 per core
+  nervad --mining-screen-threshold 4            30 threads   2280.2 H/s   3.82x over stock
+  (--mining-screen-batch is NOT worth it here)
+
+i7-7700HQ, 4C/8T, 256 KB L2
+  nervad --mining-screen-threshold 14 --mining-screen-batch   8 threads   413.5 H/s   4.45x
+```
+
+Binaries used for the A/Bs are under `D:/Claude/v6miner/ab/`. The newest is
+`nervad-final.exe`. They are not in git; rebuild from the branch if they are
+gone. The build directory is keyed on the branch name, so a branch switch sends
+output somewhere else; check the md5, not the path.
+
+### What is built
+
+| | state |
+|---|---|
+| fused pad init | shipped, +7.6% |
+| run-ahead salt | shipped, +7.6% |
+| nonce screening | shipped, `--mining-screen-threshold`, default off |
+| screen early exit | shipped, +21% via moving the optimum |
+| eight-lane HC-128 init | shipped, `HC128_Init_x8`, verified 2.37x |
+| eight-wide screen | shipped, `--mining-screen-batch`, default off; nothing at 30 threads, +4% at 7 to 8 |
+
+### Next, and the design for it
+
+**Recompute-final**, the largest remaining item that needs no JIT. His measured
+gain for the equivalent step was 2233 to 2889, 1.29x, and ours should be better
+because we screen harder.
+
+The case for it, which is the Amdahl check and should be redone if anything
+changes: at threshold 4 an accepted nonce has at most 4 memory operations per
+pass, so roughly 3,700 writes land across 65,536 pad blocks and **about 94% of
+the pad is never written**. The final pass reads all 8 MB of it. Removing ~7.5 MB
+of reads per hash is about 17 GB/s of the ~36 GB/s this machine moves at
+2280 H/s, against ~5.2M added AES operations, roughly 0.6 ms on a ~3.5 ms hash.
+Trading ~17% more compute for about half the memory traffic, at DRAM saturation.
+
+Design:
+
+1. The final pass already runs sequentially, so **no checkpoints are needed**:
+   replay the fill's AES chain in step with it. A clean block is
+   `aes_pseudo_round(text_fill)` XOR `salt[offset mod CN_SALT_MEMORY]`; a dirty
+   one is read from the pad as now.
+2. The VM records which blocks it wrote. `cn_vm_execute` is **also the
+   verification path**, where unscreened nonces do ~588,000 writes per hash and
+   tracking would cost around 5%, so it must be opt-in: a thread-local dirty-map
+   pointer that mining sets and verification leaves null. Null means no tracking
+   and the final pass reads normally, exactly as today.
+3. **`randomize_scratchpad`'s 32 byte-pokes must mark their blocks too.** Easy to
+   miss and it would corrupt the hash silently. The digest harness catches it.
+
+Verify with `contrib/powbench/build-v13-fold.sh` plus `t_v13_fold.c`, 2000
+digests across both AES arms, before measuring anything.
+
+### Then, in order
+
+- **Non-temporal stores on the fill**, his +4%, and worth more now that the two
+  full-pad passes dominate.
+- **K-way nonce interleaving**, his +23%, the largest unbuilt memory item.
+- **Trace JIT (1.48x) and virtual pad (1.51x)**, which are most of the remaining
+  gap to his 7.2x and are weeks of work: an x86-64 emitter, deopt handling,
+  checkpoint replay.
+
+### Open
+
+- The optimal threshold is a machine property; sweep it per machine rather than
+  trusting the default in the help text.
+- The miner reports the page tier for **thread 0 only**; it should report the
+  worst tier across threads. At 24 to 30 threads a per-thread fallback would be
+  invisible.
+- F36's big-endian `e2i` missing `SWAP64LE` is still unfixed, unrelated to this
+  work but noted in FINDINGS.
+
 ## Measurement rules
 
 Earned the hard way on this project. Each one is here because ignoring it
