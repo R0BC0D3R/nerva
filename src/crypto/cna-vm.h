@@ -31,6 +31,10 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // CryptoNight-Adaptive v6 virtual machine for HF13 (pool-resistant + ASIC/GPU-resistant).
 //
 // The VM generates a random program per block from a chain-rooted seed,
@@ -80,3 +84,12 @@ void cn_vm_generate_program(cn_vm_program_t *prog, const uint8_t seed[32]);
 // loops possible).  Call CN_VM_ITERATIONS times with the same prog and
 // evolving regs to accumulate scratchpad mutations.
 void cn_vm_execute(cn_vm_program_t *prog, uint8_t *scratchpad, uint64_t regs[CN_REG_COUNT]);
+
+/* Cheap estimate of what a nonce's program will cost, without registers, memory
+ * or a pad. Mining only: it chooses which nonces to hash and never affects a
+ * hash that is computed. Lower is cheaper. See the comment on the definition. */
+uint32_t cn_vm_screen_cost(const uint8_t seed[32]);
+
+#ifdef __cplusplus
+}
+#endif

@@ -45,6 +45,7 @@ using namespace epee;
 #include "cryptonote_basic/tx_extra.h"
 #include "cryptonote_core/blockchain.h"
 #include "crypto/crypto.h"
+#include "crypto/cna-vm.h"
 #include "crypto/hash.h"
 #include "ringct/rctSigs.h"
 #include "multisig/multisig.h"
@@ -666,6 +667,42 @@ namespace cryptonote
   static constexpr uint64_t CN_SEED_BACKREACH = 255;
   static constexpr uint64_t CN_SEED_STABLE_DEPTH = 256;
   static constexpr uint64_t CN_SEED_MIN_HEIGHT = CN_SEED_STABLE_DEPTH + CN_SEED_BACKREACH;
+  //---------------------------------------------------------------
+  //---------------------------------------------------------------
+  uint32_t screen_block_nonce_v13(crypto::cn_hash_context_t *context, Blockchain *bc, const block &b, uint64_t height)
+  {
+    if (b.major_version != 13)
+      return 0;                               // not screenable, so never skipped
+    const blobdata blob = get_block_hashing_blob(b);
+    return screen_block_nonce_v13(context, bc->get_db(), blob, height);
+  }
+  //---------------------------------------------------------------
+  uint32_t screen_block_nonce_v13(crypto::cn_hash_context_t *context, BlockchainDB &db, const blobdata &blob, uint64_t height)
+  {
+    if (height < CN_SEED_MIN_HEIGHT)
+      return UINT32_MAX;                      // unavailable, so do not skip
+    const uint64_t stable_height = height - 256;
+
+    crypto::hash blob_hash;
+    get_blob_hash(blob, blob_hash);
+
+    HC128_State rng_state;
+    HC128_Init(&rng_state, (unsigned char *)blob_hash.data, (unsigned char *)blob_hash.data + 16);
+
+    // Only the first 64 bytes of the salt are needed, which is one of its 4096
+    // iterations. The program seed is the same combination get_block_longhash_v13
+    // forms, so the estimate is of the program that nonce would really run.
+    char prefix[64];
+    db.get_cna_v6_seed(prefix, &rng_state, stable_height);
+
+    uint8_t seed[32];
+    const uint8_t *salt_bytes = reinterpret_cast<const uint8_t *>(prefix);
+    const uint8_t *hash_bytes = reinterpret_cast<const uint8_t *>(blob_hash.data);
+    for (int i = 0; i < 32; i++)
+      seed[i] = hash_bytes[i] ^ salt_bytes[i];
+
+    return cn_vm_screen_cost(seed);
+  }
   //---------------------------------------------------------------
   bool get_block_longhash_v13(crypto::cn_hash_context_t *context, BlockchainDB &db, const blobdata &blob, crypto::hash &res, uint64_t height)
   {

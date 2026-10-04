@@ -110,6 +110,13 @@ namespace cryptonote
     const command_line::arg_descriptor<uint64_t>    arg_bg_mining_min_idle_interval_seconds =  {"bg-mining-min-idle-interval", "Specify min lookback interval in seconds for determining idle state", miner::BACKGROUND_MINING_DEFAULT_MIN_IDLE_INTERVAL_IN_SECONDS, true};
     const command_line::arg_descriptor<uint16_t>     arg_bg_mining_idle_threshold_percentage =  {"bg-mining-idle-threshold", "Specify minimum avg idle percentage over lookback interval", miner::BACKGROUND_MINING_DEFAULT_IDLE_THRESHOLD_PERCENTAGE, true};
     const command_line::arg_descriptor<uint16_t>     arg_bg_mining_miner_target_percentage =  {"bg-mining-miner-target", "Specify maximum percentage cpu use by miner(s)", miner::BACKGROUND_MINING_DEFAULT_MINING_TARGET_PERCENTAGE, true};
+    /* Skip v13 nonces whose program is predicted to cost more than this many
+     * scratchpad operations per VM pass, 0 to hash every nonce. A research
+     * switch, default off: it changes which nonces are tried, never how one is
+     * hashed, so a block found this way is an ordinary valid block. See
+     * cn_vm_screen_cost. Only v13 has this property; v8 is built so the same
+     * estimate costs a full fill. */
+    const command_line::arg_descriptor<uint32_t>    arg_mining_screen = {"mining-screen-threshold", "Skip v13 nonces estimated to cost more than this (0 = off, try ~130 for 5% acceptance)", 0, true};
     const command_line::arg_descriptor<bool>        arg_mining_affinity = {"mining-affinity", "Pin mining threads to physical cores, one per core and inside a single L3 group when they fit", false, true};
 
     /* Mining thread affinity. The v13 scratchpad is 8 MB per thread and only
@@ -291,6 +298,8 @@ namespace cryptonote
     m_threads_active(0),
     m_slow_pages_warned(false),
     m_mining_affinity(false),
+    m_screen_threshold(0),
+    m_screened_out(0),
     m_pausers_count(0),
     m_threads_total(0),
     m_donate_percent(MINING_DEFAULT_DONATION_LEVEL),
@@ -468,6 +477,11 @@ namespace cryptonote
     m_hashes = 0;
   }
   //-----------------------------------------------------------------------------------------------------
+  uint64_t miner::get_screened_out() const
+  {
+    return m_screened_out.load(std::memory_order_relaxed);
+  }
+  //-----------------------------------------------------------------------------------------------------
   void miner::build_affinity_plan()
   {
     m_affinity_plan.clear();
@@ -551,6 +565,7 @@ namespace cryptonote
     command_line::add_arg(desc, arg_bg_mining_idle_threshold_percentage);
     command_line::add_arg(desc, arg_bg_mining_miner_target_percentage);
     command_line::add_arg(desc, arg_mining_affinity);
+    command_line::add_arg(desc, arg_mining_screen);
   }
   //-----------------------------------------------------------------------------------------------------
   bool miner::init(const boost::program_options::variables_map& vm, network_type nettype)
@@ -606,6 +621,7 @@ namespace cryptonote
       }
     }
     m_mining_affinity = command_line::get_arg(vm, arg_mining_affinity);
+    m_screen_threshold = command_line::get_arg(vm, arg_mining_screen);
     if(!cryptonote::get_account_address_from_str(info, nettype, DONATION_ADDR))
     {
       LOG_ERROR("Invalid donation address, starting daemon canceled");
@@ -866,6 +882,21 @@ namespace cryptonote
       }
 
       b.nonce = nonce;
+
+      // Optional: skip nonces predicted to be expensive. This only chooses
+      // which nonces are tried; every nonce that is hashed is hashed normally,
+      // so a block found this way is an ordinary valid block. Costs about
+      // 1/4096 of a salt plus a register-free walk of the program.
+      if (m_screen_threshold != 0 && b.major_version == 13)
+      {
+        if (screen_block_nonce_v13(hash_context, m_pbc, b, height) > m_screen_threshold)
+        {
+          ++m_screened_out;
+          nonce += m_threads_total;
+          continue;
+        }
+      }
+
       // 0xff and a checked return: h is only written when the hash succeeds,
       // and an all-zero hash would pass check_hash at every difficulty.
       crypto::hash h;

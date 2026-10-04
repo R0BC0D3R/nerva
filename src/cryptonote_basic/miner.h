@@ -151,7 +151,13 @@ namespace cryptonote
     std::atomic<bool> m_slow_pages_warned;
     // (windows group, cpu) per worker, built at start(); empty = no pinning
     std::vector<std::pair<int, int>> m_affinity_plan;
+    uint64_t get_screened_out() const;
+
     bool m_mining_affinity;
+    /* v13 nonce screening, 0 = off. Research switch; it changes which nonces
+     * are tried, never how one is hashed. */
+    uint32_t m_screen_threshold;
+    std::atomic<uint64_t> m_screened_out;
     uint8_t m_donate_percent;
     uint8_t m_donate_counter;
     volatile bool m_donating;

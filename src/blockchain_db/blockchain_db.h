@@ -32,6 +32,8 @@
 #pragma once
 
 #include <string>
+#include <cstring>
+#include <vector>
 #include <exception>
 #include <boost/program_options.hpp>
 #include "common/command_line.h"
@@ -935,6 +937,24 @@ public:
   virtual void get_cna_v4_data(char *out, uint64_t height, uint32_t seed)  = 0;
   virtual void get_cna_v5_data(char *out, HC128_State *rng_state, uint64_t height) = 0;
   virtual void get_cna_v6_data(char *out, HC128_State *rng_state, uint64_t height) = 0;
+
+  /**
+   * @brief the first 64 bytes of a v6 salt, which is all the VM program seed
+   * needs, at a fraction of the cost of the whole salt.
+   *
+   * Mining only. It lets a miner estimate what a nonce will cost before paying
+   * for it, which is a v6 property worth understanding rather than a feature:
+   * v8 closes it by drawing its per-nonce parameters only after a full fill.
+   * Never used on the verification path, where every hash must be computed.
+   *
+   * The default is correct but pays for the whole salt; LMDB overrides it.
+   */
+  virtual void get_cna_v6_seed(char *out64, HC128_State *rng_state, uint64_t height)
+  {
+    std::vector<char> full(CN_SALT_MEMORY);
+    get_cna_v6_data(full.data(), rng_state, height);
+    std::memcpy(out64, full.data(), 64);
+  }
 
   /**
    * @brief fetch a block by height

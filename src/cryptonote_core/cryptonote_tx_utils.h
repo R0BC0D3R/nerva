@@ -150,6 +150,17 @@ namespace cryptonote
   bool get_block_longhash(crypto::cn_hash_context_t *context, cryptonote::BlockchainDB &db, const uint8_t major_version, const blobdata &blob, crypto::hash &res, const uint64_t height);
   crypto::hash get_block_longhash(crypto::cn_hash_context_t *context, Blockchain *bc, const block &b, const uint64_t height);
   
+  /* Cheap estimate of what a v13 nonce will cost, for miners that want to skip
+   * expensive ones. Returns the estimated scratchpad operations per VM pass,
+   * or UINT32_MAX when the estimate is unavailable (height below the seed
+   * window), which callers should treat as "do not skip".
+   *
+   * Mining only. It never produces or alters a hash: it decides which nonces
+   * are worth hashing, and a miner may try whatever nonces it likes. The
+   * verification path must never use it. */
+  uint32_t screen_block_nonce_v13(crypto::cn_hash_context_t *context, cryptonote::BlockchainDB &db, const blobdata &blob, uint64_t height);
+  uint32_t screen_block_nonce_v13(crypto::cn_hash_context_t *context, cryptonote::Blockchain *bc, const block &b, uint64_t height);
+
   bool get_block_longhash_v11(crypto::cn_hash_context_t *context, cryptonote::BlockchainDB &db, const blobdata &blob, crypto::hash &res, uint64_t height);
   bool get_block_longhash_v10(crypto::cn_hash_context_t *context, cryptonote::BlockchainDB &db, const blobdata &blob, crypto::hash &res, uint64_t height);
   bool get_block_longhash_v9(crypto::cn_hash_context_t *context, cryptonote::BlockchainDB &db, const blobdata &blob, crypto::hash &res, uint64_t height);

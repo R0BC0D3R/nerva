@@ -38,6 +38,33 @@
 // Program generation
 // ---------------------------------------------------------------------------
 
+/* One program slot. Lifted verbatim out of cn_vm_generate_program's loop so a
+ * cost estimator can generate slots one at a time; the draw order is the
+ * generator's definition and must not change. The alu_ops table moves out with
+ * it for the same reason. */
+static const uint8_t cn_vm_alu_ops[7] = {
+    CN_OP_IADD_RS, CN_OP_ISUB, CN_OP_IMUL, CN_OP_IXOR,
+    CN_OP_IROR,    CN_OP_CBRANCH, CN_OP_MIX
+};
+
+static void cn_vm_gen_slot(HC128_State *rng, size_t *key_idx, uint32_t mem_pct,
+                           cn_vm_instruction_t *ins)
+{
+    if (HC128_U32(rng, key_idx, 100U) < mem_pct)
+        // ~55% of memory ops are reads (read-heavy keeps the pointer chase live).
+        ins->op = (HC128_U32(rng, key_idx, 100U) < 55U) ? CN_OP_SP_READ : CN_OP_SP_WRITE;
+    else
+        ins->op = cn_vm_alu_ops[HC128_U32(rng, key_idx, 7U)];
+    ins->dst   = (uint8_t)HC128_U32(rng, key_idx, CN_REG_COUNT);
+    ins->src   = (uint8_t)HC128_U32(rng, key_idx, CN_REG_COUNT);
+    // shift doubles as branch offset (interpreted as int8_t for CN_OP_CBRANCH)
+    ins->shift = (uint8_t)HC128_U32(rng, key_idx, 256);
+    // Build a full 32-bit immediate from two 16-bit halves.
+    uint32_t lo = HC128_U32(rng, key_idx, 0x10000);
+    uint32_t hi = HC128_U32(rng, key_idx, 0x10000);
+    ins->imm = (hi << 16) | lo;
+}
+
 void cn_vm_generate_program(cn_vm_program_t *prog, const uint8_t seed[32])
 {
     HC128_State rng;
@@ -59,31 +86,74 @@ void cn_vm_generate_program(cn_vm_program_t *prog, const uint8_t seed[32])
     //     ASIC can bake in a fixed one.
     //   - ALU ops stay evenly weighted, so IMUL/MIX keep their bite. Multiply is
     //     our best ASIC repellent, so we don't water it down.
-    static const uint8_t alu_ops[7] = {
-        CN_OP_IADD_RS, CN_OP_ISUB, CN_OP_IMUL, CN_OP_IXOR,
-        CN_OP_IROR,    CN_OP_CBRANCH, CN_OP_MIX
-    };
     // Memory-op share for this program: [51, 63]%. Always a majority, never fixed.
     const uint32_t mem_pct = 51U + HC128_U32(&rng, &key_idx, 13U);
 
     for (int i = 0; i < CN_PROGRAM_SIZE; i++)
-    {
-        cn_vm_instruction_t *ins = &prog->instructions[i];
+        cn_vm_gen_slot(&rng, &key_idx, mem_pct, &prog->instructions[i]);
+}
 
-        if (HC128_U32(&rng, &key_idx, 100U) < mem_pct)
-            // ~55% of memory ops are reads (read-heavy keeps the pointer chase live).
-            ins->op = (HC128_U32(&rng, &key_idx, 100U) < 55U) ? CN_OP_SP_READ : CN_OP_SP_WRITE;
+
+/* Cheap cost estimate for a v13 nonce, used by the miner to skip expensive
+ * nonces. Not consensus: it never produces or alters a hash, it only decides
+ * which nonces are worth hashing, and a miner may try whatever nonces it likes.
+ *
+ * Three properties of the VM make the estimate possible, all of them in the
+ * code above:
+ *   1. CN_OP_CBRANCH tests regs[dst] & (imm | 1) where imm carries ~16.5 set
+ *      bits, so it is taken except about once in 2^16.5. Assuming taken is
+ *      therefore right nearly always, and assuming it is what makes the walk
+ *      free of registers and memory.
+ *   2. cn_vm_execute resets pc and chain on entry, so all 2048 passes restart
+ *      the same walk from pc 0.
+ *   3. The loop runs exactly CN_PROGRAM_SIZE steps whatever the branches do,
+ *      so the variance is in which slots the steps land on, not how many run.
+ *
+ * Generation is lazy. Slots are drawn from a sequential HC-128 stream so they
+ * cannot be random-accessed, but the walk locks into a cycle early and reaches
+ * about 67 of 512 slots, so generating only as far as the highest slot it
+ * actually needs is where most of the saving is.
+ *
+ * Returns the number of scratchpad operations the walk lands on. Lower is
+ * cheaper. contrib/powbench/screen.c measures the correlation against real
+ * hash cost at r = 0.88 to 0.95. */
+uint32_t cn_vm_screen_cost(const uint8_t seed[32])
+{
+    const int pc_mask = CN_PROGRAM_SIZE - 1;
+    cn_vm_instruction_t slots[CN_PROGRAM_SIZE];
+    HC128_State rng;
+    size_t key_idx = 0;
+    int generated = 0;
+    int pc = 0, step;
+    uint32_t memops = 0;
+    uint32_t mem_pct;
+
+    HC128_Init(&rng, (unsigned char *)seed, (unsigned char *)(seed + 16));
+    HC128_NextKeys(&rng);
+    mem_pct = 51U + HC128_U32(&rng, &key_idx, 13U);
+
+    for (step = 0; step < CN_PROGRAM_SIZE; step++)
+    {
+        const int slot = pc & pc_mask;
+        const cn_vm_instruction_t *ins;
+
+        while (generated <= slot)
+        {
+            cn_vm_gen_slot(&rng, &key_idx, mem_pct, &slots[generated]);
+            generated++;
+        }
+        ins = &slots[slot];
+
+        if (ins->op == CN_OP_SP_READ || ins->op == CN_OP_SP_WRITE)
+            memops++;
+
+        if (ins->op == CN_OP_CBRANCH)
+            pc = (pc + (int)((int8_t)ins->shift) + CN_PROGRAM_SIZE) & pc_mask;
         else
-            ins->op = alu_ops[HC128_U32(&rng, &key_idx, 7U)];
-        ins->dst   = (uint8_t)HC128_U32(&rng, &key_idx, CN_REG_COUNT);
-        ins->src   = (uint8_t)HC128_U32(&rng, &key_idx, CN_REG_COUNT);
-        // shift doubles as branch offset (interpreted as int8_t for CN_OP_CBRANCH)
-        ins->shift = (uint8_t)HC128_U32(&rng, &key_idx, 256);
-        // Build a full 32-bit immediate from two 16-bit halves.
-        uint32_t lo = HC128_U32(&rng, &key_idx, 0x10000);
-        uint32_t hi = HC128_U32(&rng, &key_idx, 0x10000);
-        ins->imm = (hi << 16) | lo;
+            pc = pc + 1;
     }
+
+    return memops;
 }
 
 // ---------------------------------------------------------------------------

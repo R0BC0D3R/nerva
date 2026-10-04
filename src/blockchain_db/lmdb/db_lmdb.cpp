@@ -2823,6 +2823,50 @@ static void cna_v6_data_reference(const block_cache_data *cache, uint64_t height
 }
 
 
+/* The first 64 bytes of the salt: one of 4096 loop iterations, so about 1/4096
+ * of get_cna_v6_data. Mining only, and it is the whole reason v6 is screenable:
+ * the VM program seed is blob_hash XOR salt[0..32), so a miner can know what a
+ * nonce will cost for a fraction of what hashing it costs. v8 closes this by
+ * drawing its per-nonce parameters only after a full fill, which cannot be
+ * fast-forwarded because get_cna_v6_data reseeds from bytes it has written. */
+void BlockchainLMDB::get_cna_v6_seed(char *out64, HC128_State *rng_state, uint64_t height)
+{
+  CHECK_AND_ASSERT_MES(height > 0, , "get_cna_v6_seed called with height == 0");
+  build_block_cache(height);
+  boost::shared_lock<boost::shared_mutex> cache_lock(m_block_cache_lock);
+  const uint64_t window_size = (height > (uint64_t)CNA_V6_WINDOW_BLOCKS) ? (uint64_t)CNA_V6_WINDOW_BLOCKS : height;
+  const uint64_t window_base = height - window_size;
+
+  size_t rng_key_idx = 0;
+  auto pick_index = [&]() -> uint64_t {
+    if (HC128_U32(rng_state, &rng_key_idx, 256) < CNA_V6_FULL_HISTORY_ODDS)
+      return HC128_U32(rng_state, &rng_key_idx, height);
+    return window_base + HC128_U32(rng_state, &rng_key_idx, window_size);
+  };
+
+  unsigned char msg[64];
+  size_t msgpos;
+  const block_cache_data *bi;
+  const uint64_t count = 0;
+
+  HC128_NextKeys(rng_state);
+  bi = &m_block_cache[pick_index()];
+  std::memcpy(msg, bi->hash.data, sizeof(crypto::hash));
+  msgpos = sizeof(crypto::hash);
+  bi = &m_block_cache[pick_index()];
+  std::memcpy(msg + msgpos, &(bi->timestamp), sizeof(uint64_t));
+  msgpos += sizeof(uint64_t);
+  bi = &m_block_cache[pick_index()];
+  std::memcpy(msg + msgpos, &(bi->diff_lo), sizeof(uint64_t));
+  msgpos += sizeof(uint64_t);
+  bi = &m_block_cache[pick_index()];
+  std::memcpy(msg + msgpos, &(bi->coins), sizeof(uint64_t));
+  msgpos += sizeof(uint64_t);
+  std::memcpy(msg + msgpos, &count, sizeof(uint64_t));
+
+  HC128_EncryptMessage(rng_state, msg, (unsigned char *)out64, sizeof(msg));
+}
+
 void BlockchainLMDB::get_cna_v6_data(char *out, HC128_State *rng_state, uint64_t height)
 {
   CHECK_AND_ASSERT_MES(height > 0, , "get_cna_v6_data called with height == 0");

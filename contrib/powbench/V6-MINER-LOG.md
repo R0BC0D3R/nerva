@@ -352,6 +352,153 @@ a live chain that is being replaced anyway.
   optimization an outside miner can also make on v8, and that argues for
   either doing it in-tree or changing the salt so it does not vectorize.
 
+## Stage 3: nonce screening
+
+Built deliberately, as defensive research. The weapon is already in use by at
+least one miner on a live chain, so the asymmetry exists whether or not we
+understand it; what is optional is whether the people designing the successor
+understand it as well as the person exploiting it. v13 is being retired, so what
+is learned here is worth more than what is lost.
+
+### The mechanism, in one line
+
+The VM program seed is `blob_hash XOR salt[0..32)`, and `salt[0..32)` is written
+by **one of the salt's 4096 loop iterations**. A miner can therefore know what a
+nonce will cost for about 1/4096 of a salt plus a walk of the program with no
+registers, no memory and no pad.
+
+### What was built
+
+- `cn_vm_screen_cost` in [cna-vm.c](../../src/crypto/cna-vm.c): generate lazily,
+  walk 512 steps assuming every `CN_OP_CBRANCH` taken, count scratchpad ops.
+  Slots come off a sequential HC-128 stream so they cannot be random-accessed;
+  lazy means generating in order only as far as the walk reaches, which is about
+  67 of 512 slots.
+- `get_cna_v6_seed` on the DB: the first 64 bytes of the salt only.
+- `--mining-screen-threshold N` on the daemon, default 0 (off).
+
+**The safety property is structural, not empirical.** Screening decides *which*
+nonces are hashed, never *how* one is hashed. The verification path never calls
+it. A block found this way is an ordinary valid block, and a miner may try
+whatever nonces it likes.
+
+### Verification
+
+- The lazy screen matches a full-generation reference walk over 2000 programs.
+- Extracting `cn_vm_gen_slot` out of `cn_vm_generate_program` to enable lazy
+  generation changed nothing: 2000 v13 digests identical. The draw order is the
+  generator's definition and a refactor near it has to be proven inert.
+
+### Standalone measurement, and why it is an upper bound
+
+[t_v13_screenmine.c](t_v13_screenmine.c) records the estimate and the real
+measured hash time for each nonce, then sweeps the threshold over the recorded
+pairs, so nothing is assumed about how estimate and cost relate.
+
+```
+screen         17.9 us      full salt   1356.9 us
+estimate       min 4  p50 287  p99 396  max 418
+
+  accept   thr    n    mean hash   effective H/s   vs unscreened
+      1%    14    6      5.04 ms       126.8 H/s        3.82x
+      2%    37   10      5.50 ms       129.0 H/s        3.88x
+      5%   130   25      7.50 ms       108.5 H/s        3.27x
+     10%   200   50     12.78 ms        69.9 H/s        2.10x
+    100%   418  500     28.75 ms        33.2 H/s        1.00x
+```
+
+3.8x brackets the published 3.06x. **It is not yet believed.** This harness
+reports 30.1 ms per nonce single-threaded while the daemon does 16.9 ms per
+nonce per thread with twelve threads running, and one thread cannot be slower
+than one of twelve. Most likely the synthetic 236 MB cache evicts the pad harder
+than the real block cache does, which would inflate both the mean and the spread
+the screen feeds on. The daemon sweep settles it.
+
+## Lessons for v8
+
+The point of the v6 work. Written as rules, so a future change to v8 can be
+checked against them without re-deriving the attack each time.
+
+### 1. Anything that determines a nonce's cost must not be computable more cheaply than the nonce
+
+This is the governing rule, and v6 breaks it in one line. The VM program seed is
+`blob_hash XOR salt[0..32)`, and `salt[0..32)` falls out of **one of the salt's
+4096 loop iterations**. So a miner can learn what a nonce will cost for about
+1/4096 of the salt plus a register-free walk, measured here at **17.9 us**
+against a nonce costing milliseconds. That ratio is the entire break.
+
+**v8 already satisfies the rule**, by construction rather than by accident:
+`get_cna_v6_data` reseeds its HC-128 state 256 times from bytes it has already
+written, so the keystream cannot be fast-forwarded, and `xx`, `yy` and
+`init_size_blk` are drawn only afterwards. The cheapest possible oracle costs a
+full fill.
+
+**What to check on any future v8 change:** if a per-nonce parameter moves
+earlier in the pipeline, or if any value that influences cost becomes derivable
+from a prefix of the fill, this rule is broken and the screening attack returns.
+The draw ordering is load-bearing and should be commented as such where it is
+written, not only here.
+
+### 2. Cost that varies is only safe while it is unpredictable, so prefer cost that does not vary
+
+v6's spread is enormous: the cheap estimate ranges 4 to 418 scratchpad
+operations per pass across 500 nonces, and the cheapest 1% hash about 5.7x
+faster than the mean. v8 narrows this by pinning `init_size_blk` (F42: that one
+axis alone was worth up to 2.24x in time and bought nothing), but `xx` and `yy`
+still vary cost by F42's measured 3.7x.
+
+That is currently safe only because of rule 1. **Two defences are better than
+one**, and narrowing the spread costs nothing in fairness: a PoW where every
+nonce costs the same is strictly easier to reason about, and difficulty then
+means what it is assumed to mean.
+
+### 3. Evaluate a defence against an optimised miner, not a stock one
+
+FINDINGS F6b modelled v6 screening at 1.3 to 1.4x; the published miner
+attributes 3.06x to it. **Both can be right.** Screening removes a share of the
+part of a nonce that varies, so the more the fixed parts have been optimised
+away, the larger that share becomes and the more screening is worth.
+
+A design gate run against a stock baseline therefore **systematically
+understates** every attack of this shape. v8's gates should be re-run against
+the fastest implementation we know how to build, which after this project is a
+better implementation than when they were first run.
+
+### 4. Shipping an optimisation is a defensive act
+
+The gap that matters is not between our miner and the theoretical maximum, it
+is between a stock miner and a tuned one. Every optimisation that lands in the
+stock miner is one nobody can hold privately. This is the whole logic of the
+project, and it has a concrete instance: the run-ahead salt is worth +7.6% here
+and would be worth far more on v8, because v8's fill is a much larger share of
+its nonce.
+
+### 5. Proportions do not transfer between implementations
+
+The salt is **19% of a v13 nonce** and about **55% of a v8 nonce**, because
+v8's pad is 1 MB against v13's 8 MB so everything else shrank around it. The
+same salt change is therefore worth roughly four times more on v8 than on v13.
+
+The published report orders its work with the salt first because on **its**
+pipeline the salt was 59.5% of a nonce. Our stage order should follow our own
+profile, and v8's order should follow v8's. Twice now a figure taken from one
+context and applied to another has produced a wrong prediction here.
+
+### 6. What dies with the VM, and what does not
+
+Of the published 13.4x on v6, the progression attributes 1.96x to engineering
+and the rest to screening (3.06x), trace JIT (1.48x) and virtual pad (1.51x).
+**All three of the large multipliers are VM properties and v8 has no VM.** The
+GPU hybrid likewise hunts "the ~1 in 950 whose VM never touches the pad", and
+v8 has no such nonce: both AES passes and every sweep touch the whole pad on
+every nonce.
+
+So v8's exposure to that toolkit is roughly the 1.4x of engineering, which rule
+4 says to ship ourselves. **The residual is not screening at all**: it is GPU
+offload of the fill, which does not predict cost but pays it elsewhere, so the
+draw ordering does nothing against it. See F43, and note `CN_SALT_MEMORY` is
+load-bearing there and is not documented as such.
+
 ## Environment traps
 
 - **The build must run inside MSYS2 bash.** In Git for Windows bash, `make`
