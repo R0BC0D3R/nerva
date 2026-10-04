@@ -113,6 +113,19 @@ the effect is real and not an artifact.
 
 0xROOTPLS measured +7% for this change on an already-optimized miner.
 
+### Confirmed on the live miner
+
+The fused build run through NervaOne against a live synced mainnet daemon
+reports **640 to 720 H/s**, against a remembered 580 to 640 before it. That is
+about +11% at the midpoint.
+
+**Quote the +7.6%, not the +11%.** The NervaOne comparison is not controlled:
+the two ranges overlap at 640, the baseline is from memory rather than a run
+made the same day, and it came from a third binary built at a different moment
+from either A/B binary. What it does establish is that the effect is real on
+the live miner and on a synced daemon rather than only on an offline database
+copy, which the controlled rig could not show.
+
 ## The void run, and what it cost
 
 The first daemon A-B-B-A came back:
