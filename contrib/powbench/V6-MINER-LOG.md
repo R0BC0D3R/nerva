@@ -140,22 +140,49 @@ The two baselines were 98% apart. Run as a plain A-B this would have reported
 either a **2x speedup** (B2 against A1) or a 5% regression (B1 against A1), and
 both would have been pure noise.
 
-**Cause: large pages.** `allocate_hugepage` asks Windows for 2 MB pages and,
-when physical memory is too fragmented to supply them, **falls back to malloc
-and says nothing** ([slow-hash.c:315](../../src/crypto/slow-hash.c#L315)). An
-8 MB scratchpad per thread on 4 KB pages is a different workload, and the gap
-is about 2x: roughly 300 H/s on the fallback against roughly 600 on huge pages.
+**Cause: two daemons running at once, not large pages.** `nervad-base.log` for
+that A/B holds **three** daemon startups for the **two** baseline runs it
+performed, the extra one beginning 67 seconds into A1. Two daemons sharing the
+machine halves each one's reported rate, which is exactly the factor seen, and
+it ended partway through, so B2 and A2 read normally. The source was almost
+certainly an earlier A/B task that was force-stopped: that killed the
+PowerShell loop but not the daemons it had launched with `Start-Process`, which
+are detached and outlive it.
 
-The miner does log which tier it got, but at MGINFO, which `--log-level 0`
-suppressed, so the early runs discarded the one piece of information that
-explained them. Every run now logs at level 1 into its own file, the tier is
-parsed back out and printed next to the number, and a run that did not get huge
-pages is retried rather than averaged in.
+**The large-pages explanation written here first was wrong**, and the evidence
+against it was already in the logs. `allocate_hugepage` does fall back to
+malloc when memory is fragmented
+([slow-hash.c:315](../../src/crypto/slow-hash.c#L315)), but the miner warns
+loudly when it does: `Mining is running on normal memory pages`, through
+`MGUSER_YELLOW` on the `user` category, which `--log-level 0` still shows, and
+`CN_PAGES_MALLOC` is well below the `CN_PAGES_THP` threshold that fires it.
+That warning appears in none of the logs, and every page-tier line ever
+recorded on this machine says huge pages. A tidy mechanism that explained the
+magnitude was accepted before checking the one line that would have falsified
+it.
 
-This also resolved two earlier confusions: a claimed "plateau" at 620-634 H/s
+Lesson, and the more useful of the two: **a plausible cause that fits the
+magnitude is not evidence.** The check that settled it cost one grep.
+
+Every run now logs at level 1 into its own file and the page tier is parsed back
+out and printed beside the number. That gating is worth keeping, since a silent
+fallback really would be worth about 2x if it ever happened, but it is not what
+was wrong here.
+
+What none of this changes is the +7.6%. That run's four logs show exactly one
+daemon start each, the same page tier throughout, and +0.1% drift between the
+two baselines. The protection came from the A-B-B-A gate, not from page-tier
+gating added on a wrong theory.
+
+**Harness fix owed:** before starting a run, assert that no nervad process
+exists and that the RPC port is free, and confirm the daemon answering RPC is
+the process just started. Stopping a runner must also stop the daemons it
+spawned.
+
+Two earlier confusions have the same root: a claimed "plateau" at 620-634 H/s
 that was really a startup transient, and an apparent regime mismatch where the
 core benchmark looked slower than a whole nonce. Both came from comparing
-against a malloc-fallback run.
+against a contended run.
 
 ## What has already failed
 
@@ -167,11 +194,11 @@ stands as a caveat on estimates made here.
 
 ## Next stages
 
-1. **Non-temporal stores plus large pages.** The fill writes 8 MB it never
-   reads first, so `movntdq` skips read-for-ownership. The large-page half is
-   partly answered now: they are granted on this machine when memory is not too
-   fragmented, and the fallback is worth about 2x, so making the fallback
-   visible to the user is worth more than it looks.
+1. **Non-temporal stores.** The fill writes 8 MB it never reads first, so
+   `movntdq` skips read-for-ownership. The large-page half of this stage needs
+   nothing: master already warns on the fallback and ships
+   `nervad --setup-large-pages`. Checked, after briefly proposing to build it
+   again.
 2. **Eight-lane AVX2 HC-128 salt.** The big one, and it applies to **both v13
    and v8**, since both call `get_cna_v6_data`. The salt is roughly 40% of a
    nonce here. HC-128's update is elementwise on 32-bit words, so 8 salts fill
