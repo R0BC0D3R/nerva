@@ -580,6 +580,78 @@ batching the *screen* eight-wide is far less invasive than batching the hash:
 the screen is a pure function of the blob and never touches the pad, so the hash
 path can stay scalar.
 
+### Eight-wide screening: correct, 2.37x on the part it touches, and worth nothing
+
+A negative result, kept because the reasoning that led to it was sound and the
+next person will otherwise redo it.
+
+At 0.41% acceptance the screen is roughly 40% of the work and each screen is two
+HC-128 key schedules, so vectorising the schedules looked like the obvious next
+move. [hc128-x8.c](../../src/crypto/hc128-x8.c) does eight at a time, in its own
+translation unit at AVX2 while the rest of the binary stays at baseline, with a
+cpuid plus XGETBV check and a scalar fallback.
+
+**Verified:** bit-identical to eight `HC128_Init` calls over 12,000 schedules,
+including the transpose back to ordinary `HC128_State` values and four keystream
+blocks drawn from each result. That last part matters: a state can match field
+for field and still be unusable if `counter1024` or the keystream buffer is
+wrong. **2.37x per schedule**, 1.95 us to 0.83 us.
+
+**Measured on the daemon, threshold 4, 30 threads:**
+
+```
+scalar screen                        2280.2 H/s
+x8 screen, 64 KB allocated per call  2101.7      -7.8%
+x8 screen, thread-local buffer       2260.6      -0.9%
+```
+
+So a 2.37x faster key schedule converts to **nothing**. The screen's selection
+is provably identical, acceptance reads 0.41% to three digits either way, so
+this is not a correctness problem. The transposed per-lane state costs about
+what the vectorisation saves: the scalar screen reuses one 4 KB `HC128_State`
+that stays hot, while the batched one writes and reads back eight of them twice
+per batch, roughly 8 KB per nonce of traffic the scalar path never does.
+
+It is off by default behind `--mining-screen-batch`. Adding it did not cost the
+default path anything: A-B-B-A gives pre 2274.7, post 2260.3, delta -0.6%
+against a baseline drift of -0.5%, so the difference is not separable from
+noise.
+
+**The allocation finding is the useful part.** A 64 KB allocation per call cost
+**7% at 30 threads and was invisible single-threaded**, because the
+microbenchmark called it in a tight loop where the allocator hands back the same
+block every time. A microbenchmark can be correct, repeatable, and still answer
+a question nobody asked.
+
+**If it is ever worth revisiting**, the way is the one the published
+implementation takes: keep the state lane-interleaved for the whole screen and
+run `NextKeys` eight-wide too, so there is no transpose at all. That needs a
+per-lane block queue because keystream consumption diverges. The eight-lane init
+is also worth far more on **v8**, whose salt is 55% of a nonce against v13's
+19%, and there it would serve the salt itself rather than screening, so the
+transpose penalty would not land in the same place.
+
+A single run at 8 threads came back +5% for batching, which fits the
+cache-pressure explanation, but it was one unrepeated point in an uninterleaved
+sequence and 12 threads came back -11% against 30 threads' -0.9%. **Not
+believed**, and the flag exists so a low-core machine can be tested properly,
+not because it has been shown to help.
+
+### The rig was finding blocks all day
+
+The offline daemon mines against a stale chain copy whose difficulty drifts
+down, so it had been finding real blocks: height moved 4424749 to 4424751 over
+the day's runs. Each find rebuilds the template and stalls the miner, and it is
+what made `start_mining` intermittently return busy.
+
+At roughly a 2% chance per 30-second run the distortion was small, and the drift
+gates would have caught a badly affected run, but it was an uncontrolled
+variable present in every measurement and it would have grown as difficulty
+fell. All harnesses now pass `--fixed-difficulty 100000000`.
+
+**The plan file written at the start of this project said to do exactly that.**
+It was not done, and was not noticed for a full day.
+
 ### Where this leaves the project
 
 Each row at its own best thread count, which is the only fair way to compare

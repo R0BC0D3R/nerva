@@ -118,20 +118,18 @@ void cn_vm_generate_program(cn_vm_program_t *prog, const uint8_t seed[32])
  * returns a value above `limit` as soon as the count passes it. Lower is
  * cheaper. contrib/powbench/screen.c measures the correlation against real
  * hash cost at r = 0.88 to 0.95. */
-uint32_t cn_vm_screen_cost(const uint8_t seed[32], uint32_t limit)
+uint32_t cn_vm_screen_cost_from_state(HC128_State *rng, uint32_t limit)
 {
     const int pc_mask = CN_PROGRAM_SIZE - 1;
     cn_vm_instruction_t slots[CN_PROGRAM_SIZE];
-    HC128_State rng;
     size_t key_idx = 0;
     int generated = 0;
     int pc = 0, step;
     uint32_t memops = 0;
     uint32_t mem_pct;
 
-    HC128_Init(&rng, (unsigned char *)seed, (unsigned char *)(seed + 16));
-    HC128_NextKeys(&rng);
-    mem_pct = 51U + HC128_U32(&rng, &key_idx, 13U);
+    HC128_NextKeys(rng);
+    mem_pct = 51U + HC128_U32(rng, &key_idx, 13U);
 
     for (step = 0; step < CN_PROGRAM_SIZE; step++)
     {
@@ -140,7 +138,7 @@ uint32_t cn_vm_screen_cost(const uint8_t seed[32], uint32_t limit)
 
         while (generated <= slot)
         {
-            cn_vm_gen_slot(&rng, &key_idx, mem_pct, &slots[generated]);
+            cn_vm_gen_slot(rng, &key_idx, mem_pct, &slots[generated]);
             generated++;
         }
         ins = &slots[slot];
@@ -163,6 +161,16 @@ uint32_t cn_vm_screen_cost(const uint8_t seed[32], uint32_t limit)
     }
 
     return memops;
+}
+
+/* The same thing starting from a seed. Separate so a caller screening several
+ * nonces can batch the key schedules, which is where most of the screen's cost
+ * is: HC128_Init is about 1.95 us scalar against 0.83 us eight at a time. */
+uint32_t cn_vm_screen_cost(const uint8_t seed[32], uint32_t limit)
+{
+    HC128_State rng;
+    HC128_Init(&rng, (unsigned char *)seed, (unsigned char *)(seed + 16));
+    return cn_vm_screen_cost_from_state(&rng, limit);
 }
 
 // ---------------------------------------------------------------------------

@@ -160,6 +160,14 @@ namespace cryptonote
    * verification path must never use it. */
   uint32_t screen_block_nonce_v13(crypto::cn_hash_context_t *context, cryptonote::BlockchainDB &db, const blobdata &blob, uint64_t height, uint32_t limit);
   uint32_t screen_block_nonce_v13(crypto::cn_hash_context_t *context, cryptonote::Blockchain *bc, const block &b, uint64_t height, uint32_t limit);
+  /* Batched form. Mining only. Batches the two HC-128 key schedules each screen
+   * needs, which is where the cost is at realistic acceptance rates. */
+  void screen_block_nonces_v13_x8(crypto::cn_hash_context_t *context, cryptonote::BlockchainDB &db,
+                                  const blobdata *blobs, size_t n, uint64_t height,
+                                  uint32_t limit, uint32_t *out);
+  void screen_block_nonces_v13_x8(crypto::cn_hash_context_t *context, cryptonote::Blockchain *bc,
+                                  const blobdata *blobs, size_t n, uint64_t height,
+                                  uint32_t limit, uint32_t *out);
 
   bool get_block_longhash_v11(crypto::cn_hash_context_t *context, cryptonote::BlockchainDB &db, const blobdata &blob, crypto::hash &res, uint64_t height);
   bool get_block_longhash_v10(crypto::cn_hash_context_t *context, cryptonote::BlockchainDB &db, const blobdata &blob, crypto::hash &res, uint64_t height);

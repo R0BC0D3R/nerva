@@ -30,6 +30,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include "hc128.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -94,6 +95,10 @@ void cn_vm_execute(cn_vm_program_t *prog, uint8_t *scratchpad, uint64_t regs[CN_
  * than a measurement. Pass UINT32_MAX for the exact count. See the comment on
  * the definition. */
 uint32_t cn_vm_screen_cost(const uint8_t seed[32], uint32_t limit);
+
+/* Same, from an already-initialised HC-128 state, so a caller screening a batch
+ * of nonces can run the key schedules eight at a time with HC128_Init_x8. */
+uint32_t cn_vm_screen_cost_from_state(HC128_State *rng, uint32_t limit);
 
 #ifdef __cplusplus
 }

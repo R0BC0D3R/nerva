@@ -46,6 +46,7 @@ using namespace epee;
 #include "cryptonote_core/blockchain.h"
 #include "crypto/crypto.h"
 #include "crypto/cna-vm.h"
+#include "crypto/hc128-x8.h"
 #include "crypto/hash.h"
 #include "ringct/rctSigs.h"
 #include "multisig/multisig.h"
@@ -668,6 +669,89 @@ namespace cryptonote
   static constexpr uint64_t CN_SEED_STABLE_DEPTH = 256;
   static constexpr uint64_t CN_SEED_MIN_HEIGHT = CN_SEED_STABLE_DEPTH + CN_SEED_BACKREACH;
   //---------------------------------------------------------------
+  //---------------------------------------------------------------
+  //---------------------------------------------------------------
+  /* Screen a batch of nonces at once.
+   *
+   * The win is not the walk, it is the two HC-128 key schedules each screen
+   * needs: 1.95 us scalar against 0.83 us when eight run in the same vector
+   * registers. At the acceptance rates screening actually runs at, around
+   * 0.4%, a miner performs a couple of hundred screens per accepted nonce, so
+   * the key schedules dominate everything else it does.
+   *
+   * Only the schedules batch. The salt prefix reads the block cache per lane
+   * and the walk diverges per lane by construction, since rejection sampling
+   * and early exit both make the work data-dependent.
+   *
+   * Mining only, like the single-nonce form. `out` receives one estimate per
+   * blob; a blob at a height below the seed window gets UINT32_MAX, which
+   * callers treat as "do not skip".
+   */
+  void screen_block_nonces_v13_x8(crypto::cn_hash_context_t *context, BlockchainDB &db,
+                                  const blobdata *blobs, size_t n, uint64_t height,
+                                  uint32_t limit, uint32_t *out)
+  {
+    if (n == 0)
+      return;
+    if (height < CN_SEED_MIN_HEIGHT || n > HC128_X8_LANES)
+    {
+      for (size_t i = 0; i < n; i++)
+        out[i] = screen_block_nonce_v13(context, db, blobs[i], height, limit);
+      return;
+    }
+    const uint64_t stable_height = height - 256;
+
+    crypto::hash blob_hash[HC128_X8_LANES];
+    unsigned char keys[HC128_X8_LANES * 16], ivs[HC128_X8_LANES * 16];
+    for (size_t i = 0; i < n; i++)
+    {
+      get_blob_hash(blobs[i], blob_hash[i]);
+      std::memcpy(keys + i * 16, blob_hash[i].data, 16);
+      std::memcpy(ivs  + i * 16, blob_hash[i].data + 16, 16);
+    }
+    /* Unused lanes are harmless but must be initialised, or the schedule runs
+     * on whatever the stack held. */
+    for (size_t i = n; i < HC128_X8_LANES; i++)
+    {
+      std::memset(keys + i * 16, 0, 16);
+      std::memset(ivs  + i * 16, 0, 16);
+    }
+
+    HC128_State rng[HC128_X8_LANES];
+    HC128_Init_x8(rng, keys, ivs);
+
+    unsigned char seeds[HC128_X8_LANES * 16], seed_ivs[HC128_X8_LANES * 16];
+    for (size_t i = 0; i < n; i++)
+    {
+      char prefix[64];
+      db.get_cna_v6_seed(prefix, &rng[i], stable_height);
+      const uint8_t *sb = reinterpret_cast<const uint8_t *>(prefix);
+      const uint8_t *hb = reinterpret_cast<const uint8_t *>(blob_hash[i].data);
+      uint8_t seed[32];
+      for (int k = 0; k < 32; k++)
+        seed[k] = hb[k] ^ sb[k];
+      std::memcpy(seeds    + i * 16, seed, 16);
+      std::memcpy(seed_ivs + i * 16, seed + 16, 16);
+    }
+    for (size_t i = n; i < HC128_X8_LANES; i++)
+    {
+      std::memset(seeds    + i * 16, 0, 16);
+      std::memset(seed_ivs + i * 16, 0, 16);
+    }
+
+    HC128_State prng[HC128_X8_LANES];
+    HC128_Init_x8(prng, seeds, seed_ivs);
+
+    for (size_t i = 0; i < n; i++)
+      out[i] = cn_vm_screen_cost_from_state(&prng[i], limit);
+  }
+  //---------------------------------------------------------------
+  void screen_block_nonces_v13_x8(crypto::cn_hash_context_t *context, Blockchain *bc,
+                                  const blobdata *blobs, size_t n, uint64_t height,
+                                  uint32_t limit, uint32_t *out)
+  {
+    screen_block_nonces_v13_x8(context, bc->get_db(), blobs, n, height, limit, out);
+  }
   //---------------------------------------------------------------
   uint32_t screen_block_nonce_v13(crypto::cn_hash_context_t *context, Blockchain *bc, const block &b, uint64_t height, uint32_t limit)
   {

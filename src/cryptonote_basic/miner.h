@@ -157,6 +157,7 @@ namespace cryptonote
     /* v13 nonce screening, 0 = off. Research switch; it changes which nonces
      * are tried, never how one is hashed. */
     uint32_t m_screen_threshold;
+    bool m_screen_batch;
     std::atomic<uint64_t> m_screened_out;
     uint8_t m_donate_percent;
     uint8_t m_donate_counter;

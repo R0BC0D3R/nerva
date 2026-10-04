@@ -1,3 +1,4 @@
+include(CheckCCompilerFlag)
 # Copyright (c) 2018-2026, The Nerva Project
 # Copyright (c) 2014-2024, The Monero Project
 #
@@ -42,6 +43,7 @@ set(crypto_sources
   hash-extra-skein.c
   hash.c
   hc128.c
+  hc128-x8.c
   hmac-keccak.c
   jh.c
   keccak.c
@@ -69,6 +71,7 @@ set(crypto_private_headers
   hash-ops.h
   hash.h
   hc128.h
+  hc128-x8.h
   hmac-keccak.h
   initializer.h
   jh.h
@@ -101,6 +104,18 @@ if (NOT NO_AES)
     set(_slow_hash_hw_supported TRUE)
     list(APPEND crypto_sources slow-hash-hw.c slow-hash-v8-hw.c slow-hash-v8fp-hw.c)
     # -maes is already on CMAKE_C_FLAGS / CMAKE_CXX_FLAGS for x86 (32- and 64-bit).
+  endif ()
+endif ()
+
+# Eight-lane AVX2 HC-128 key schedule, used only by v13 nonce screening. Its
+# own translation unit so the rest of the binary stays at the baseline ISA; the
+# entry point checks cpuid (and XGETBV, since AVX2 in cpuid does not mean the OS
+# preserves YMM state) and falls back to eight scalar HC128_Init calls.
+if (NOT ARM AND NOT PPC64LE AND NOT PPC64 AND NOT PPC AND NOT S390X AND NOT RISCV AND NOT LOONGARCH)
+  check_c_compiler_flag("-mavx2" HAS_MAVX2)
+  if (HAS_MAVX2)
+    set_source_files_properties(hc128-x8.c PROPERTIES
+      COMPILE_FLAGS "-mavx2 -DHC128_X8_AVX2_BUILT=1")
   endif ()
 endif ()
 

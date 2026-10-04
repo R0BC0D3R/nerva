@@ -116,7 +116,13 @@ namespace cryptonote
      * hashed, so a block found this way is an ordinary valid block. See
      * cn_vm_screen_cost. Only v13 has this property; v8 is built so the same
      * estimate costs a full fill. */
-    const command_line::arg_descriptor<uint32_t>    arg_mining_screen = {"mining-screen-threshold", "Skip v13 nonces estimated to cost more than this (0 = off, try ~130 for 5% acceptance)", 0, true};
+    const command_line::arg_descriptor<uint32_t>    arg_mining_screen = {"mining-screen-threshold", "Skip v13 nonces estimated to cost more than this (0 = off, 4 measured best on a 16-core Zen 4)", 0, true};
+    /* Screen eight nonces at a time so the two HC-128 key schedules each screen
+     * needs run in vector registers. Measured on a 7950X: +5% at 8 threads,
+     * nothing at 30, where the transposed per-lane state costs about what the
+     * vectorisation saves. Off by default for that reason, and worth trying on
+     * a machine with fewer cores or more cache per core. */
+    const command_line::arg_descriptor<bool>        arg_mining_screen_batch = {"mining-screen-batch", "Screen v13 nonces eight at a time (helps on low core counts, not on many)", false, true};
     const command_line::arg_descriptor<bool>        arg_mining_affinity = {"mining-affinity", "Pin mining threads to physical cores, one per core and inside a single L3 group when they fit", false, true};
 
     /* Mining thread affinity. The v13 scratchpad is 8 MB per thread and only
@@ -299,6 +305,7 @@ namespace cryptonote
     m_slow_pages_warned(false),
     m_mining_affinity(false),
     m_screen_threshold(0),
+    m_screen_batch(false),
     m_screened_out(0),
     m_pausers_count(0),
     m_threads_total(0),
@@ -578,6 +585,7 @@ namespace cryptonote
     command_line::add_arg(desc, arg_bg_mining_miner_target_percentage);
     command_line::add_arg(desc, arg_mining_affinity);
     command_line::add_arg(desc, arg_mining_screen);
+    command_line::add_arg(desc, arg_mining_screen_batch);
   }
   //-----------------------------------------------------------------------------------------------------
   bool miner::init(const boost::program_options::variables_map& vm, network_type nettype)
@@ -634,6 +642,7 @@ namespace cryptonote
     }
     m_mining_affinity = command_line::get_arg(vm, arg_mining_affinity);
     m_screen_threshold = command_line::get_arg(vm, arg_mining_screen);
+    m_screen_batch = command_line::get_arg(vm, arg_mining_screen_batch);
     if(!cryptonote::get_account_address_from_str(info, nettype, DONATION_ADDR))
     {
       LOG_ERROR("Invalid donation address, starting daemon canceled");
@@ -852,6 +861,11 @@ namespace cryptonote
     // point and reading one would report the worst tier no matter what the
     // allocation actually got.
     uint8_t tier_reported_version = 0;   // 0 = nothing reported yet
+    /* Screening batch. Accepted nonces are held here and hashed one at a time,
+     * so only the screening is batched and the hash path is untouched. */
+    enum { SCREEN_BATCH = 8 };
+    uint32_t accepted[SCREEN_BATCH];
+    size_t accepted_n = 0, accepted_i = 0;
     block b;
     ++m_threads_active;
     while(!m_stop)
@@ -884,6 +898,9 @@ namespace cryptonote
         CRITICAL_REGION_END();
         local_template_ver = m_template_no;
         nonce = m_starter_nonce + th_local_index;
+        // Queued nonces were screened against the previous blob, so their
+        // estimates no longer describe anything. Drop them.
+        accepted_n = accepted_i = 0;
       }
 
       if(!local_template_ver)//no any set_block_template call
@@ -895,11 +912,15 @@ namespace cryptonote
 
       b.nonce = nonce;
 
-      // Optional: skip nonces predicted to be expensive. This only chooses
-      // which nonces are tried; every nonce that is hashed is hashed normally,
-      // so a block found this way is an ordinary valid block. Costs about
-      // 1/4096 of a salt plus a register-free walk of the program.
-      if (m_screen_threshold != 0 && b.major_version == 13)
+      /* Optional: skip nonces predicted to be expensive. This only chooses
+       * which nonces are tried; every nonce that is hashed is hashed normally,
+       * so a block found this way is an ordinary valid block.
+       *
+       * Screened in batches, because the cost is two HC-128 key schedules per
+       * nonce and those run eight at a time in vector registers for well under
+       * half the price. Accepted nonces are queued and hashed below one at a
+       * time; nothing about the hash changes. */
+      if (m_screen_threshold != 0 && b.major_version == 13 && !m_screen_batch)
       {
         if (screen_block_nonce_v13(hash_context, m_pbc, b, height, m_screen_threshold) > m_screen_threshold)
         {
@@ -907,6 +928,38 @@ namespace cryptonote
           nonce += m_threads_total;
           continue;
         }
+      }
+      else if (m_screen_threshold != 0 && b.major_version == 13)
+      {
+        if (accepted_n == 0)
+        {
+          blobdata blobs[SCREEN_BATCH];
+          uint32_t est[SCREEN_BATCH];
+          uint32_t cand[SCREEN_BATCH];
+          size_t nb = 0;
+          for (; nb < SCREEN_BATCH; nb++)
+          {
+            cand[nb] = nonce + (uint32_t)nb * m_threads_total;
+            b.nonce = cand[nb];
+            blobs[nb] = get_block_hashing_blob(b);
+          }
+          screen_block_nonces_v13_x8(hash_context, m_pbc, blobs, nb,
+                                     height, m_screen_threshold, est);
+          for (size_t k = 0; k < nb; k++)
+          {
+            if (est[k] > m_screen_threshold)
+              ++m_screened_out;
+            else
+              accepted[accepted_n++] = cand[k];
+          }
+          nonce += (uint32_t)nb * m_threads_total;
+          if (accepted_n == 0)
+            continue;
+          accepted_i = 0;
+        }
+        b.nonce = accepted[accepted_i++];
+        if (accepted_i >= accepted_n)
+          accepted_n = 0;
       }
 
       // 0xff and a checked return: h is only written when the hash succeeds,
@@ -974,7 +1027,8 @@ namespace cryptonote
             epee::serialization::store_t_to_json_file(m_config, m_config_folder_path + "/" + MINER_CONFIG_FILE_NAME);
         }
       }
-      nonce+=m_threads_total;
+      if (m_screen_threshold == 0 || b.major_version != 13 || !m_screen_batch)
+        nonce += m_threads_total;   // batched screening advances it eight at a time
       ++m_hashes;
       ++m_total_hashes;
     }
