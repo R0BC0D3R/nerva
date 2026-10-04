@@ -450,14 +450,74 @@ pipeline, and by rule 3 that is the expected direction: screening removes a
 share of what varies, so the less the fixed costs have been cut, the smaller
 that share is. Finishing the memory work should move our figure toward his.
 
-### Where this leaves the project
+### Screening moves the optimal thread count, and that is worth another 17%
+
+Measured live through NervaOne on the 7950X (16 cores, 32 threads), screening
+enabled at threshold 37:
 
 ```
-stock (this morning)                597.6 H/s
-+ fused pad init                      661.0      1.11x
-+ run-ahead salt                      711.0      1.19x
-+ nonce screening at 2.2% accept     1605.3      2.69x
+12 threads   1.52 - 1.62 kH/s      <- the optimum for stock v6
+14 threads   1.61 - 1.67
+18 threads   1.71 - 1.78
+20 threads   1.74 - 1.83
+24 threads   1.82 - 1.89           <- new optimum
+30 threads   1.83 - 1.89           <- no further gain
 ```
+
+Stock v6 peaks at 12 to 14 threads because every nonce drags an 8 MB pad
+through the cache hierarchy, so past about twelve threads the extra workers only
+fight each other for L3 and memory bandwidth.
+
+**Screening changes what a thread mostly does.** At 2.2% acceptance roughly 98%
+of nonces end at the estimate, which touches one salt iteration and walks 512
+program slots with no registers, no memory and no pad. That work is small and
+cache-light, so it scales with core count the way the full hash does not. The
+machine stops being bandwidth-bound and starts being compute-bound, and the
+optimum moves from 12 threads to 24.
+
+The 12-thread live figure, 1.52 to 1.62 kH/s, agrees with the 1605 H/s measured
+on the offline rig, so the two environments line up before the thread sweep
+diverges from it.
+
+**The lesson, and it generalises past this one case: an optimisation that
+changes a workload's resource profile also changes its optimal configuration,
+and measuring it at the old configuration understates it.** Every number in this
+log above this line was taken at 12 threads because that was right for stock v6.
+The screening figure of 2.17x is therefore a floor, not the result.
+
+For v8: when a defence is evaluated against an attack, the attack must be
+measured at **the attacker's** best configuration, not the defender's. An
+attacker retunes; a design gate that holds the thread count fixed will report a
+smaller threat than exists.
+
+**Open risk at high thread counts.** Each thread wants its own 8 MB pad on huge
+pages, and at 24 to 30 threads that is 192 to 240 MB of large-page allocations
+on top of the 236 MB block cache. `allocate_hugepage` falls back to malloc
+silently per thread, and the miner logs the tier for **thread 0 only**
+(`miner.cpp`, guarded by `th_local_index == 0`); the per-thread detail is at
+debug level. So some threads could be on normal pages at high counts with
+nothing visible saying so. Worth confirming before trusting a high-thread
+number, and worth fixing by reporting the worst tier across threads rather than
+thread 0's.
+
+### Where this leaves the project
+
+Each row at its own best thread count, which is the only fair way to compare
+once the optimum moves:
+
+```
+stock, 12 threads                     597.6 H/s
++ fused pad init, 12 threads            661.0      1.11x
++ run-ahead salt, 12 threads            711.0      1.19x
++ screening at 2.2%, 12 threads        1605.3      2.69x
++ retuned to 24 threads                ~1855       3.10x
+```
+
+Against the published v6 progression on a comparable machine (his 5900X stock
+558 H/s against this 7950X's 597.6), his figure after the same two steps,
+memory work and screening, is 976 H/s scaled from a 5600G or about 2233 on the
+5900X. The remaining gap is the memory work we have not built, chiefly K-way
+nonce interleaving at +23%, plus trace JIT and virtual pad.
 
 ## Lessons for v8
 
