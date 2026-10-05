@@ -49,6 +49,9 @@
 #include <string.h>
 #include <stdint.h>
 
+/* cn_vm_dirty_map, for the measurement hook below. */
+#include "cna-vm.h"
+
 /* (xx-1)*yy sweeps, and consensus draws xx, yy in [4,8], so 7*8 = 56.
  *
  * This bound is NOT a consensus guarantee at this level. cn_slow_hash_v14 is
@@ -234,6 +237,19 @@ static inline void cn_v8_xor16(void *dst, const void *src, const unsigned char *
                        _mm_load_si128((const __m128i *)cn_v8_cmp));        \
     _a = _mm_load_si128(R128(a));
 
+/* Mining-only measurement hook, NULL unless a caller turned tracking on.
+ *
+ * v8's sweeps write two 16-byte slots per operation and consensus draws at
+ * most (xx-1)*yy + iters = 119 operations, so the arithmetic says under 0.4%
+ * of a 1 MB pad is ever written. That is worth measuring rather than deriving,
+ * because it decides whether v6's recomputed final pass transfers to v8: every
+ * block the sweeps never touch is reproducible from the fill chain and the
+ * salt, exactly as in v13. Costs a not-taken branch when tracking is off.
+ *
+ * j is a byte offset, blocks are init_size_byte = 128 bytes. */
+#define CN_V8_DIRTY_MARK(j)                                                    do {                                                                           uint8_t *cn_dm_ = cn_vm_dirty_map();                                       if (cn_dm_ != NULL)                                                            cn_dm_[(j) >> 10] |= (uint8_t)(1u << (((j) >> 7) & 7));             } while (0)
+
+
 #define post_aes_variant_v8()                                              \
     _mm_store_si128(R128(c), _c);                                          \
     _b = _mm_xor_si128(_b, _c);                                            \
@@ -242,6 +258,7 @@ static inline void cn_v8_xor16(void *dst, const void *src, const unsigned char *
     _mm_store_si128(R128(&hp_state[j]),                                    \
         _mm_xor_si128(_mm_load_si128((const __m128i *)cn_v8_lgb),          \
                       _mm_load_si128((const __m128i *)cn_v8_cmp)));        \
+    CN_V8_DIRTY_MARK(j);                                                \
     j = state_index(c);                                                    \
     CN_V8_COMP(cn_v8_cmp, j);                                              \
     _mm_store_si128((__m128i *)cn_v8_lgb,                                  \
@@ -261,6 +278,7 @@ static inline void cn_v8_xor16(void *dst, const void *src, const unsigned char *
     _mm_store_si128(R128(&hp_state[j]),                                    \
         _mm_xor_si128(_mm_load_si128((const __m128i *)cn_v8_lgb),          \
                       _mm_load_si128((const __m128i *)cn_v8_cmp)));        \
+    CN_V8_DIRTY_MARK(j);                                                \
     _b = _c;
 
 /* The same step, software arm. Structurally identical; it reads the pad into a

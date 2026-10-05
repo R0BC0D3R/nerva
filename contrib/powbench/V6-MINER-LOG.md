@@ -1359,6 +1359,78 @@ and which one a design has depends on the machine, not on the algorithm. **State
 the pad size as a ratio to the target machine's cache per thread, not in
 megabytes**, and re-check it when caches grow.
 
+### 10. v8's pad is 98.5% reproducible on every nonce, and only its size hides that
+
+Lesson 7 says a pass over memory is memory work only while the memory is not
+reproducible. Asked of v8 and measured rather than argued:
+
+```
+v8 pad 1 MB, 8192 blocks of 128 bytes
+blocks the sweeps wrote, 2000 nonces at the consensus draw
+  min 23   mean 89.6   max 222   of 8192
+  1.09% of the pad written, 98.91% reproducible
+  the 32 random-value pokes add at most 32 more, so at least 98.52%
+```
+
+Everything else in the pad at the moment the final pass reads it is the fill's
+AES chain XOR the salt, both of which a miner can regenerate for the price of an
+AES round. **v6's recomputed final pass therefore applies to v8 structurally.**
+
+It applies *more* completely than it does to v6. On v13 a miner needs screening
+at 0.4% acceptance to find nonces whose pads are that clean. On v8 **every nonce
+is that clean**, because the write count is bounded by the draw: xx and yy in
+[4,8] and iters in [0,63] give at most (xx-1)*yy + iters = 119 sweep operations,
+each writing two 16-byte slots, against 65,536 slots in the pad.
+
+#### Why it is not currently exploitable, and what that rests on
+
+Regenerating a block costs an AES pseudo-round; reading one costs a memory
+access. Which is cheaper depends entirely on where the pad lives. At 1 MB a
+thread the pad is in L3 (lesson 9), so reading is cheap: regenerating all 8192
+blocks is roughly 655,000 AES operations, call it 330,000 cycles, against maybe
+16,000 cycles to stream 1 MB out of L3. A 20x loss. *That is an estimate from
+throughput figures, not a measurement; what is measured is the mechanism behind
+it, in lesson 9, where streaming stores lost 39% to 61% for the same reason.*
+
+So v8 is protected from this, and from the non-temporal store attack, **by one
+property and the same one in both cases: threads times 1 MB stays under L3.**
+
+#### The consequence that inverts the usual intuition
+
+If v8's pad were made larger to increase memory-hardness, past the point where
+it stops fitting in cache **both attacks switch on at once**, and the larger pad
+helps the attacker more than the defender:
+
+- the honest miner pays a larger fill, a larger final-pass read, and DRAM for
+  both
+- the attacker pays a larger fill and regenerates the final pass, trading DRAM
+  for AES, which is exactly the trade that was worth +16.8% on v13's 8 MB pad
+
+**Growing the pad would not raise the attacker's cost. It would lower it
+relative to the honest miner's.** That is the opposite of what "bigger pad, more
+memory-hard" predicts, and it is the single most useful thing this project has
+produced about v8.
+
+#### The root cause, stated so it can be designed against
+
+**v8's count of pad-dirtying operations is constant at at most 119, regardless
+of how big the pad is.** The pad's size buys fill cost and final-pass cost, both
+sequential, both prefetchable, and both reproducible from a 128-byte chain state
+plus the salt. It does not buy random-access work, because the random-access
+count does not scale with it.
+
+So the rule for any future change:
+
+> Pad size only buys memory-hardness to the extent that something writes the pad
+> unpredictably, in proportion to its size. A pad whose write count is fixed
+> while its size grows is buying sequential bandwidth, and sequential bandwidth
+> over reproducible data is not a cost an attacker has to pay.
+
+If v8's pad is ever resized, the sweep count has to scale with it, or the resize
+is worse than useless. If it is left at 1 MB, the safety is real but it is
+cache-residency safety: **state it as such, and re-check it as caches grow**, per
+lesson 9.
+
 ## Current state, and how to pick this up cold
 
 Branch `perf/v13-fused-pad-init` on remote `robcoder` (R0BC0D3R/nerva). Nothing
