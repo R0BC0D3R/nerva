@@ -45,30 +45,32 @@ internally, never what counts as a valid block.
 
 ## Getting a binary
 
-**[Download the latest build here.](https://github.com/R0BC0D3R/nerva/actions/workflows/depends.yml?query=branch%3Aperf%2Fv13-fused-pad-init+is%3Asuccess)**
-That link lists successful builds of this branch, newest first. Open the top
-one, scroll to **Artifacts** at the bottom of the page, and download the one for
-your platform.
+Download your platform directly from the table below. These come from
+[build 37313642307](https://github.com/R0BC0D3R/nerva/actions/runs/37313642307),
+the current build of this branch.
 
 **You need to be signed in to GitHub to download workflow artifacts.** A free
 account is enough. If you would rather not, build it yourself; see below.
 
-| platform | artifact |
+| platform | download |
 |---|---|
-| Windows 64-bit | `nerva-windows-x64` |
-| Windows 32-bit | `nerva-windows-x32` |
-| Linux x86_64 | `nerva-linux-x86_64` or `nerva-linux-x86_64-musl` |
-| Linux i686 | `nerva-linux-i686` or `nerva-linux-i686-musl` |
-| macOS Intel | `nerva-macos-x64` |
-| macOS Apple Silicon | `nerva-macos-armv8` |
-| Linux ARM 64-bit | `nerva-linux-armv8` or `nerva-linux-armv8-musl` |
-| Linux ARM 32-bit | `nerva-linux-armv7` or `nerva-linux-armv7-musl` |
-| FreeBSD x86_64 | `nerva-freebsd-x86_64` |
-| Android ARM64 | `nerva-android-armv8` |
+| Windows 64-bit | [nerva-windows-x64](https://github.com/R0BC0D3R/nerva/actions/runs/37313642307/artifacts/11346809372) |
+| Windows 32-bit | [nerva-windows-x32](https://github.com/R0BC0D3R/nerva/actions/runs/37313642307/artifacts/11346980942) |
+| Linux x86_64 | [nerva-linux-x86_64](https://github.com/R0BC0D3R/nerva/actions/runs/37313642307/artifacts/11346459595) or [musl](https://github.com/R0BC0D3R/nerva/actions/runs/37313642307/artifacts/11346799306) |
+| Linux i686 | [nerva-linux-i686](https://github.com/R0BC0D3R/nerva/actions/runs/37313642307/artifacts/11347125499) or [musl](https://github.com/R0BC0D3R/nerva/actions/runs/37313642307/artifacts/11346788743) |
+| macOS Intel | [nerva-macos-x64](https://github.com/R0BC0D3R/nerva/actions/runs/37313642307/artifacts/11346484570) |
+| macOS Apple Silicon | [nerva-macos-armv8](https://github.com/R0BC0D3R/nerva/actions/runs/37313642307/artifacts/11347305462) |
+| Linux ARM 64-bit | [nerva-linux-armv8](https://github.com/R0BC0D3R/nerva/actions/runs/37313642307/artifacts/11346524528) or [musl](https://github.com/R0BC0D3R/nerva/actions/runs/37313642307/artifacts/11347395295) |
+| Linux ARM 32-bit | [nerva-linux-armv7](https://github.com/R0BC0D3R/nerva/actions/runs/37313642307/artifacts/11347410173) or [musl](https://github.com/R0BC0D3R/nerva/actions/runs/37313642307/artifacts/11346950713) |
+| FreeBSD x86_64 | [nerva-freebsd-x86_64](https://github.com/R0BC0D3R/nerva/actions/runs/37313642307/artifacts/11346554448) |
+| Android ARM64 | [nerva-android-armv8](https://github.com/R0BC0D3R/nerva/actions/runs/37313642307/artifacts/11346319618) |
+| iOS ARM64 | [nerva-ios-armv8](https://github.com/R0BC0D3R/nerva/actions/runs/37313642307/artifacts/11346664279) |
 
-Every push to the branch rebuilds all of these, so the top run is current with
-the branch. Artifacts expire after a while, so if the list is empty, re-run the
-workflow from the Actions tab or build it yourself.
+Every push to the branch rebuilds all of these, so those links go stale when the
+branch moves and the artifacts themselves expire after a while. If a link is
+dead,
+**[pick the newest successful build here](https://github.com/R0BC0D3R/nerva/actions/workflows/depends.yml?query=branch%3Aperf%2Fv13-fused-pad-init+is%3Asuccess)**
+and scroll to **Artifacts** at the bottom of the page, or build it yourself.
 
 **Building it yourself** trusts nobody, and is the better option if you would
 rather not download a binary from a stranger's branch. It builds exactly like
