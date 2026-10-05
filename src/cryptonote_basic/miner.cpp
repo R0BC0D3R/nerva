@@ -41,6 +41,9 @@
 #include "cryptonote_format_utils.h"
 #include "cryptonote_core/cryptonote_tx_utils.h"
 #include "crypto/cna-vm.h"
+#if defined(CN_V13_PHASE_TIMING)
+#include <x86intrin.h>
+#endif
 #include "file_io_utils.h"
 #include "common/command_line.h"
 #include "common/util.h"
@@ -518,6 +521,41 @@ namespace cryptonote
       MGINFO("screen: " << hashed << " hashed, " << skipped << " skipped, acceptance "
              << (seen ? (100.0 * (double)hashed / (double)seen) : 0.0) << "%");
     }
+#if defined(CN_V13_PHASE_TIMING)
+    {
+      const uint64_t n = m_phase_hashes.load(std::memory_order_relaxed);
+      if (n > 0)
+      {
+        uint64_t total = m_screen_cycles.load(std::memory_order_relaxed);
+        int ph;
+        for (ph = 0; ph < crypto::CN_PH_COUNT; ph++)
+          total += m_phase_cycles[ph].load(std::memory_order_relaxed);
+        if (total > 0)
+        {
+          std::ostringstream ss;
+          ss << "phases over " << n << " hashes, cycles/hash and share:";
+          for (ph = 0; ph < crypto::CN_PH_COUNT; ph++)
+          {
+            const uint64_t c = m_phase_cycles[ph].load(std::memory_order_relaxed);
+            ss << "\n    " << std::setw(28) << std::left << crypto::cn_v13_phase_name(ph)
+               << std::setw(12) << std::right << (c / n)
+               << "  " << std::fixed << std::setprecision(2)
+               << (100.0 * (double)c / (double)total) << "%";
+          }
+          {
+            const uint64_t c = m_screen_cycles.load(std::memory_order_relaxed);
+            ss << "\n    " << std::setw(28) << std::left << "screen (whole path)"
+               << std::setw(12) << std::right << (c / n)
+               << "  " << std::fixed << std::setprecision(2)
+               << (100.0 * (double)c / (double)total) << "%";
+          }
+          ss << "\n    " << std::setw(28) << std::left << "total"
+             << std::setw(12) << std::right << (total / n) << "  100.00%";
+          MGINFO(ss.str());
+        }
+      }
+    }
+#endif
     m_last_hr_merge_time = misc_utils::get_tick_count();
     m_hashes = 0;
   }
@@ -967,7 +1005,14 @@ namespace cryptonote
        * time; nothing about the hash changes. */
       if (m_screen_threshold != 0 && b.major_version == 13 && !m_screen_batch)
       {
+#if defined(CN_V13_PHASE_TIMING)
+        const uint64_t scr_t0 = __rdtsc();
+        const uint32_t scr_est = screen_block_nonce_v13(hash_context, m_pbc, b, height, m_screen_threshold);
+        m_screen_cycles.fetch_add(__rdtsc() - scr_t0, std::memory_order_relaxed);
+        if (scr_est > m_screen_threshold)
+#else
         if (screen_block_nonce_v13(hash_context, m_pbc, b, height, m_screen_threshold) > m_screen_threshold)
+#endif
         {
           ++m_screened_out;
           nonce += m_threads_total;
@@ -1076,6 +1121,19 @@ namespace cryptonote
         nonce += m_threads_total;   // batched screening advances it eight at a time
       ++m_hashes;
       ++m_total_hashes;
+#if defined(CN_V13_PHASE_TIMING)
+      {
+        /* Seven relaxed adds against a hash that costs tens of millions of
+         * cycles, so the instrument does not move what it measures. */
+        int ph;
+        for (ph = 0; ph < crypto::CN_PH_COUNT; ph++)
+        {
+          m_phase_cycles[ph].fetch_add(crypto::cn_v13_phase_cycles[ph], std::memory_order_relaxed);
+          crypto::cn_v13_phase_cycles[ph] = 0;
+        }
+        m_phase_hashes.fetch_add(1, std::memory_order_relaxed);
+      }
+#endif
     }
     cn_vm_dirty_enable(0);
     crypto::cn_v13_nt_fill_enable(0);

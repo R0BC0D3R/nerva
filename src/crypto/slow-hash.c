@@ -125,6 +125,24 @@ int cn_v13_nt_fill(void)
     return cn_v13_tls_nt_fill;
 }
 
+#if defined(CN_V13_PHASE_TIMING)
+__thread uint64_t cn_v13_phase_cycles[CN_PH_COUNT];
+
+const char *cn_v13_phase_name(int phase)
+{
+    static const char *const names[CN_PH_COUNT] = {
+        "head (keccak, key expand)",
+        "fill (8 MB)",
+        "pokes (32 bytes)",
+        "program generation",
+        "VM (2048 passes)",
+        "final pass",
+        "tail (permute, extra hash)"
+    };
+    return (phase >= 0 && phase < CN_PH_COUNT) ? names[phase] : "?";
+}
+#endif
+
 #define CN_DISPATCH(call_hw, call_sw) \
     do { \
         if (cn_hardware_aes_supported()) { call_hw; } else { call_sw; } \
@@ -650,7 +668,20 @@ int cn_slow_hash_known_answer_test(void)
         cn_slow_hash_v10(ctx, live_in, sizeof(live_in) - 1, h,
                          cn_v10_kat[k].iters, cn_v10_kat[k].blk, cn_v10_kat[k].xx,
                          cn_v10_kat[k].yy, cn_v10_kat[k].zz, cn_v10_kat[k].ww);
-        if (memcmp(h, cn_v10_kat[k].want, HASH_SIZE) != 0) ok = 0;
+        if (memcmp(h, cn_v10_kat[k].want, HASH_SIZE) != 0)
+        {
+            int z;
+            fprintf(stderr, "KAT FAIL v10[%u] iters=%u blk=%u xx=%u yy=%u zz=%u ww=%u",
+                    (unsigned)k, (unsigned)cn_v10_kat[k].iters, (unsigned)cn_v10_kat[k].blk,
+                    (unsigned)cn_v10_kat[k].xx, (unsigned)cn_v10_kat[k].yy,
+                    (unsigned)cn_v10_kat[k].zz, (unsigned)cn_v10_kat[k].ww);
+            fprintf(stderr, "\n  got  ");
+            for (z = 0; z < HASH_SIZE; z++) fprintf(stderr, "%02x", (unsigned char)h[z]);
+            fprintf(stderr, "\n  want ");
+            for (z = 0; z < HASH_SIZE; z++) fprintf(stderr, "%02x", cn_v10_kat[k].want[z]);
+            fprintf(stderr, "\n");
+            ok = 0;
+        }
     }
 
     for (k = 0; k < sizeof(cn_v11_kat) / sizeof(cn_v11_kat[0]); k++)
@@ -660,13 +691,15 @@ int cn_slow_hash_known_answer_test(void)
         cn_slow_hash_v11(ctx, live_in, sizeof(live_in) - 1, h,
                          cn_v11_kat[k].iters, cn_v11_kat[k].blk,
                          cn_v11_kat[k].xx, cn_v11_kat[k].yy);
-        if (memcmp(h, cn_v11_kat[k].want, HASH_SIZE) != 0) ok = 0;
+        if (memcmp(h, cn_v11_kat[k].want, HASH_SIZE) != 0)
+        { fprintf(stderr, "KAT FAIL v11[%u]\n", (unsigned)k); ok = 0; }
     }
 
     memset(&ctx->random_values, 0, sizeof(ctx->random_values));
     memset(ctx->salt, 0, CN_SALT_MEMORY);
     cn_slow_hash_v13(ctx, live_in, sizeof(live_in) - 1, h, seed);
-    if (memcmp(h, cn_v13_kat, HASH_SIZE) != 0) ok = 0;
+    if (memcmp(h, cn_v13_kat, HASH_SIZE) != 0)
+    { fprintf(stderr, "KAT FAIL v13\n"); ok = 0; }
 
     for (k = 0; k < sizeof(cn_v14_kat) / sizeof(cn_v14_kat[0]); k++)
     {
@@ -675,7 +708,8 @@ int cn_slow_hash_known_answer_test(void)
         cn_slow_hash_v14(ctx, v8_in, sizeof(v8_in) - 1, h,
                          cn_v14_kat[k].iters, CN_V8_INIT_SIZE_BLK,
                          cn_v14_kat[k].xx, cn_v14_kat[k].yy);
-        if (memcmp(h, cn_v14_kat[k].want, HASH_SIZE) != 0) ok = 0;
+        if (memcmp(h, cn_v14_kat[k].want, HASH_SIZE) != 0)
+        { fprintf(stderr, "KAT FAIL v14[%u]\n", (unsigned)k); ok = 0; }
     }
 
     cn_hash_context_free(ctx);

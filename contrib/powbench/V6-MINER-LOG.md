@@ -918,6 +918,133 @@ This is the clearest case yet of rule 5 paying off in reverse: the result had
 the wrong **shape** for the model, the model was wrong rather than the result,
 and the correction is worth more than the measurement was.
 
+### Where a nonce's time actually goes, and the roadmap it overturned
+
+The roadmap had the trace JIT next, ranked on an **instruction count**: about
+1.05M interpreted VM instructions per hash against about 15.7M AES operations.
+Turning those counts into a time budget accounted for only about 60% of a hash,
+which is not a basis for weeks of emitter work, so the split was measured
+instead.
+
+Measured by instrumenting the real `cn_slow_hash_v13` behind
+`CN_V13_PHASE_TIMING`, a macro the daemon never defines, rather than by timing a
+copy of the algorithm. A copy drifts, and then the breakdown describes the copy.
+
+```
+30 threads, threshold 4, recompute and non-temporal fill on
+
+                          cycles/hash    share of a nonce
+screen, modelled part      11,568,000       24.8%
+screen, get_cna_v6_seed     7,960,000       17.0%   (by difference, see below)
+  screen total             19,530,000       41.8%
+VM, 2048 passes            13,689,000       29.3%
+final pass                  8,636,000       18.5%
+fill, 8 MB                  4,737,000       10.1%
+everything else               107,000        0.2%
+                           46,700,000
+```
+
+**The screen is the largest single cost, not the VM.** The estimate it replaced
+had the VM at 18% and the screen at 7%. Both were wrong, and in opposite
+directions.
+
+What that does to the trace JIT: eliminating the VM **entirely** caps at 1.41x,
+and a JIT removes interpreter dispatch rather than the memory operations
+underneath it, so the realistic prize is 1.15x to 1.25x for an x86-64 emitter
+plus deopt handling. Halving the screen is worth 1.26x by itself. The JIT went
+from "next" to "not next" on one afternoon's measurement.
+
+#### The control that caught the first version being wrong
+
+The harness models the miner's duty cycle, screen included, so **it has to
+reproduce the daemon's hashrate or its breakdown is a breakdown of something
+else.** The first version reported 3726.7 H/s against the daemon's 2875.8, and
+the cause was found rather than patched: `screen_block_nonce_v13` does four
+things per candidate, a blob hash, an `HC128_Init` for the salt prefix,
+`get_cna_v6_seed`, and `cn_vm_screen_cost`, and the harness timed only the last.
+Adding the first two took it to 3467.1. The rest is `get_cna_v6_seed`'s reads
+into the block cache, which need the database, and that is the row derived by
+difference above.
+
+**Caveat, stated rather than buried.** That derived row assumes the
+hash-internal costs are the same in harness and daemon. They moved about 6%
+between the two harness runs, so treat 17% as roughly right rather than precise.
+The ordering does not depend on it.
+
+### Eight-wide screening, re-measured: from worth nothing to +9.1%
+
+It was recorded as worth nothing at 30 threads, and the reason given was cache
+pressure: the transposed per-lane state cost about what the vectorisation saved.
+Since then per-hash traffic has fallen from 24 MB to 8 and the screen has gone
+from a small share of a nonce to the largest one, so both halves of that trade
+had moved. Re-measured rather than re-read:
+
+```
+30 threads, recompute and non-temporal fill on, 0.6% drift
+
+thr 4 serial  (mean of two readings)   2886.4 H/s
+thr 4 batched                          3148.6        +9.08%
+thr 6 batched                          3111.3        +7.79%
+thr 8 batched                          3004.7        +4.10%
+```
+
+The threshold was then swept downward as well, since a cheaper screen lowers the
+price of rejecting a candidate and should make being pickier affordable:
+
+```
+thr 4 batched (mean of two readings)   3117.1 H/s
+thr 3 batched                          3109.8        -0.24%
+thr 2 batched                          2965.4        -4.87%
+thr 1 batched                          2846.4        -8.68%
+```
+
+Flat from 3 to 4 and falling away below. **Threshold 4 stands.** It has now been
+predicted to move looser once and tighter once, and has not moved either time,
+which is worth recording as a property of the algorithm rather than continuing
+to re-derive it: the optimum is robust at 4 across every configuration measured
+on this machine.
+
+**This is the second result on this project to reverse itself**, and both
+reversed for the same reason: a measurement is a property of the configuration
+it was taken in. The first time, the eight-wide screen was worth nothing at 30
+threads and 4% at 7 to 8, so it looked like a core-count effect. It was not. It
+was a cache-pressure effect, and removing two thirds of the memory traffic
+turned it positive on the machine where it had been worthless.
+
+**Rule: when a change alters the balance, every "not worth it" result taken
+under the old balance is void, not merely stale.** Keep a list of them. On this
+project the list was `--mining-screen-batch` and it was worth 9%.
+
+### Live confirmation at 16 threads, and thread scaling as evidence
+
+Run through NervaOne on mainnet at 16 threads with the full configuration:
+**a little over 1.7 kH/s** on a quiet machine. The rig at 30 threads reads
+3148.6, so linear scaling predicts 1679 at 16. The live miner and the offline
+rig agree to about 2%, at a thread count the rig never measured.
+
+The first reading of that run was 1.6 to 1.7 and the machine was not quiet: a
+verification build was running on the same cores. Rule 4 says not to touch the
+machine during a run, and it applies to the person doing the measuring as much
+as to anyone else. The build finished, the rate went up, and the gap closed.
+
+The scaling itself is the more interesting part, because it corroborates the
+phase breakdown from a direction that did not feed into it:
+
+```
+before the recomputed final pass   12 -> 30 threads   1.57 -> 1.86 kH/s   1.18x for 2.5x the threads
+after everything                   16 -> 30 threads   1.71 -> 3.15        1.84x for 1.88x the threads
+```
+
+Sublinear then, linear now. A memory-bound workload cannot scale linearly with
+thread count because the threads contend for one memory system; a compute-bound
+one can. **This is independent evidence for the "no longer memory bound"
+conclusion**, and it did not come from the instrumentation that produced it.
+
+Caveat, per rule 6: these cross two measurement setups, live NervaOne against
+the offline rig. That is exactly the comparison rule 6 says not to trust at the
+few-percent level. It is used here only because the effect is a factor of two in
+scaling efficiency, far outside what setup differences explain.
+
 ### Where this leaves the project
 
 Each row at its own best thread count, which is the only fair way to compare
@@ -935,6 +1062,7 @@ stock,                     12 threads            597.6 H/s
 + screen early exit (thr 4), 30 threads           2280.2      3.82x
 + recomputed final pass,     30 threads           2590.5      4.33x
 + non-temporal fill,         30 threads           2875.8      4.81x
++ eight-wide screening,      30 threads           3148.6      5.27x
 ```
 
 Best unscreened is 733.4 H/s at 12 threads, so screening and its retuning are
@@ -1126,8 +1254,10 @@ here is proposed for nerva-project.
 ```
 7950X, 16C/32T, 1 MB L2 per core
   nervad --mining-screen-threshold 4 --mining-recompute-final --mining-nontemporal-fill
-                                                30 threads   2875.8 H/s   4.81x over stock
-  (threshold 6 and 8 read the same within drift; 4 is the safe choice)
+         --mining-screen-batch
+                                                30 threads   3148.6 H/s   5.27x over stock
+  (threshold 4 is the optimum; 3 ties it, 2 and below and 6 and above are worse)
+  16 threads and below is UNMEASURED
   (--mining-screen-batch is NOT worth it here)
 
 i7-7700HQ, 4C/8T, 256 KB L2
@@ -1154,6 +1284,8 @@ output somewhere else; check the md5, not the path.
 | eight-wide screen | shipped, `--mining-screen-batch`, default off; nothing at 30 threads, +4% at 7 to 8 |
 | recomputed final pass | shipped, `--mining-recompute-final`, default off; +16.8% screened, -7.7% unscreened |
 | non-temporal fill | shipped, `--mining-nontemporal-fill`, default off; +22% alone, +12% on top of the recompute |
+| eight-wide screen | **re-measured: +9.1% at 30 threads**, not the zero first recorded |
+| phase timing | `CN_V13_PHASE_TIMING`, off; instruments the real hash, see the breakdown above |
 
 ### Next, and it is not what it was this morning
 
@@ -1175,12 +1307,19 @@ memory        8 MB of streaming stores
 
 In order:
 
-- **Trace JIT.** Advertised at 1.48x and previously filed under "weeks of work,
-  do last". It is now the most valuable unbuilt item, because the ~1M
-  interpreted VM instructions per hash are pure compute and the interpreter
-  dispatch is most of their cost. The program is fixed for the whole hash and
-  re-run 2048 times, which is the ideal case for emitting it once. Needs an
-  x86-64 emitter and deopt handling.
+- **The screen, which the phase breakdown says is 42% of a nonce.** Eight-wide
+  screening has already taken 9.1% of that and is now on by default in the best
+  configuration. What is left splits into the two `HC128_Init` calls per
+  candidate, now vectorised, and `get_cna_v6_seed`'s reads into the block
+  cache, which the breakdown puts at about 17% of a nonce on its own, larger
+  than the entire 8 MB fill. That is the biggest single unattacked cost on the
+  project and nothing has been tried against it yet.
+
+- **Trace JIT, now demoted on measurement rather than promoted on a count.**
+  The VM is 29% of a nonce, so eliminating it *entirely* caps at 1.41x, and a
+  JIT removes interpreter dispatch rather than the memory operations
+  underneath, so the realistic prize is 1.15x to 1.25x for an x86-64 emitter
+  plus deopt handling. Worth doing eventually, not worth doing next.
 
 - **One fewer AES pass.** The recomputed final pass does the fill's AES work a
   second time. Half of it could be avoided at K-block granularity by keeping
@@ -1232,6 +1371,20 @@ dirty-block count so a vacuous comparison is visible rather than silent.
   invisible.
 - F36's big-endian `e2i` missing `SWAP64LE` is still unfixed, unrelated to this
   work but noted in FINDINGS.
+- **Unexplained: defining `CN_V13_PHASE_TIMING` makes every v10 and v11
+  known-answer vector fail, while v13 and v14 pass.** Ruled out: the timing
+  marks themselves (removing them from the hardware unit does not fix it), a
+  thread-local array in `slow-hash.c` on its own (does not reproduce it), the
+  `<x86intrin.h>` include (replaced with `__builtin_ia32_rdtsc`, still fails),
+  and the optimisation level (the clean tree passes at -O1, -O2 and -O3 with
+  identical digests). The wrong value is stable across runs, so it is
+  deterministic rather than uninitialised memory, and in the same binary the
+  same arguments give the right digest from a harness and the wrong one from
+  inside the known-answer test. Nothing committed is affected: the macro is
+  off, and the tree passes. **Worth its own session.** The KAT now names the
+  failing vector, which is what made this visible at all.
+- **16 threads and below is unmeasured** for the current configuration. Every
+  number on this project since the recompute landed is at 30 threads.
 
 ## Measurement rules
 
@@ -1296,6 +1449,23 @@ A-B-B-A or repeated baseline bounds the drift **within** that run, usually to
 So a number from yesterday's run is not a baseline for today's change. Measure
 the baseline again, in the same run, every time. The cost is one extra point and
 it is always worth paying.
+
+### Rule 7. When the balance changes, every "not worth it" is void, not stale
+
+A measurement is a property of the configuration it was taken in. Eight-wide
+screening was recorded as worth nothing at 30 threads and 4% at 7 to 8, which
+looked like a core-count effect and was filed as one. It was a cache-pressure
+effect. Removing two thirds of the memory traffic made it worth 9.1% on the
+machine where it had been worthless, and the code had been sitting finished and
+switched off the whole time.
+
+So a change that alters the balance does not merely make old negative results
+stale, it voids them. **Keep an explicit list of everything rejected under the
+old balance and re-run it.** On this project that list had one entry and it was
+worth 9%.
+
+This is rule 1 pointed at negative results instead of positive ones, and the
+negative ones are easier to miss because nothing downstream depends on them.
 
 ## Environment traps
 

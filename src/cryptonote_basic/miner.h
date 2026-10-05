@@ -165,6 +165,14 @@ namespace cryptonote
     bool m_recompute_final;
     /* Stream v13's pad fill past the caches. Mining only. See hash-ops.h. */
     bool m_nt_fill;
+#if defined(CN_V13_PHASE_TIMING)
+    /* Measurement-only build: where a nonce's time actually goes, aggregated
+     * across mining threads. The shipped daemon never defines the macro, so
+     * none of this exists there. See contrib/powbench/build-v13-phases.sh. */
+    std::atomic<uint64_t> m_phase_cycles[8];
+    std::atomic<uint64_t> m_screen_cycles;
+    std::atomic<uint64_t> m_phase_hashes;
+#endif
     uint8_t m_donate_percent;
     uint8_t m_donate_counter;
     volatile bool m_donating;

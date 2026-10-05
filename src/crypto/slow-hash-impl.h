@@ -35,6 +35,19 @@
 
 #include "cna-vm.h"
 
+/* See hash-ops.h. Both expand to nothing in the daemon's build. */
+#if defined(CN_V13_PHASE_TIMING)
+/* __builtin_ia32_rdtsc rather than __rdtsc from <x86intrin.h>: this header is
+ * also included by the software-AES translation unit, which is compiled
+ * without -maes, and pulling the intrinsic headers in there changes what that
+ * unit computes. The builtin needs no header. */
+#define CN_PH_DECL      uint64_t ph_t = __builtin_ia32_rdtsc()
+#define CN_PH_MARK(ph)  do { const uint64_t ph_n = __builtin_ia32_rdtsc(); cn_v13_phase_cycles[ph] += ph_n - ph_t; ph_t = ph_n; } while (0)
+#else
+#define CN_PH_DECL      ((void)0)
+#define CN_PH_MARK(ph)  ((void)0)
+#endif
+
 #if !defined(CN_USE_SOFTWARE_AES)
 
 void cn_slow_hash_v11(cn_hash_context_t *context, const void *data, size_t length, char *hash, size_t iters, uint8_t init_size_blk, uint16_t xx, uint16_t yy)
@@ -263,6 +276,8 @@ void cn_slow_hash_v13(cn_hash_context_t *context, const void *data, size_t lengt
     static void (*const extra_hashes[4])(const void *, size_t, char *) = {
         hash_extra_blake, hash_extra_groestl, hash_extra_jh, hash_extra_skein};
 
+    CN_PH_DECL;
+
     hash_process(&state.hs, data, length);
     memcpy(text, state.init, init_size_byte);
     aes_expand_key((OAES_CTX *)context->oaes_ctx, state.hs.b, expandedKey);
@@ -275,6 +290,8 @@ void cn_slow_hash_v13(cn_hash_context_t *context, const void *data, size_t lengt
         memcpy(expandedKeyFill, expandedKey, sizeof(expandedKey));
         memset(dirty, 0, CN_V13_DIRTY_BYTES);
     }
+    CN_PH_MARK(CN_PH_HEAD);
+
     for (i = 0; i < CN_SCRATCHPAD_MEMORY_V13 / init_size_byte; i++)
     {
         aes_pseudo_round(text, text, expandedKey, init_size_blk);
@@ -326,6 +343,7 @@ void cn_slow_hash_v13(cn_hash_context_t *context, const void *data, size_t lengt
     if (nt_fill)
         _mm_sfence();
 #endif
+    CN_PH_MARK(CN_PH_FILL);
 
     {
         const cn_random_values_t rv = context->random_values;
@@ -352,6 +370,7 @@ void cn_slow_hash_v13(cn_hash_context_t *context, const void *data, size_t lengt
             }
         }
     }
+    CN_PH_MARK(CN_PH_POKE);
 
     uint64_t regs[CN_REG_COUNT];
     {
@@ -362,12 +381,14 @@ void cn_slow_hash_v13(cn_hash_context_t *context, const void *data, size_t lengt
 
     cn_vm_program_t prog;
     cn_vm_generate_program(&prog, seed);
+    CN_PH_MARK(CN_PH_GEN);
 
     {
         int iter;
         for (iter = 0; iter < CN_VM_ITERATIONS; iter++)
             cn_vm_execute(&prog, hp_state, regs);
     }
+    CN_PH_MARK(CN_PH_VM);
 
     {
         int r;
@@ -425,8 +446,11 @@ void cn_slow_hash_v13(cn_hash_context_t *context, const void *data, size_t lengt
         }
     }
     memcpy(state.init, text, init_size_byte);
+    CN_PH_MARK(CN_PH_FINAL);
+
     hash_permutation(&state.hs);
     extra_hashes[state.hs.b[0] & 3](&state, 200, hash);
+    CN_PH_MARK(CN_PH_TAIL);
 
     free(text);
 }

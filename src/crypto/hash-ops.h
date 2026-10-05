@@ -211,6 +211,28 @@ int cn_hardware_aes_supported(void);
 int cn_v13_nt_fill_enable(int on);
 int cn_v13_nt_fill(void);
 
+/* Per-phase cycle counts for the v13 hash, so the cost breakdown is measured
+ * rather than inferred from instruction counts. Compiled in only when
+ * CN_V13_PHASE_TIMING is defined, which the daemon never defines and only
+ * contrib/powbench/build-v13-phases.sh sets. Zero cost otherwise.
+ *
+ * The real function is instrumented rather than a copy of it, because a copy
+ * drifts from the original and then the breakdown describes the copy. */
+#if defined(CN_V13_PHASE_TIMING)
+enum {
+  CN_PH_HEAD = 0,   /* keccak, key expansion                */
+  CN_PH_FILL,       /* the 8 MB fill                        */
+  CN_PH_POKE,       /* the 32 random-value pokes            */
+  CN_PH_GEN,        /* register seed and program generation */
+  CN_PH_VM,         /* 2048 passes of cn_vm_execute         */
+  CN_PH_FINAL,      /* the final pass                       */
+  CN_PH_TAIL,       /* permutation and the extra hash       */
+  CN_PH_COUNT
+};
+extern __thread uint64_t cn_v13_phase_cycles[CN_PH_COUNT];
+const char *cn_v13_phase_name(int phase);
+#endif
+
 /* Hashes a fixed input with both the HW and SW paths and compares. Returns 1
  * on success or when the HW path isn't built/active (nothing to verify), and
  * 0 if HW and SW disagree, which would mean wrong PoW. */
