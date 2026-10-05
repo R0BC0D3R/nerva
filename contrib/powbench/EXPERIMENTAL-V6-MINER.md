@@ -45,16 +45,30 @@ internally, never what counts as a valid block.
 
 ## Getting a binary
 
-Every push to `perf/v13-fused-pad-init` cross-builds **14 targets** through the
-`depends` workflow: Windows x64 and x32, Linux x86_64 and i686 (glibc and musl),
-macOS x64 and arm64, FreeBSD x86_64, Android arm64, and ARM v7 and v8. It can
-also be run on demand from the Actions tab with "Run workflow", which works on
-any branch.
+**[Download the latest build here.](https://github.com/R0BC0D3R/nerva/actions/workflows/depends.yml?query=branch%3Aperf%2Fv13-fused-pad-init+is%3Asuccess)**
+That link lists successful builds of this branch, newest first. Open the top
+one, scroll to **Artifacts** at the bottom of the page, and download the one for
+your platform.
 
-**From Actions artifacts.** Actions tab, newest `depends` run on branch
-`perf/v13-fused-pad-init`, then the artifact for your platform. **GitHub
-requires a signed-in account to download workflow artifacts**, and they expire
-after a while. A free account is enough.
+**You need to be signed in to GitHub to download workflow artifacts.** A free
+account is enough. If you would rather not, build it yourself; see below.
+
+| platform | artifact |
+|---|---|
+| Windows 64-bit | `nerva-windows-x64` |
+| Windows 32-bit | `nerva-windows-x32` |
+| Linux x86_64 | `nerva-linux-x86_64` or `nerva-linux-x86_64-musl` |
+| Linux i686 | `nerva-linux-i686` or `nerva-linux-i686-musl` |
+| macOS Intel | `nerva-macos-x64` |
+| macOS Apple Silicon | `nerva-macos-armv8` |
+| Linux ARM 64-bit | `nerva-linux-armv8` or `nerva-linux-armv8-musl` |
+| Linux ARM 32-bit | `nerva-linux-armv7` or `nerva-linux-armv7-musl` |
+| FreeBSD x86_64 | `nerva-freebsd-x86_64` |
+| Android ARM64 | `nerva-android-armv8` |
+
+Every push to the branch rebuilds all of these, so the top run is current with
+the branch. Artifacts expire after a while, so if the list is empty, re-run the
+workflow from the Actions tab or build it yourself.
 
 **Building it yourself** trusts nobody, and is the better option if you would
 rather not download a binary from a stranger's branch. It builds exactly like
@@ -94,11 +108,25 @@ nervad --mining-screen-threshold 4 \
 
 Then start mining as usual, or add `--start-mining <your address> --mining-threads N`.
 
-Through NervaOne, put the flags in the additional-arguments box and set threads
-in the UI. **Check the daemon log says the thread count you expect**: a stale
+### Through NervaOne
+
+Put this in the **additional arguments** box, and set the thread count in the
+UI:
+
+```
+--mining-screen-threshold 4 --mining-screen-batch --mining-recompute-final --mining-nontemporal-fill
+```
+
+**Do not add `--mining-affinity` there.** NervaOne already passes it, and
+repeating an argument can stop the daemon starting.
+
+**Check the daemon log says the thread count you expect.** A stale
 `--mining-threads` can leave the UI showing one number while the daemon runs
-another. The line to look for is `Mining has started with N threads`, and it is
-always the truth.
+another; this happened during testing, with the selector reading 16 while the
+daemon mined with 12 all night. The line to look for is
+`Mining has started with N threads`, and it is always the truth. If it
+disagrees with the UI, stop mining, change the thread count, and start again,
+which forces NervaOne to re-issue the setting.
 
 ### What each flag does
 
