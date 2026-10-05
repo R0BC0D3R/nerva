@@ -33,6 +33,12 @@ on:
     push:
         branches:
             - master
+            # Experimental v6 miner branch, fork only. Every push cross-builds
+            # all targets so there are binaries to point people at. See
+            # contrib/powbench/EXPERIMENTAL-V6-MINER.md. Drop this line to go
+            # back to manual runs; workflow_dispatch below already allows them
+            # on any branch.
+            - perf/v13-fused-pad-init
         paths-ignore:
             - 'docs/**'
             - '**/README.md'

@@ -3,6 +3,40 @@
 Running record of the work, the measurements and the mistakes. Fork branch
 only, not proposed for nerva-project. Started 2026-10-04.
 
+## Start here
+
+**If you are picking this up to improve v8, read in this order and skip the
+rest:**
+
+1. **Lessons for v8**, ten numbered rules distilled from everything below. They
+   are written to be checkable against a proposed v8 change without re-deriving
+   the attack. Lessons 7, 9 and 10 are the load-bearing ones and all three are
+   measured, not argued.
+2. **Current state, and how to pick this up cold**, for what is built, what the
+   switches are, and what is open.
+3. **Measurement rules**, seven of them, each earned by a confidently wrong
+   number. Rule 1 and rule 7 have each cost this project a day.
+
+The three findings that matter most for v8, in one place:
+
+- **v8's pad is 98.5% reproducible on every nonce** (lesson 10). v6's recompute
+  attack applies structurally, with no screening needed.
+- **Both known pad attacks are held off by one property**: the working set not
+  exceeding L3 by much. Measured on two machines, the threshold is well above
+  1.3x over-subscription, not at 1.0x (lesson 9).
+- **Enlarging v8's pad would help an attacker, not hinder one** (lesson 10).
+  v13 already ran that experiment: the deliberate 4 MB to 8 MB rise at HF13 is
+  what created its 1.29x attack surface.
+
+**If you are a miner wanting to run this**, see
+[EXPERIMENTAL-V6-MINER.md](EXPERIMENTAL-V6-MINER.md) instead. Nothing in this
+file is needed to use the build.
+
+**Numbers in this log were corrected as they were re-measured.** Where a figure
+was withdrawn, the old one is shown struck through in prose rather than deleted,
+because rule 1 is that a withdrawn number outlives the correction. If two
+figures disagree, the one in **Current state** is current.
+
 ## Why this exists
 
 The CNA v8 work in PR #162 is measured but not live, so nobody is mining on it
@@ -721,6 +755,13 @@ side wins depends on how much cache pressure the machine is already under. Off
 by default remains right for the 7950X and wrong for the laptop, which is what
 the flag is for.
 
+> **Superseded.** This is wrong as of the recomputed final pass and the
+> non-temporal fill, which removed two thirds of the memory traffic and with it
+> the cache pressure this paragraph blames. Re-measured, the eight-wide screen
+> is **+9.1% at 30 threads** and is on in the best configuration. It was never a
+> core-count effect. See "Eight-wide screening, re-measured" and rule 7, which
+> exists because of this.
+
 ### Recomputing the final pass instead of reading it: +16.8%
 
 v13 writes all 8 MB of the pad in the fill and reads all 8 MB back in the final
@@ -911,8 +952,13 @@ That re-prices everything still on the list, and in opposite directions:
 - **The compute items are worth more.** What is left per hash is roughly 15.7M
   AES operations across three passes over the chain, about 1M interpreted VM
   instructions, and the screen's 244 rejected candidates per accepted nonce.
-  Trace JIT attacks the second of those and is now the most valuable unbuilt
-  item rather than the most expensive one.
+
+  *Superseded, and left here because the reasoning is still right while the
+  conclusion is not.* This originally read that the trace JIT was now the most
+  valuable unbuilt item. Measuring the screen from inside the daemon rather
+  than by subtracting harnesses put the VM at 29% of a nonce, capping a perfect
+  JIT at 1.41x and a realistic one at 1.15x to 1.25x. See the screen cost split
+  below.
 
 This is the clearest case yet of rule 5 paying off in reverse: the result had
 the wrong **shape** for the model, the model was wrong rather than the result,
@@ -966,10 +1012,15 @@ Adding the first two took it to 3467.1. The rest is `get_cna_v6_seed`'s reads
 into the block cache, which need the database, and that is the row derived by
 difference above.
 
-**Caveat, stated rather than buried.** That derived row assumes the
-hash-internal costs are the same in harness and daemon. They moved about 6%
-between the two harness runs, so treat 17% as roughly right rather than precise.
-The ordering does not depend on it.
+**Caveat, stated rather than buried, and it turned out to matter.** That derived
+row assumes the hash-internal costs are the same in harness and daemon.
+
+**It was wrong by more than 5x.** Measured from inside the daemon, as the screen
+cost split below records, `get_cna_v6_seed` is 3.1% of the screen, not 17% of a
+nonce. The gap the subtraction charged to it was mostly the second `HC128_Init`
+inside `cn_vm_screen_cost` and the per-candidate blob rebuild. **Do not use the
+derived row for anything**; it is kept only because a plan was built on it and
+rule 1 says to show what was withdrawn.
 
 ### Eight-wide screening, re-measured: from worth nothing to +9.1%
 
@@ -1576,7 +1627,6 @@ here is proposed for nerva-project.
     12 threads  1733 H/s     16 threads  2277 H/s
   (13 blocks found overnight at 12 threads, 13 credited, none rejected)
   Scaling is linear to 16, the physical core count, and 0.74 of linear beyond.
-  (--mining-screen-batch is NOT worth it here)
 
 i7-7700HQ, 4C/8T, 256 KB L2
   nervad --mining-screen-threshold 14 --mining-screen-batch   8 threads   413.5 H/s   4.45x
@@ -1585,8 +1635,13 @@ i7-7700HQ, 4C/8T, 256 KB L2
    machine most likely to gain from each)
 ```
 
+Builds for every platform come from the `depends` GitHub workflow, which now
+triggers on pushes to this branch as well as on manual dispatch. User-facing
+instructions, including how to publish a pre-release from the artifacts, are in
+[EXPERIMENTAL-V6-MINER.md](EXPERIMENTAL-V6-MINER.md).
+
 Binaries used for the A/Bs are under `D:/Claude/v6miner/ab/`. The newest is
-`nervad-rec.exe`. They are not in git; rebuild from the branch if they are
+`nervad-hoist.exe`. They are not in git; rebuild from the branch if they are
 gone. The build directory is keyed on the branch name, so a branch switch sends
 output somewhere else; check the md5, not the path.
 
@@ -1599,10 +1654,9 @@ output somewhere else; check the md5, not the path.
 | nonce screening | shipped, `--mining-screen-threshold`, default off |
 | screen early exit | shipped, +21% via moving the optimum |
 | eight-lane HC-128 init | shipped, `HC128_Init_x8`, verified 2.37x |
-| eight-wide screen | shipped, `--mining-screen-batch`, default off; nothing at 30 threads, +4% at 7 to 8 |
+| eight-wide screen | shipped, `--mining-screen-batch`, default off; **+9.1% at 30 threads** on re-measurement, after first being recorded as worth nothing there. See rule 7 |
 | recomputed final pass | shipped, `--mining-recompute-final`, default off; +16.8% screened, -7.7% unscreened |
 | non-temporal fill | shipped, `--mining-nontemporal-fill`, default off; +22% alone, +12% on top of the recompute |
-| eight-wide screen | **re-measured: +9.1% at 30 threads**, not the zero first recorded |
 | phase timing | `CN_V13_PHASE_TIMING`, off; instruments the real hash, see the breakdown above |
 | screen profiling | on, its own log category; `--log-level "*:WARNING,user:INFO,global:INFO,miner.screen:INFO"` |
 | hoisted hashing blob | on, `NERVA_NO_BLOB_HOIST=1` disables; removes 3,351 cycles a candidate, under 2% of throughput at 30 threads |
@@ -1628,13 +1682,21 @@ memory        8 MB of streaming stores
 
 In order:
 
-- **The screen, which the phase breakdown says is 42% of a nonce.** Eight-wide
-  screening has already taken 9.1% of that and is now on by default in the best
-  configuration. What is left splits into the two `HC128_Init` calls per
-  candidate, now vectorised, and `get_cna_v6_seed`'s reads into the block
-  cache, which the breakdown puts at about 17% of a nonce on its own, larger
-  than the entire 8 MB fill. That is the biggest single unattacked cost on the
-  project and nothing has been tried against it yet.
+- **The screen, which the phase breakdown says is 42% of a nonce.** Measured
+  from inside the daemon, a candidate costs about 52,600 cycles and splits:
+
+  ```
+  HC128_Init, salt prefix     16,350   31%   vectorised by --mining-screen-batch
+  cn_vm_screen_cost          ~34,550   66%   a second HC128_Init plus the walk
+  get_cna_v6_seed              1,700    3%   not worth attacking
+  blob rebuild                     0    0%   hoisted out
+  ```
+
+  So the screen is **two HC-128 key schedules at about 59% plus a walk at about
+  30%**. The schedules are already eight wide. The walk, roughly 12.5% of a
+  nonce, is the largest piece nothing has attacked, and it resists the same
+  treatment because it is lazy slot generation whose lanes diverge at different
+  points. Both schedules are keyed per nonce, so neither can be cached.
 
 - **Trace JIT, now demoted on measurement rather than promoted on a count.**
   The VM is 29% of a nonce, so eliminating it *entirely* caps at 1.41x, and a
