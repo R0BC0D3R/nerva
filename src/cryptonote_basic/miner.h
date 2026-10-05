@@ -165,6 +165,9 @@ namespace cryptonote
     bool m_recompute_final;
     /* Stream v13's pad fill past the caches. Mining only. See hash-ops.h. */
     bool m_nt_fill;
+    /* Screen cost split, aggregated across mining threads and reported with the
+     * acceptance line. Mining only. See screen_profile_read. */
+    std::atomic<uint64_t> m_scr_calls, m_scr_total, m_scr_seed, m_scr_init, m_scr_blob;
 #if defined(CN_V13_PHASE_TIMING)
     /* Measurement-only build: where a nonce's time actually goes, aggregated
      * across mining threads. The shipped daemon never defines the macro, so

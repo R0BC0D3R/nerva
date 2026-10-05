@@ -336,6 +336,7 @@ namespace cryptonote
     m_screened_out(0),
     m_recompute_final(false),
     m_nt_fill(false),
+    m_scr_calls(0), m_scr_total(0), m_scr_seed(0), m_scr_init(0), m_scr_blob(0),
     m_pausers_count(0),
     m_threads_total(0),
     m_donate_percent(MINING_DEFAULT_DONATION_LEVEL),
@@ -513,18 +514,35 @@ namespace cryptonote
      * nonces actually hashed, so it has to be read against how many were
      * skipped to get it.
      *
-     * MINFO, not MGINFO. The merge interval is two seconds, so at MGINFO this
-     * line lands in the ordinary daemon log 1784 times an hour and was 99.3%
-     * of an overnight log. It is a research diagnostic: silent at the default
-     * log level, visible at --log-level 1, which is what the measurement
-     * scripts already run at. */
+     * Its own category, not MGINFO and not MINFO. The merge interval is two
+     * seconds, so at MGINFO this line lands in the ordinary daemon log 1784
+     * times an hour and was 99.3% of an overnight log. MINFO was the first fix
+     * and was wrong in the other direction: --log-level 1 resolves to
+     * *:WARNING with only global raised, so the line could not be turned back
+     * on without --log-level 2 and everything else with it.
+     *
+     * A category is silent by default and switches on by itself:
+     *   --log-level "*:WARNING,miner.screen:INFO"                          */
     if (m_screen_threshold != 0)
     {
       const uint64_t skipped = m_screened_out.exchange(0, std::memory_order_relaxed);
       const uint64_t hashed = m_hashes;
       const uint64_t seen = skipped + hashed;
-      MINFO("screen: " << hashed << " hashed, " << skipped << " skipped, acceptance "
+      MCINFO("miner.screen", "screen: " << hashed << " hashed, " << skipped << " skipped, acceptance "
             << (seen ? (100.0 * (double)hashed / (double)seen) : 0.0) << "%");
+      {
+        const uint64_t c = m_scr_calls.exchange(0, std::memory_order_relaxed);
+        const uint64_t t = m_scr_total.exchange(0, std::memory_order_relaxed);
+        const uint64_t sd = m_scr_seed.exchange(0, std::memory_order_relaxed);
+        const uint64_t ini = m_scr_init.exchange(0, std::memory_order_relaxed);
+        const uint64_t bl = m_scr_blob.exchange(0, std::memory_order_relaxed);
+        if (c && t)
+          MCINFO("miner.screen", "screen cost: " << ((t + bl) / c) << " cycles/candidate: blob "
+                << (bl / c) << " (" << (100.0 * (double)bl / (double)(t + bl)) << "%), HC128_Init "
+                << (ini / c) << " (" << (100.0 * (double)ini / (double)(t + bl)) << "%), get_cna_v6_seed "
+                << (sd / c) << " (" << (100.0 * (double)sd / (double)(t + bl)) << "%), rest "
+                << ((t - sd - ini) / c) << " (" << (100.0 * (double)(t - sd - ini) / (double)(t + bl)) << "%)");
+      }
     }
 #if defined(CN_V13_PHASE_TIMING)
     {
@@ -1126,6 +1144,19 @@ namespace cryptonote
         nonce += m_threads_total;   // batched screening advances it eight at a time
       ++m_hashes;
       ++m_total_hashes;
+      if (m_screen_threshold != 0)
+      {
+        uint64_t c, t, sd, ini, bl;
+        screen_profile_read(&c, &t, &sd, &ini, &bl);
+        if (c)
+        {
+          m_scr_calls.fetch_add(c, std::memory_order_relaxed);
+          m_scr_total.fetch_add(t, std::memory_order_relaxed);
+          m_scr_seed.fetch_add(sd, std::memory_order_relaxed);
+          m_scr_init.fetch_add(ini, std::memory_order_relaxed);
+          m_scr_blob.fetch_add(bl, std::memory_order_relaxed);
+        }
+      }
 #if defined(CN_V13_PHASE_TIMING)
       {
         /* Seven relaxed adds against a hash that costs tens of millions of
