@@ -1411,6 +1411,39 @@ relative to the honest miner's.** That is the opposite of what "bigger pad, more
 memory-hard" predicts, and it is the single most useful thing this project has
 produced about v8.
 
+#### This is not a thought experiment: v13 already ran it
+
+FINDINGS F11 records that **HF13 raised the pad from 4 MB to 8 MB deliberately**,
+reasoning that 8 MB per thread overflows L3-per-core on nearly every machine
+class, so every class falls back to DRAM latency and they even out.
+
+That reasoning is right about an honest miner and wrong about an optimised one,
+and this project measured the difference. The two attacks that a
+cache-overflowing pad enables are exactly the two measured here, and on the two
+versions they land in opposite directions:
+
+```
+                         v13, 8 MB, exceeds L3     v8, 1 MB, fits in L3
+non-temporal fill             +22%                     -39% to -61%
+recomputed final pass         +16.8%                   a loss, see above
+together                      1.29x                    nothing
+```
+
+**The decision to push the pad past L3 is what handed the v13 attacker that
+1.29x.** Forcing every machine class to DRAM latency does even them out, but
+only among miners who go to DRAM. An optimised miner responds by not going to
+DRAM at all: it regenerates the 94% to 99.95% of the pad that nothing wrote, and
+pays AES instead. The bigger the pad, the more that trade is worth.
+
+*Caveat on the comparison:* v13 and v8 differ in more than pad size, v13 having
+the VM and v8 the sweeps. But both attacks target the fill and the final pass,
+which are structurally the same sequential AES passes in both, so the comparison
+is sound for these two attacks specifically and should not be stretched further.
+
+So F11's rationale deserves an amendment rather than a contradiction: a pad that
+overflows L3 evens out **honest** machine classes, and simultaneously creates
+the headroom an optimised miner uses to leave that class entirely.
+
 #### The root cause, stated so it can be designed against
 
 **v8's count of pad-dirtying operations is constant at at most 119, regardless
