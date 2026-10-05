@@ -511,15 +511,20 @@ namespace cryptonote
     }
     /* With screening on, the hashrate alone cannot be interpreted: it counts
      * nonces actually hashed, so it has to be read against how many were
-     * skipped to get it. Logged every merge interval, and only when screening
-     * is enabled. */
+     * skipped to get it.
+     *
+     * MINFO, not MGINFO. The merge interval is two seconds, so at MGINFO this
+     * line lands in the ordinary daemon log 1784 times an hour and was 99.3%
+     * of an overnight log. It is a research diagnostic: silent at the default
+     * log level, visible at --log-level 1, which is what the measurement
+     * scripts already run at. */
     if (m_screen_threshold != 0)
     {
       const uint64_t skipped = m_screened_out.exchange(0, std::memory_order_relaxed);
       const uint64_t hashed = m_hashes;
       const uint64_t seen = skipped + hashed;
-      MGINFO("screen: " << hashed << " hashed, " << skipped << " skipped, acceptance "
-             << (seen ? (100.0 * (double)hashed / (double)seen) : 0.0) << "%");
+      MINFO("screen: " << hashed << " hashed, " << skipped << " skipped, acceptance "
+            << (seen ? (100.0 * (double)hashed / (double)seen) : 0.0) << "%");
     }
 #if defined(CN_V13_PHASE_TIMING)
     {

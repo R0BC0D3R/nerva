@@ -1015,35 +1015,90 @@ turned it positive on the machine where it had been worthless.
 under the old balance is void, not merely stale.** Keep a list of them. On this
 project the list was `--mining-screen-batch` and it was worth 9%.
 
-### Live confirmation at 16 threads, and thread scaling as evidence
+### Live confirmation on mainnet: 13 blocks found, 13 credited, none rejected
 
-Run through NervaOne on mainnet at 16 threads with the full configuration:
-**a little over 1.7 kH/s** on a quiet machine. The rig at 30 threads reads
-3148.6, so linear scaling predicts 1679 at 16. The live miner and the offline
-rig agree to about 2%, at a thread count the rig never measured.
-
-The first reading of that run was 1.6 to 1.7 and the machine was not quiet: a
-verification build was running on the same cores. Rule 4 says not to touch the
-machine during a run, and it applies to the person doing the measuring as much
-as to anyone else. The build finished, the rate went up, and the gap closed.
-
-The scaling itself is the more interesting part, because it corroborates the
-phase breakdown from a direction that did not feed into it:
+An overnight run through NervaOne on mainnet with the full configuration, from
+02:21 to 09:58. The daemon log confirms what was running:
 
 ```
-before the recomputed final pass   12 -> 30 threads   1.57 -> 1.86 kH/s   1.18x for 2.5x the threads
-after everything                   16 -> 30 threads   1.71 -> 3.15        1.84x for 1.88x the threads
+Mining has started with 12 threads
+v13 miner options: screen threshold 4 (batched), final pass recomputed, fill stores non-temporal
+Mining scratchpads on huge pages
 ```
 
-Sublinear then, linear now. A memory-bound workload cannot scale linearly with
-thread count because the threads contend for one memory system; a compute-bound
-one can. **This is independent evidence for the "no longer memory bound"
-conclusion**, and it did not come from the instrumentation that produced it.
+13 blocks found, and all 13 heights appear as credited transfers in the wallet.
+No rejections, no orphans, no alternative-chain entries, no errors. The only
+warnings are DNS-disabled and "no incoming connections", neither related to
+mining.
 
-Caveat, per rule 6: these cross two measurement setups, live NervaOne against
-the offline rig. That is exactly the comparison rule 6 says not to trust at the
-few-percent level. It is used here only because the effect is a factor of two in
-scaling efficiency, far outside what setup differences explain.
+**This is the end-to-end confirmation that matters.** Screening only changes
+which nonces are tried, so it cannot produce an invalid block. The recomputed
+final pass and the non-temporal fill do change how a nonce is hashed, and the
+6600-digest harness says they are bit-identical. A night of accepted blocks says
+the harness was testing the right thing.
+
+Live acceptance was 0.410%, against 0.41% on the rig. The live hashrate falls
+straight out of the same log line: 3433 hashes per two-second merge window,
+**1716 H/s at 12 threads**.
+
+#### Thread scaling, and a correction
+
+An earlier version of this section read that figure as 16 threads, because that
+is what the run was meant to use and what the NervaOne thread selector showed.
+The daemon log says 12, and NervaOne's own log says why:
+
+```
+22:21:40 local   NervaOne starts nervad with  --mining-threads 12 --start-mining <addr>
+02:21:48 UTC     NervaOne: "Setting mining threads: 16"
+02:21:49 UTC     daemon:   "Mining has started with 12 threads"
+```
+
+The two logs are four hours apart because the daemon timestamps in UTC and
+NervaOne in local time; these are the same moment. NervaOne launched the daemon
+with a stale `--mining-threads 12` and mining began immediately from
+`--start-mining`. Setting the selector to 16 one second earlier updated UI state
+only: there is no `Calling StartMining` after it, unlike the earlier sequence
+that day where changing the count produced `Stopping mining` then
+`Calling StartMining ... Threads: 24`.
+
+**The daemon does not clamp.** `miner::start` takes `threads_count` as given and
+logs that same value, so "Mining has started with N threads" is always what the
+caller asked for. When a front end's displayed count disagrees with that line,
+the line is right.
+
+The conclusion built on the wrong figure was wrong, and is replaced here rather
+than deleted, per rule 1.
+
+```
+                       12 -> 30 threads   throughput   efficiency vs linear
+before the recompute   1.57 -> 1.86 kH/s    1.18x           0.47
+after everything       1.72 -> 3.15         1.83x           0.73
+```
+
+Scaling efficiency went from 0.47 of linear to 0.73. That is a large improvement
+and it is consistent with the workload being much less memory bound, but it is
+**not** linear and should not be quoted as such. Note also what the remaining
+sublinearity most likely is: 30 threads on 16 cores means two threads sharing
+one core's AES units, and the measured cost is now dominated by AES and the
+screen. That is an SMT ceiling, not necessarily a memory one, and the two are
+easy to confuse.
+
+The near-perfect agreement previously claimed here, a prediction of 1679 against
+a measurement of 1716, was a coincidence between a prediction for 16 threads and
+a measurement at 12. **16 threads remains unmeasured.** Per-thread throughput is
+143 H/s at 12 threads against 105 at 30, so a sweep between them is worth doing
+and may well beat both for a machine that is not dedicated to mining.
+
+#### The diagnostic that ate the log
+
+The run produced 13,658 log lines and 13,565 of them were the `screen:`
+acceptance line, 99.3% of the file. The merge interval is two seconds, so at
+`MGINFO` it writes 1784 lines an hour into the ordinary daemon log forever.
+
+It is a research diagnostic and it is now `MINFO`: silent at the default log
+level, visible at `--log-level 1`, which is what the measurement scripts already
+pass. **A diagnostic added for a measurement has to be given a log level before
+it ships**, and the place that becomes obvious is someone else's overnight log.
 
 ### Where this leaves the project
 
@@ -1257,7 +1312,11 @@ here is proposed for nerva-project.
          --mining-screen-batch
                                                 30 threads   3148.6 H/s   5.27x over stock
   (threshold 4 is the optimum; 3 ties it, 2 and below and 6 and above are worse)
-  16 threads and below is UNMEASURED
+
+  Same build live on mainnet through NervaOne, 12 threads:  1716 H/s
+  (13 blocks found overnight, 13 credited, none rejected)
+  Between 12 and 30 threads is UNMEASURED, and per-thread throughput is 36%
+  better at 12, so there is probably something worth having in there
   (--mining-screen-batch is NOT worth it here)
 
 i7-7700HQ, 4C/8T, 256 KB L2
@@ -1383,8 +1442,11 @@ dirty-block count so a vacuous comparison is visible rather than silent.
   inside the known-answer test. Nothing committed is affected: the macro is
   off, and the tree passes. **Worth its own session.** The KAT now names the
   failing vector, which is what made this visible at all.
-- **16 threads and below is unmeasured** for the current configuration. Every
-  number on this project since the recompute landed is at 30 threads.
+- **Between 12 and 30 threads is unmeasured** for the current configuration.
+  Every rig number since the recompute landed is at 30 threads, and the one
+  live number is at 12. Per-thread throughput is 143 H/s at 12 against 105 at
+  30, so the curve between them has not been looked at since the work changed
+  shape.
 
 ## Measurement rules
 
@@ -1476,8 +1538,14 @@ negative ones are easier to miss because nothing downstream depends on them.
   `MINGW_PREFIX` is also unset there, so `MSYS2_FOLDER` resolves to
   `C:/Program Files/Git`. Wrap it:
   `MSYSTEM=MINGW64 CHERE_INVOKING=1 /c/msys64/usr/bin/bash.exe -lc 'cd ... && make release-static-win64 -j4'`.
-- **The `--start-mining` command-line flag silently does not start the miner.**
-  The `start_mining` RPC does, and returns a status that can be checked.
+- **`--start-mining` was recorded here as silently not starting the miner, and
+  live evidence now contradicts that.** NervaOne launches the daemon with
+  `--start-mining <address> --mining-threads N` and the miner starts: an
+  overnight mainnet run on that path found 13 blocks. Whatever was observed
+  originally, the flag is not simply inert, so **re-test before relying on
+  either version of this**. The `start_mining` RPC remains the safer choice for
+  scripted runs because it returns a status that can be checked, which is why
+  the measurement scripts use it.
 - **Never redirect the daemon's stdout.** It reads EOF on stdin and exits
   immediately, which looks exactly like a crash.
 - **A build's exit code is not the exit code you get back.** Running
