@@ -192,6 +192,25 @@ int crypto_has_aesni(void);
  * the optional HW-vs-SW self-test. */
 int cn_hardware_aes_supported(void);
 
+/* Non-temporal stores for v13's pad fill. Mining only, per thread, off by
+ * default, and purely a performance switch: the pad comes out identical.
+ *
+ * The fill writes 8 MB and that costs 16 MB of bus traffic, because a store
+ * that misses fetches the line first so it can be modified, even though the
+ * fill overwrites every byte of it and never reads what was there. A streaming
+ * store skips that fetch. With the recomputed final pass on, the fill is
+ * almost all the traffic a screened nonce generates, so this removes about half
+ * of it.
+ *
+ * Off by default because it is wrong on the verification path: one 8 MB pad
+ * fits in a modern L3, so leaving it in cache is right there, and streaming it
+ * out would push the VM's reads and the final pass to DRAM.
+ *
+ * Returns 1 on success. x86 only; elsewhere enabling it is accepted and does
+ * nothing. */
+int cn_v13_nt_fill_enable(int on);
+int cn_v13_nt_fill(void);
+
 /* Hashes a fixed input with both the HW and SW paths and compares. Returns 1
  * on success or when the HW path isn't built/active (nothing to verify), and
  * 0 if HW and SW disagree, which would mean wrong PoW. */

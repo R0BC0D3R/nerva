@@ -163,6 +163,8 @@ namespace cryptonote
      * them. Mining only, and only worth it on screened nonces, which barely
      * write the pad. See cna-vm.h. */
     bool m_recompute_final;
+    /* Stream v13's pad fill past the caches. Mining only. See hash-ops.h. */
+    bool m_nt_fill;
     uint8_t m_donate_percent;
     uint8_t m_donate_counter;
     volatile bool m_donating;

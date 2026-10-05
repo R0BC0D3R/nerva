@@ -137,6 +137,16 @@ namespace cryptonote
      * there would be pure overhead, so the recording is per thread and off
      * unless a mining thread turns it on. */
     const command_line::arg_descriptor<bool>        arg_mining_recompute = {"mining-recompute-final", "Regenerate unwritten v13 pad blocks in the final pass instead of reading them (pairs with --mining-screen-threshold)", false, true};
+    /* Stream the fill's stores past the caches. 8 MB of ordinary stores costs
+     * 16 MB of bus traffic, because a store that misses fetches the line before
+     * modifying it even though the fill overwrites every byte of it. With the
+     * recomputed final pass on, the fill is nearly all the traffic a screened
+     * nonce generates, so this takes about half of what is left.
+     *
+     * Mining only and off by default, for the same reason as the recompute:
+     * one 8 MB pad fits in L3, so on the verification path keeping it in cache
+     * is right and streaming it out would push every later read to DRAM. */
+    const command_line::arg_descriptor<bool>        arg_mining_nt_fill = {"mining-nontemporal-fill", "Stream v13's pad fill past the caches (pairs with --mining-recompute-final)", false, true};
     const command_line::arg_descriptor<bool>        arg_mining_affinity = {"mining-affinity", "Pin mining threads to physical cores, one per core and inside a single L3 group when they fit", false, true};
 
     /* Mining thread affinity. The v13 scratchpad is 8 MB per thread and only
@@ -322,6 +332,7 @@ namespace cryptonote
     m_screen_batch(false),
     m_screened_out(0),
     m_recompute_final(false),
+    m_nt_fill(false),
     m_pausers_count(0),
     m_threads_total(0),
     m_donate_percent(MINING_DEFAULT_DONATION_LEVEL),
@@ -602,6 +613,7 @@ namespace cryptonote
     command_line::add_arg(desc, arg_mining_screen);
     command_line::add_arg(desc, arg_mining_screen_batch);
     command_line::add_arg(desc, arg_mining_recompute);
+    command_line::add_arg(desc, arg_mining_nt_fill);
   }
   //-----------------------------------------------------------------------------------------------------
   bool miner::init(const boost::program_options::variables_map& vm, network_type nettype)
@@ -660,6 +672,7 @@ namespace cryptonote
     m_screen_threshold = command_line::get_arg(vm, arg_mining_screen);
     m_screen_batch = command_line::get_arg(vm, arg_mining_screen_batch);
     m_recompute_final = command_line::get_arg(vm, arg_mining_recompute);
+    m_nt_fill = command_line::get_arg(vm, arg_mining_nt_fill);
     if(!cryptonote::get_account_address_from_str(info, nettype, DONATION_ADDR))
     {
       LOG_ERROR("Invalid donation address, starting daemon canceled");
@@ -754,10 +767,11 @@ namespace cryptonote
 
     /* Say what is on, so a measurement run can be checked against what it was
      * meant to be measuring rather than against the binary's name. */
-    if (m_screen_threshold != 0 || m_recompute_final)
+    if (m_screen_threshold != 0 || m_recompute_final || m_nt_fill)
       MGUSER_YELLOW("v13 miner options: screen threshold " << m_screen_threshold
                     << (m_screen_batch ? " (batched)" : "")
-                    << ", final pass " << (m_recompute_final ? "recomputed" : "read from pad"));
+                    << ", final pass " << (m_recompute_final ? "recomputed" : "read from pad")
+                    << ", fill stores " << (m_nt_fill ? "non-temporal" : "ordinary"));
 
     if( get_is_background_mining_enabled() )
     {
@@ -890,6 +904,8 @@ namespace cryptonote
     const bool recompute_final = m_recompute_final && cn_vm_dirty_enable(1);
     if (m_recompute_final && !recompute_final)
       MERROR("Miner thread [" << th_local_index << "] could not allocate the dirty map, reading the pad instead");
+    if (m_nt_fill)
+      crypto::cn_v13_nt_fill_enable(1);
     /* Screening batch. Accepted nonces are held here and hashed one at a time,
      * so only the screening is batched and the hash path is untouched. */
     enum { SCREEN_BATCH = 8 };
@@ -1062,6 +1078,7 @@ namespace cryptonote
       ++m_total_hashes;
     }
     cn_vm_dirty_enable(0);
+    crypto::cn_v13_nt_fill_enable(0);
     crypto::cn_hash_context_free(hash_context);
     MGINFO("Miner thread stopped ["<< th_local_index << "]");
     --m_threads_active;

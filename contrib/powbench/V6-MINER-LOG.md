@@ -840,6 +840,84 @@ the same file, and the daemon logs which options are live so the run can be
 checked against what it was meant to be measuring. Worth doing this way from
 now on.
 
+### Non-temporal stores on the fill: +22%, and it is bigger than the recompute
+
+His figure for this step was +4%. Measured here at 30 threads, threshold 4, one
+binary, 0.4% drift across the run, which makes it the cleanest measurement on
+the project:
+
+```
+neither     2223.0 H/s
+nt only     2711.3        1.22x over neither
+rec only    2578.7        1.16x over neither
+rec + nt    2875.8        1.29x over neither, 1.12x over rec alone
+```
+
+**8 MB of ordinary stores is 16 MB of bus traffic.** A store that misses fetches
+the line before modifying it, even though the fill overwrites every byte of it
+and never reads what was there. That read is invisible in the source, it is pure
+waste, and `_mm_stream_si128` skips it. Writing the number down for both passes
+is what made this obvious, and the estimate the change was planned from was out
+by exactly the factor it omitted.
+
+#### They do not compound, and the reason is the useful part
+
+1.22 times 1.16 is 1.42, and the measured combination is 1.29. Two changes that
+both remove traffic from the same bottleneck cannot each be worth what they were
+worth alone. The traffic budget per accepted nonce says it plainly:
+
+```
+                fill          final pass      total       throughput
+neither      16 MB (RFO+WB)     8 MB          24 MB      2223 H/s   53 GB/s
+nt only       8 MB              8 MB          16 MB      2711       43
+rec only     16 MB            ~ 0             16 MB      2579       41
+rec + nt      8 MB            ~ 0              8 MB      2876       23
+```
+
+#### The threshold, swept again, and a prediction that did not land
+
+The hash just got 1.29x cheaper, which raises the screen's share of the total,
+so this time the optimum really should move looser. 30 threads, both switches
+on:
+
+```
+threshold   4    2797.8 H/s and 2860.2 H/s   accept 0.41%   (first and last point)
+threshold   6    2884.7                             0.56%
+threshold   8    2864.0                             0.70%
+threshold  12    2726.2                             0.98%
+threshold  20    2446.8                             1.47%
+```
+
+Threshold 4 averages 2829.0 across its two readings, so 6 is 2.0% above it and 8
+is 1.2% above it, against 2.2% of drift in the same run. **4, 6 and 8 are
+indistinguishable.** The plateau is visibly wider than it was, and the peak
+reads at 6 both times it has been swept, but neither sweep establishes a move.
+Keep 4, and do not record this as a shift on the strength of a reading inside
+the drift.
+
+#### The conclusion that changes the roadmap
+
+**Traffic fell by 3x and throughput rose by 1.29x, so this workload is no longer
+memory bound.** At 23 GB/s there is clearly headroom on a machine that was
+moving 53 GB/s an hour ago.
+
+That re-prices everything still on the list, and in opposite directions:
+
+- **The remaining memory items are worth much less than their published
+  numbers.** Virtual pad and K-way nonce interleaving both buy memory traffic or
+  memory-stall overlap, and there is now far less of either to buy. Virtual pad
+  would take the fill's remaining 8 MB to nearly nothing, but on this evidence
+  that is worth well under the 1.51x it is advertised at.
+- **The compute items are worth more.** What is left per hash is roughly 15.7M
+  AES operations across three passes over the chain, about 1M interpreted VM
+  instructions, and the screen's 244 rejected candidates per accepted nonce.
+  Trace JIT attacks the second of those and is now the most valuable unbuilt
+  item rather than the most expensive one.
+
+This is the clearest case yet of rule 5 paying off in reverse: the result had
+the wrong **shape** for the model, the model was wrong rather than the result,
+and the correction is worth more than the measurement was.
+
 ### Where this leaves the project
 
 Each row at its own best thread count, which is the only fair way to compare
@@ -856,6 +934,7 @@ stock,                     12 threads            597.6 H/s
 + retuned,                 32 threads             1876.0      3.14x
 + screen early exit (thr 4), 30 threads           2280.2      3.82x
 + recomputed final pass,     30 threads           2590.5      4.33x
++ non-temporal fill,         30 threads           2875.8      4.81x
 ```
 
 Best unscreened is 733.4 H/s at 12 threads, so screening and its retuning are
@@ -874,11 +953,11 @@ Against the published v6 progression on a comparable machine (his 5900X stock
 558 H/s against this 7950X's 597.6), his figure after the same two steps,
 memory work and screening, is 976 H/s scaled from a 5600G or about 2233 on the
 5900X. His next step, the equivalent of the recomputed final pass, took him
-from 2233 to 2889, 1.29x. Ours is 1.17x on the same step, and the gap is worth
-understanding rather than shrugging at: his recompute presumably also removes
-the fill's read-for-ownership traffic, which ours does not yet. The remaining
-gap after that is chiefly K-way nonce interleaving at +23%, plus trace JIT and
-virtual pad.
+from 2233 to 2889, 1.29x. Ours was 1.17x on that step alone, and the gap closed
+exactly where the guess said it would: adding non-temporal stores takes the pair
+to 1.29x and 2875.8 H/s, level with his 2889. His single step evidently bundled
+both, which is the more natural way to write it, and splitting them is what made
+the traffic arithmetic legible here.
 
 ## Lessons for v8
 
@@ -1003,6 +1082,40 @@ reseeding is what stops the keystream being fast-forwarded. The pad deserves the
 question asked explicitly in the same way, and currently FINDINGS does not ask
 it.
 
+### 8. A pad's size is not its bandwidth cost, in either direction
+
+Two factors of two sit between "the pad is N bytes" and what a miner actually
+pays for it, and both were found the hard way today.
+
+**Upward, for an unoptimised miner.** Writing N bytes costs 2N of bus traffic,
+because a store that misses fetches the line before modifying it. The fill never
+reads what was there, so that fetch is pure waste, and `_mm_stream_si128` skips
+it. Worth +22% here.
+
+**Downward, for an optimised one.** Any part of the pad that is a pure function
+of a cheap chain is not read at all. See lesson 7.
+
+So a defender who sizes a pad and calls the product its memory cost is wrong by
+up to 4x, and wrong in the direction that flatters the design: the number they
+imagine is the one a naive miner pays, and the attacker is not running a naive
+miner. **Cost a pad by what an optimised miner moves across the bus, measured,
+not by its size.**
+
+There is a sharper version of this for v8 specifically. v8's fill writes 1 MB,
+and whatever bandwidth argument is made for it should be made at 1 MB of
+streaming stores rather than 2 MB of ordinary ones, because that is what an
+attacker pays. Nothing in the design stops them, and nothing should: the fix is
+not to try to force ordinary stores, it is to stop counting the saved traffic as
+a defence.
+
+It also explains a discrepancy that looked like noise. The published figure for
+this step is +4% and it measured +22% here. Both are probably right, for
+different balances: +4% is what it is worth when the rest of the miner is still
+moving a lot of traffic, and +22% is what it is worth once the other passes have
+been removed. **A published optimisation's percentage is a property of the miner
+it was measured in, not of the optimisation.** That is lesson 5 again, and it
+has now cost a prediction twice.
+
 ## Current state, and how to pick this up cold
 
 Branch `perf/v13-fused-pad-init` on remote `robcoder` (R0BC0D3R/nerva). Nothing
@@ -1012,14 +1125,16 @@ here is proposed for nerva-project.
 
 ```
 7950X, 16C/32T, 1 MB L2 per core
-  nervad --mining-screen-threshold 4 --mining-recompute-final
-                                                30 threads   2590.5 H/s   4.33x over stock
+  nervad --mining-screen-threshold 4 --mining-recompute-final --mining-nontemporal-fill
+                                                30 threads   2875.8 H/s   4.81x over stock
+  (threshold 6 and 8 read the same within drift; 4 is the safe choice)
   (--mining-screen-batch is NOT worth it here)
 
 i7-7700HQ, 4C/8T, 256 KB L2
   nervad --mining-screen-threshold 14 --mining-screen-batch   8 threads   413.5 H/s   4.45x
-  (--mining-recompute-final is UNMEASURED here, and the laptop's 256 KB L2
-   and lower memory bandwidth make it the machine most likely to gain)
+  (--mining-recompute-final and --mining-nontemporal-fill are both UNMEASURED
+   here, and the laptop's 256 KB L2 and lower memory bandwidth make it the
+   machine most likely to gain from each)
 ```
 
 Binaries used for the A/Bs are under `D:/Claude/v6miner/ab/`. The newest is
@@ -1038,84 +1153,65 @@ output somewhere else; check the md5, not the path.
 | eight-lane HC-128 init | shipped, `HC128_Init_x8`, verified 2.37x |
 | eight-wide screen | shipped, `--mining-screen-batch`, default off; nothing at 30 threads, +4% at 7 to 8 |
 | recomputed final pass | shipped, `--mining-recompute-final`, default off; +16.8% screened, -7.7% unscreened |
+| non-temporal fill | shipped, `--mining-nontemporal-fill`, default off; +22% alone, +12% on top of the recompute |
 
-### Next, and the design for it
+### Next, and it is not what it was this morning
 
-**Non-temporal stores on the fill.** His +4%, and the recomputed final pass has
-just made it worth much more than that.
+**Read this before picking an item.** The workload is no longer memory bound.
+Per-hash traffic is down from 24 MB to 8 MB, 53 GB/s to 23 GB/s, and the last 3x
+of traffic bought only 1.29x of throughput. Every remaining item on the original
+list was priced against a memory-bound miner, and those prices are now wrong.
 
-The Amdahl check, which should be redone if anything changes. On an accepted
-nonce at threshold 4 the per-hash DRAM traffic is now almost entirely the fill,
-because the VM's median nonce touches nothing and the final pass regenerates
-instead of reading:
+What a hash actually costs now, at threshold 4 and 30 threads:
 
 ```
-fill          8 MB of stores
-VM            median zero writes, a handful of reads
-final pass    median 32 blocks read, 4 KB
+AES          ~15.7M operations, three passes over the chain
+             (fill, the final pass's replay, the final pass itself)
+VM           ~1.05M interpreted instructions, 2048 passes of 512 steps
+screen       ~244 rejected candidates per accepted nonce, two HC-128
+             key schedules each
+memory        8 MB of streaming stores
 ```
 
-**But 8 MB of ordinary stores is 16 MB of bus traffic, not 8.** A store that
-misses does a read-for-ownership first: the line is fetched, modified, and
-written back. That read is invisible in the source and is pure waste here,
-because the fill overwrites every byte of the line and never reads what was
-there. `_mm_stream_si128` skips it. So this removes about half of what is now
-roughly all of the traffic, where when it was measured at +4% it was removing
-one quarter of it.
+In order:
 
-At 2590 H/s and 16 MB per hash that is about 41 GB/s, and the change should take
-it to about 21.
+- **Trace JIT.** Advertised at 1.48x and previously filed under "weeks of work,
+  do last". It is now the most valuable unbuilt item, because the ~1M
+  interpreted VM instructions per hash are pure compute and the interpreter
+  dispatch is most of their cost. The program is fixed for the whole hash and
+  re-run 2048 times, which is the ideal case for emitting it once. Needs an
+  x86-64 emitter and deopt handling.
 
-Design:
+- **One fewer AES pass.** The recomputed final pass does the fill's AES work a
+  second time. Half of it could be avoided at K-block granularity by keeping
+  checkpoints of `fill_text` during the fill, which is the same machinery the
+  virtual pad needs. Cheaper to try than the JIT, and it attacks what is now the
+  largest single cost.
 
-1. x86 only. The fused fill's 8-byte store loop becomes `_mm_stream_si128` over
-   16-byte chunks; `dp` is 128-byte aligned because the pad is page aligned and
-   `p_off` is a multiple of `init_size_byte`, so the alignment requirement is
-   already met. The ARM arm keeps the scalar loop.
-2. **`_mm_sfence()` after the fill loop**, before the VM reads the pad. Streaming
-   stores are weakly ordered.
-3. **Opt-in, for the same reason the dirty map is.** On the verification path a
-   single 8 MB pad fits in this machine's L3, so leaving it in cache is right
-   there and streaming it out would force the VM's reads and the final pass to
-   go to DRAM. Same per-thread flag mechanism, set by mining threads only.
-   `--mining-nontemporal-fill`.
-4. It compounds with the recomputed final pass rather than competing with it:
-   NT's usual downside is that the data is no longer in cache for whoever reads
-   it next, and after the recompute almost nobody reads it.
+- **A three-way XOR in `aes_pseudo_round_xor`.** The recomputed path builds each
+  clean block into a scratch buffer and then XORs it in, so there is a 128-byte
+  store and reload per block that a three-operand variant removes. Small, but
+  it is 8 MB of L1 traffic per hash and the measurement is cheap.
 
-Verify with `contrib/powbench/t_v13_recompute.c`, which already runs every
-digest with the flag off and on. Note the harness compares against the same
-binary, so it catches a wrong fill but not a fill that is wrong in both modes;
-diff its stdout against the current build's as well.
+- **Screen cost.** At 0.41% acceptance the screen runs 244 times per hash. It
+  was 4% of the total when the hash was expensive; the hash is now 1.29x
+  cheaper, so it is worth re-deriving rather than re-reading the old share.
+  `--mining-screen-batch` is still off on this machine and may be worth
+  re-measuring now that cache pressure has fallen.
 
-### Then, in order, and one of these has changed size
+**Demoted, with the reason:**
 
-- **Virtual pad, and it is now much more attractive than "1.51x, weeks of
-  work".** Today's dirty-block measurement is what changes the estimate. The
-  median screened nonce does **zero** VM writes and only a few thousand reads,
-  so the pad is not being used as memory at all: it is written once and read
-  back once. If the VM's reads could be served by replay, the fill would not
-  have to happen either, and the per-hash traffic would go from 16 MB to
-  essentially nothing.
+- **Virtual pad**, advertised 1.51x. It removes the fill's remaining 8 MB, which
+  is now 23 GB/s of headroom rather than a wall. On this evidence it is worth a
+  fraction of its published number, and it is still the largest piece of work on
+  the list. The checkpoint machinery is worth building anyway for the AES-pass
+  item above, which is the cheap half of it.
+- **K-way nonce interleaving**, advertised +23%. Its value is overlapping memory
+  stalls and there are far fewer left to overlap.
 
-  Sketch: keep `fill_text` every K blocks as a checkpoint. At K = 16 that is
-  512 KB per thread, which lives in cache rather than DRAM. A VM read into a
-  clean region replays at most 16 AES pseudo-rounds from the nearest checkpoint;
-  at roughly 8192 reads per hash that is about 5M extra AES operations, the same
-  order as the recompute already costs. Blocks the VM has written are no longer
-  replayable, so they go in a side table, which the median nonce leaves empty,
-  and the 32 pokes go there too. The tail where a screened nonce turns out to
-  dirty most of the pad needs a fallback to materialising it.
-
-  This is still the largest single piece of work on the list, but it is now the
-  one with the clearest case, and the checkpoint machinery is a small extension
-  of the chain replay that the recomputed final pass already has.
-
-- **K-way nonce interleaving**, his +23%. Worth re-estimating after the fill
-  changes: its value comes from overlapping memory stalls, and there may be
-  fewer left to overlap.
-
-- **Trace JIT (1.48x)**, which needs an x86-64 emitter and deopt handling.
+Verify anything here with `contrib/powbench/t_v13_recompute.c`, which runs the
+full 2x2 of the existing switches against the base path and prints the
+dirty-block count so a vacuous comparison is visible rather than silent.
 
 ### Open
 
@@ -1214,6 +1310,15 @@ it is always worth paying.
   The `start_mining` RPC does, and returns a status that can be checked.
 - **Never redirect the daemon's stdout.** It reads EOF on stdin and exits
   immediately, which looks exactly like a crash.
+- **A build's exit code is not the exit code you get back.** Running
+  `make ... > log 2>&1; echo $?; tail -3 log` as one command reports the exit
+  code of `tail`, and a background task's completion notice reports the same
+  thing, so a failed build is announced as a success. It happened here: the
+  non-temporal fill failed to compile over a namespace qualifier, the run was
+  announced as exit 0, and the binary that got staged was the previous one.
+  **The md5 check is what caught it**, which is the second time that check has
+  earned its place in one project. Capture `rc=$?` immediately and make it the
+  last thing printed.
 - **The version banner does not distinguish builds.** It is stamped from the
   git hash, so a tree with uncommitted changes reports the last commit. Go by
   file, and check the two binaries differ before trusting an A/B.

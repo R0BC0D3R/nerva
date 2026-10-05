@@ -1,10 +1,14 @@
 /* v13 digest harness for the recomputed final pass.
  *
- * The change makes the final pass regenerate any pad block the VM never wrote
- * rather than reading it. Correctness is the whole risk, so this harness runs
- * every digest twice, once with dirty tracking off (the old code path, byte for
- * byte) and once with it on, and compares. Both arms are called explicitly, so
- * the software path is covered on a machine that has AES-NI.
+ * Two mining-only switches are meant to change nothing about the digest:
+ * --mining-recompute-final regenerates any pad block the VM never wrote rather
+ * than reading it, and --mining-nontemporal-fill streams the fill's stores past
+ * the caches. Correctness is the whole risk, so this harness runs every case
+ * four times, the full 2x2, and compares all of them to the one with neither
+ * on, which is the path the daemon has always had. Both AES arms are called
+ * explicitly, so the software path is covered on a machine that has AES-NI.
+ * The software arm ignores the non-temporal switch, which makes its two
+ * streaming variants duplicates of the other two rather than a gap.
  *
  * Two things make a comparison like this vacuous, and both are checked rather
  * than assumed:
@@ -140,42 +144,58 @@ static void run(cn_hash_context_t *ctx, const char *tag, int seeds, uint32_t thr
 
         for (k = 0; k < 4; k++)
         {
-            uint32_t nd;
+            /* The full 2x2. Both switches are meant to be pure performance,
+             * so all four have to agree with the one that has neither on,
+             * which is the code path the daemon has always had. Testing them
+             * one at a time would miss an interaction, and there is a real
+             * one to miss: the recomputed final pass reads dirty blocks back
+             * out of a pad the streaming stores have just written. */
+            static const char *variant[4] = { "base", "rec", "nt", "rec+nt" };
+            uint32_t nd = 0;
+            int v;
 
-            fill_salt(ctx->salt, s);
-            fill_random_values(&ctx->random_values, s);
+            for (v = 0; v < 4; v++)
+            {
+                char *out = (v == 0) ? h_off : h_on;
 
-            cn_vm_dirty_enable(0);
-            fn(ctx, inputs[k], strlen(inputs[k]), h_off, seed);
+                fill_salt(ctx->salt, s);
+                fill_random_values(&ctx->random_values, s);
 
-            if (!cn_vm_dirty_enable(1)) { fprintf(stderr, "no dirty map\n"); exit(2); }
-            fill_salt(ctx->salt, s);
-            fill_random_values(&ctx->random_values, s);
-            fn(ctx, inputs[k], strlen(inputs[k]), h_on, seed);
-            nd = dirty_blocks(cn_vm_dirty_map());
-            cn_vm_dirty_enable(0);
+                if (v & 1) { if (!cn_vm_dirty_enable(1)) { fprintf(stderr, "no dirty map\n"); exit(2); } }
+                else cn_vm_dirty_enable(0);
+                cn_v13_nt_fill_enable((v & 2) ? 1 : 0);
 
-            t->digests++;
+                fn(ctx, inputs[k], strlen(inputs[k]), out, seed);
+                if (v == 1) nd = dirty_blocks(cn_vm_dirty_map());
+
+                cn_vm_dirty_enable(0);
+                cn_v13_nt_fill_enable(0);
+
+                if (v == 0) continue;
+
+                t->digests++;
+                if (memcmp(h_off, h_on, HASH_SIZE) != 0)
+                {
+                    int i;
+                    printf("MISMATCH %s seed=%u k=%d variant=%s dirty=%u\n  base ",
+                           tag, s - 1, k, variant[v], nd);
+                    for (i = 0; i < HASH_SIZE; i++) printf("%02x", (unsigned char)h_off[i]);
+                    printf("\n  got  ");
+                    for (i = 0; i < HASH_SIZE; i++) printf("%02x", (unsigned char)h_on[i]);
+                    putchar('\n');
+                    t->mismatches++;
+                }
+            }
+
             t->d_sum += nd; t->n++;
             if (nd < t->d_min) t->d_min = nd;
             if (nd > t->d_max) t->d_max = nd;
 
-            if (memcmp(h_off, h_on, HASH_SIZE) != 0)
+            /* printed so two builds can be diffed, not just self-compared */
             {
-                int i;
-                printf("MISMATCH %s seed=%u k=%d dirty=%u\n  off ", tag, s - 1, k, nd);
-                for (i = 0; i < HASH_SIZE; i++) printf("%02x", (unsigned char)h_off[i]);
-                printf("\n  on  ");
-                for (i = 0; i < HASH_SIZE; i++) printf("%02x", (unsigned char)h_on[i]);
-                putchar('\n');
-                t->mismatches++;
-            }
-            else
-            {
-                /* printed so two builds can be diffed, not just self-compared */
                 int i;
                 printf("%s s=%u k=%d dirty=%6u ", tag, s - 1, k, nd);
-                for (i = 0; i < HASH_SIZE; i++) printf("%02x", (unsigned char)h_on[i]);
+                for (i = 0; i < HASH_SIZE; i++) printf("%02x", (unsigned char)h_off[i]);
                 putchar('\n');
             }
         }
@@ -207,7 +227,7 @@ int main(int argc, char **argv)
     run(ctx, "hw-plain", plain, 0, cn_slow_hash_v13_hw, &hi);
     run(ctx, "sw-plain", plain / 10, 0, cn_slow_hash_v13_sw, &hi);
 
-    fprintf(stderr, "\n%d digests, tracking off vs on\n", lo.digests + hi.digests);
+    fprintf(stderr, "\n%d digests, 3 variants per case against the base path\n", lo.digests + hi.digests);
     fprintf(stderr, "  screened   dirty blocks %u to %u of %u, mean %.1f (%.3f%% of the pad)\n",
             lo.d_min, lo.d_max, CN_V13_PAD_BLOCKS, lo.n ? lo.d_sum / lo.n : 0.0,
             lo.n ? lo.d_sum / lo.n * 100.0 / CN_V13_PAD_BLOCKS : 0.0);
@@ -223,7 +243,7 @@ int main(int argc, char **argv)
         cn_hash_context_free(ctx);
         return 1;
     }
-    fprintf(stderr, "\nall digests identical with and without the recomputed final pass\n");
+    fprintf(stderr, "\nall digests identical across the recompute and non-temporal 2x2\n");
     cn_hash_context_free(ctx);
     return 0;
 }

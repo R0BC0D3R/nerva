@@ -254,6 +254,11 @@ void cn_slow_hash_v13(cn_hash_context_t *context, const void *data, size_t lengt
 
     /* Non-NULL only on a mining thread that asked for it. See cna-vm.h. */
     uint8_t * const dirty = cn_vm_dirty_map();
+#if defined(__x86_64__) || defined(__i386__)
+    /* See hash-ops.h. Mining only, and a performance switch only: the pad comes
+     * out byte for byte the same either way. */
+    const int nt_fill = cn_v13_nt_fill();
+#endif
 
     static void (*const extra_hashes[4])(const void *, size_t, char *) = {
         hash_extra_blake, hash_extra_groestl, hash_extra_jh, hash_extra_skein};
@@ -290,6 +295,22 @@ void cn_slow_hash_v13(cn_hash_context_t *context, const void *data, size_t lengt
             const uint8_t * const sp = (const uint8_t *)salt + (p_off & (CN_SALT_MEMORY - 1));
             uint8_t * const dp = &hp_state[p_off];
             uint32_t k;
+#if defined(__x86_64__) || defined(__i386__)
+            if (nt_fill)
+            {
+                /* dp is 16-byte aligned, which _mm_stream_si128 requires: the
+                 * pad is page aligned and p_off is a multiple of
+                 * init_size_byte. sp is loaded unaligned because the salt
+                 * offset only has to be a multiple of 8. */
+                for (k = 0; k < init_size_byte; k += 16)
+                {
+                    const __m128i t  = _mm_loadu_si128((const __m128i *)(const void *)(text + k));
+                    const __m128i sv = _mm_loadu_si128((const __m128i *)(const void *)(sp + k));
+                    _mm_stream_si128((__m128i *)(void *)(dp + k), _mm_xor_si128(t, sv));
+                }
+            }
+            else
+#endif
             for (k = 0; k < init_size_byte; k += 8)
             {
                 uint64_t t, sv;
@@ -300,6 +321,11 @@ void cn_slow_hash_v13(cn_hash_context_t *context, const void *data, size_t lengt
             }
         }
     }
+#if defined(__x86_64__) || defined(__i386__)
+    /* Streaming stores are weakly ordered and the VM reads the pad next. */
+    if (nt_fill)
+        _mm_sfence();
+#endif
 
     {
         const cn_random_values_t rv = context->random_values;
