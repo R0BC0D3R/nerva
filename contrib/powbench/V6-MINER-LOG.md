@@ -721,6 +721,125 @@ side wins depends on how much cache pressure the machine is already under. Off
 by default remains right for the 7950X and wrong for the laptop, which is what
 the flag is for.
 
+### Recomputing the final pass instead of reading it: +16.8%
+
+v13 writes all 8 MB of the pad in the fill and reads all 8 MB back in the final
+pass. Between them the VM mutates it. The final pass is therefore reading data
+that is a pure function of the fill's AES chain everywhere the VM did not write,
+and the fill's chain is cheap to replay. So the final pass regenerates those
+blocks instead of reading them: a clean block is `aes_pseudo_round(fill_text)`
+XOR the salt at the same offset, and the final pass already walks the blocks in
+the same order the fill wrote them, which is why no checkpoints are needed.
+
+```
+30 threads, one binary, flag off vs on, fresh daemon per point
+
+screened   (threshold 4)   2217.3 -> 2590.5 H/s   1.17x
+unscreened (threshold 0)    558.8 ->  516.0 H/s   0.92x
+baseline drift across the run                      1.0%
+```
+
+The unscreened loss is the result that makes the gain believable, and it was
+predicted before the run rather than explained after it: unscreened, 90.7% of
+blocks are dirty, so almost nothing is regenerated and the replay's AES is paid
+for all 65536 blocks anyway.
+
+#### How clean a screened nonce really is
+
+This is the number the whole change rests on, and it is much stronger than the
+estimate it was planned from. The design assumed roughly 3,700 writes and about
+94% of the pad never written. Measured over 1000 screened and 1000 unscreened
+digests:
+
+```
+                  dirty blocks of 65536
+screened (thr 4)  median 32     mean 1751    range 32 to 64870
+unscreened        mean 59416                 range 32 to 65536
+```
+
+**The median screened nonce dirties exactly 32 blocks, which is exactly the 32
+blocks the random values poke. The VM writes nothing at all.** Screening does
+not just select cheap nonces. It selects nonces that never touch the pad.
+
+The screened mean is dragged to 1751 by a tail that reaches 64870, and the tail
+is explainable rather than noise. `cn_vm_screen_cost` walks the program assuming
+`CN_OP_CBRANCH` is always taken, which it is except about once in 2^16.5, so a
+real run that falls through visits instructions the estimate never counted. The
+screen is a cheap estimate that is occasionally wrong in the expensive
+direction, which costs throughput and never correctness.
+
+#### Why it is opt-in
+
+`cn_vm_execute` is also the verification path. There a nonce is unscreened,
+writes hundreds of thousands of times and leaves the pad fully dirty, so
+recording which blocks it wrote would be pure overhead for no benefit. The map
+is a per-thread pointer that is NULL unless a mining thread sets it, and NULL
+means the old code path byte for byte. `--mining-recompute-final`, off by
+default.
+
+#### Verification
+
+`contrib/powbench/t_v13_recompute.c`. 2200 digests, each computed twice inside
+one binary, tracking off then on, and compared. Both AES arms, dense per-seed
+salt, dense random values, and both nonce populations. All identical.
+
+Two things would have made that comparison vacuous, and both are checked rather
+than assumed:
+
+- **A zero salt.** XOR with zero is the identity, so a wrong salt offset would
+  still give the right digest. The salt is dense and per-seed, and `SALT_ZERO=1`
+  is the control.
+- **A fully dirty pad.** If nothing is ever regenerated the comparison proves
+  nothing, so the harness prints the dirty-block count it actually exercised and
+  says so explicitly if nothing was regenerated. Half the seeds are drawn the
+  way a screening miner draws them, by rejecting any seed over the threshold.
+
+The random values matter too, and an earlier harness got this wrong in a way
+worth remembering: it zeroed them, which makes every poke "add 0 at index 0".
+The pad comes out unchanged, so failing to mark the blocks they touch would not
+have changed a single digest. Here they are dense and never write a value back
+unchanged.
+
+**Negative control.** Deleting the poke marking, which is the silent-corruption
+risk the design flagged, produces 24 mismatches out of 32. The harness has
+teeth.
+
+#### The optimum did not move, which is the first time it has not
+
+Every cost reduction so far has moved the best screening threshold, so it was
+re-swept rather than assumed. With the recomputed final pass on, 30 threads:
+
+```
+threshold   2    2437.6 H/s   accept 0.26%
+threshold   4    2520.5        0.41%     (first and last point: 2570.4, drift 2.0%)
+threshold   6    2533.5        0.56%
+threshold   8    2473.9        0.71%
+threshold  12    2330.8        0.98%
+threshold  20    2113.4        1.48%
+```
+
+The peak reads at 6 rather than 4, by 0.5%, which is inside the spread of either
+point and inside the run's own drift. **Treat it as unchanged at 4.**
+
+The prediction before the sweep was that it would move looser, because
+throughput is roughly `1 / (hash + screen / acceptance)` and making the hash
+cheaper raises the screen's share. That is the right first-order reasoning and
+it is not what happened, because a second effect pulls the other way: a looser
+threshold accepts nonces whose programs do write the pad, and a dirty block has
+to be read rather than regenerated, so the recompute itself earns less as the
+threshold loosens. The two cancel almost exactly. Worth remembering before
+predicting the next one: a change that makes accepted work cheaper **and** makes
+the saving depend on acceptance does not move the optimum.
+
+#### The one-binary A/B
+
+Every earlier A/B here compared two binaries, which needs the md5 checked by
+hand because the version banner is stamped from the git hash and does not
+distinguish builds. A flag removes that whole class of error: the two sides are
+the same file, and the daemon logs which options are live so the run can be
+checked against what it was meant to be measuring. Worth doing this way from
+now on.
+
 ### Where this leaves the project
 
 Each row at its own best thread count, which is the only fair way to compare
@@ -736,10 +855,17 @@ stock,                     12 threads            597.6 H/s
 + screening (thr 37),      12 threads             1605.3      2.69x
 + retuned,                 32 threads             1876.0      3.14x
 + screen early exit (thr 4), 30 threads           2280.2      3.82x
++ recomputed final pass,     30 threads           2590.5      4.33x
 ```
 
 Best unscreened is 733.4 H/s at 12 threads, so screening and its retuning are
 worth **3.11x** on their own.
+
+A caution on reading that table. The same configuration read 2520.5, 2570.4 and
+2590.5 across two runs on the same evening, a spread of about 3%, which is
+larger than several of the individual effects in it. Every multiplier above was
+measured **inside one run** against its own baseline, which is the only
+comparison the rig supports at this resolution. See rule 6.
 
 Live through NervaOne on the same machine, 24 to 30 threads: 1.82 to 1.89 kH/s,
 which agrees with the rig.
@@ -747,8 +873,12 @@ which agrees with the rig.
 Against the published v6 progression on a comparable machine (his 5900X stock
 558 H/s against this 7950X's 597.6), his figure after the same two steps,
 memory work and screening, is 976 H/s scaled from a 5600G or about 2233 on the
-5900X. The remaining gap is the memory work we have not built, chiefly K-way
-nonce interleaving at +23%, plus trace JIT and virtual pad.
+5900X. His next step, the equivalent of the recomputed final pass, took him
+from 2233 to 2889, 1.29x. Ours is 1.17x on the same step, and the gap is worth
+understanding rather than shrugging at: his recompute presumably also removes
+the fill's read-for-ownership traffic, which ours does not yet. The remaining
+gap after that is chiefly K-way nonce interleaving at +23%, plus trace JIT and
+virtual pad.
 
 ## Lessons for v8
 
@@ -835,6 +965,44 @@ offload of the fill, which does not predict cost but pays it elsewhere, so the
 draw ordering does nothing against it. See F43, and note `CN_SALT_MEMORY` is
 load-bearing there and is not documented as such.
 
+### 7. A pass over memory is only memory work while the memory is not reproducible
+
+v13's final pass reads all 8 MB of the pad and does real AES on every byte of
+it. It looks like 8 MB of memory work and it is not. Everywhere the VM did not
+write, the pad holds a pure function of a 128-byte running state and the salt,
+so a miner regenerates it for the price of an AES round and never touches DRAM.
+Measured: +16.8% on this machine, and the pass goes from 8 MB of reads to
+essentially none.
+
+The pad's **size** bought nothing on that pass. What bought something was that
+the VM had written parts of it, and screening reduces that to nothing: the
+median accepted nonce at threshold 4 leaves exactly 32 dirty blocks, and all 32
+are the random-value pokes rather than anything the VM did.
+
+So **32 bytes of chain-dependent data were the entire residual memory-hardness
+of an 8 MB pass**, and they are cheap to track around. A handful of
+chain-dependent pokes is not a defence.
+
+The rule, and it is checkable rather than a judgement call:
+
+> For a pass over the pad to cost memory, the pad's contents **at the moment
+> that pass runs** must not be reproducible from less state than the pad holds.
+
+Ask it of every pass in v8 separately, because the answer differs per pass. v8's
+fill writes the pad from an AES chain, so immediately after the fill the pad is
+reproducible from 128 bytes and any pass at that point is free. What protects
+the later passes is that the sweeps touch the whole pad, so reproducing the pad
+means redoing the sweeps, which is the work itself. That is the right property,
+but note what it rests on: **it rests on every sweep touching everything, not on
+the pad being 1 MB.** A change that makes a sweep conditional, data-dependent or
+skippable re-opens this, and it would not look like a memory change when it was
+made.
+
+This is the same question `salt_pad_v8` already answers for the salt, where the
+reseeding is what stops the keystream being fast-forwarded. The pad deserves the
+question asked explicitly in the same way, and currently FINDINGS does not ask
+it.
+
 ## Current state, and how to pick this up cold
 
 Branch `perf/v13-fused-pad-init` on remote `robcoder` (R0BC0D3R/nerva). Nothing
@@ -844,15 +1012,18 @@ here is proposed for nerva-project.
 
 ```
 7950X, 16C/32T, 1 MB L2 per core
-  nervad --mining-screen-threshold 4            30 threads   2280.2 H/s   3.82x over stock
+  nervad --mining-screen-threshold 4 --mining-recompute-final
+                                                30 threads   2590.5 H/s   4.33x over stock
   (--mining-screen-batch is NOT worth it here)
 
 i7-7700HQ, 4C/8T, 256 KB L2
   nervad --mining-screen-threshold 14 --mining-screen-batch   8 threads   413.5 H/s   4.45x
+  (--mining-recompute-final is UNMEASURED here, and the laptop's 256 KB L2
+   and lower memory bandwidth make it the machine most likely to gain)
 ```
 
 Binaries used for the A/Bs are under `D:/Claude/v6miner/ab/`. The newest is
-`nervad-final.exe`. They are not in git; rebuild from the branch if they are
+`nervad-rec.exe`. They are not in git; rebuild from the branch if they are
 gone. The build directory is keyed on the branch name, so a branch switch sends
 output somewhere else; check the md5, not the path.
 
@@ -866,51 +1037,100 @@ output somewhere else; check the md5, not the path.
 | screen early exit | shipped, +21% via moving the optimum |
 | eight-lane HC-128 init | shipped, `HC128_Init_x8`, verified 2.37x |
 | eight-wide screen | shipped, `--mining-screen-batch`, default off; nothing at 30 threads, +4% at 7 to 8 |
+| recomputed final pass | shipped, `--mining-recompute-final`, default off; +16.8% screened, -7.7% unscreened |
 
 ### Next, and the design for it
 
-**Recompute-final**, the largest remaining item that needs no JIT. His measured
-gain for the equivalent step was 2233 to 2889, 1.29x, and ours should be better
-because we screen harder.
+**Non-temporal stores on the fill.** His +4%, and the recomputed final pass has
+just made it worth much more than that.
 
-The case for it, which is the Amdahl check and should be redone if anything
-changes: at threshold 4 an accepted nonce has at most 4 memory operations per
-pass, so roughly 3,700 writes land across 65,536 pad blocks and **about 94% of
-the pad is never written**. The final pass reads all 8 MB of it. Removing ~7.5 MB
-of reads per hash is about 17 GB/s of the ~36 GB/s this machine moves at
-2280 H/s, against ~5.2M added AES operations, roughly 0.6 ms on a ~3.5 ms hash.
-Trading ~17% more compute for about half the memory traffic, at DRAM saturation.
+The Amdahl check, which should be redone if anything changes. On an accepted
+nonce at threshold 4 the per-hash DRAM traffic is now almost entirely the fill,
+because the VM's median nonce touches nothing and the final pass regenerates
+instead of reading:
+
+```
+fill          8 MB of stores
+VM            median zero writes, a handful of reads
+final pass    median 32 blocks read, 4 KB
+```
+
+**But 8 MB of ordinary stores is 16 MB of bus traffic, not 8.** A store that
+misses does a read-for-ownership first: the line is fetched, modified, and
+written back. That read is invisible in the source and is pure waste here,
+because the fill overwrites every byte of the line and never reads what was
+there. `_mm_stream_si128` skips it. So this removes about half of what is now
+roughly all of the traffic, where when it was measured at +4% it was removing
+one quarter of it.
+
+At 2590 H/s and 16 MB per hash that is about 41 GB/s, and the change should take
+it to about 21.
 
 Design:
 
-1. The final pass already runs sequentially, so **no checkpoints are needed**:
-   replay the fill's AES chain in step with it. A clean block is
-   `aes_pseudo_round(text_fill)` XOR `salt[offset mod CN_SALT_MEMORY]`; a dirty
-   one is read from the pad as now.
-2. The VM records which blocks it wrote. `cn_vm_execute` is **also the
-   verification path**, where unscreened nonces do ~588,000 writes per hash and
-   tracking would cost around 5%, so it must be opt-in: a thread-local dirty-map
-   pointer that mining sets and verification leaves null. Null means no tracking
-   and the final pass reads normally, exactly as today.
-3. **`randomize_scratchpad`'s 32 byte-pokes must mark their blocks too.** Easy to
-   miss and it would corrupt the hash silently. The digest harness catches it.
+1. x86 only. The fused fill's 8-byte store loop becomes `_mm_stream_si128` over
+   16-byte chunks; `dp` is 128-byte aligned because the pad is page aligned and
+   `p_off` is a multiple of `init_size_byte`, so the alignment requirement is
+   already met. The ARM arm keeps the scalar loop.
+2. **`_mm_sfence()` after the fill loop**, before the VM reads the pad. Streaming
+   stores are weakly ordered.
+3. **Opt-in, for the same reason the dirty map is.** On the verification path a
+   single 8 MB pad fits in this machine's L3, so leaving it in cache is right
+   there and streaming it out would force the VM's reads and the final pass to
+   go to DRAM. Same per-thread flag mechanism, set by mining threads only.
+   `--mining-nontemporal-fill`.
+4. It compounds with the recomputed final pass rather than competing with it:
+   NT's usual downside is that the data is no longer in cache for whoever reads
+   it next, and after the recompute almost nobody reads it.
 
-Verify with `contrib/powbench/build-v13-fold.sh` plus `t_v13_fold.c`, 2000
-digests across both AES arms, before measuring anything.
+Verify with `contrib/powbench/t_v13_recompute.c`, which already runs every
+digest with the flag off and on. Note the harness compares against the same
+binary, so it catches a wrong fill but not a fill that is wrong in both modes;
+diff its stdout against the current build's as well.
 
-### Then, in order
+### Then, in order, and one of these has changed size
 
-- **Non-temporal stores on the fill**, his +4%, and worth more now that the two
-  full-pad passes dominate.
-- **K-way nonce interleaving**, his +23%, the largest unbuilt memory item.
-- **Trace JIT (1.48x) and virtual pad (1.51x)**, which are most of the remaining
-  gap to his 7.2x and are weeks of work: an x86-64 emitter, deopt handling,
-  checkpoint replay.
+- **Virtual pad, and it is now much more attractive than "1.51x, weeks of
+  work".** Today's dirty-block measurement is what changes the estimate. The
+  median screened nonce does **zero** VM writes and only a few thousand reads,
+  so the pad is not being used as memory at all: it is written once and read
+  back once. If the VM's reads could be served by replay, the fill would not
+  have to happen either, and the per-hash traffic would go from 16 MB to
+  essentially nothing.
+
+  Sketch: keep `fill_text` every K blocks as a checkpoint. At K = 16 that is
+  512 KB per thread, which lives in cache rather than DRAM. A VM read into a
+  clean region replays at most 16 AES pseudo-rounds from the nearest checkpoint;
+  at roughly 8192 reads per hash that is about 5M extra AES operations, the same
+  order as the recompute already costs. Blocks the VM has written are no longer
+  replayable, so they go in a side table, which the median nonce leaves empty,
+  and the 32 pokes go there too. The tail where a screened nonce turns out to
+  dirty most of the pad needs a fallback to materialising it.
+
+  This is still the largest single piece of work on the list, but it is now the
+  one with the clearest case, and the checkpoint machinery is a small extension
+  of the chain replay that the recomputed final pass already has.
+
+- **K-way nonce interleaving**, his +23%. Worth re-estimating after the fill
+  changes: its value comes from overlapping memory stalls, and there may be
+  fewer left to overlap.
+
+- **Trace JIT (1.48x)**, which needs an x86-64 emitter and deopt handling.
 
 ### Open
 
 - The optimal threshold is a machine property; sweep it per machine rather than
-  trusting the default in the help text.
+  trusting the default in the help text. It did not move when the recomputed
+  final pass went in, which is the first time it has not.
+- **`--mining-recompute-final` is unmeasured on the laptop.** It should help
+  there at least as much, and plausibly more: 256 KB of L2 and less memory
+  bandwidth per core is exactly the machine that gains most from trading DRAM
+  for AES. Its best threshold is 14, which is looser than this machine's 4, so
+  the pad will be dirtier and some of the gain comes back off.
+- The recomputed final pass builds each clean block into a scratch buffer and
+  then XORs it in, so a 128-byte store and reload happens per block that a
+  three-way XOR variant of `aes_pseudo_round_xor` would remove. Cheap to try,
+  and only worth it if it shows up next to the DRAM saving.
 - The miner reports the page tier for **thread 0 only**; it should report the
   worst tier across threads. At 24 to 30 threads a per-thread fallback would be
   invisible.
@@ -968,6 +1188,18 @@ accepts cheaper nonces but pays the estimate more times per accepted nonce, so
 the effective rate has a peak. Calling a non-monotonic result "impossible" was
 wrong; what was actually anomalous was one point, not the shape. Predict the
 shape first, then the deviations stand out instead of the noise.
+
+### Rule 6. Compare inside a run, never across runs
+
+The same configuration read 2520.5, 2570.4 and 2590.5 H/s across two runs on the
+same evening with nothing changed. That is a spread of about 3%, and it is
+larger than several of the effects measured on this project. Each run's own
+A-B-B-A or repeated baseline bounds the drift **within** that run, usually to
+1 to 2%, and that is the only comparison the rig supports at this resolution.
+
+So a number from yesterday's run is not a baseline for today's change. Measure
+the baseline again, in the same run, every time. The cost is one extra point and
+it is always worth paying.
 
 ## Environment traps
 

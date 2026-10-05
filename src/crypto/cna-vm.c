@@ -33,6 +33,7 @@
 
 #include <string.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 // ---------------------------------------------------------------------------
 // Program generation
@@ -200,6 +201,34 @@ static inline uint64_t mix64(uint64_t val, uint32_t key_material)
 }
 
 // ---------------------------------------------------------------------------
+// Dirty-block tracking (mining only, see cna-vm.h)
+// ---------------------------------------------------------------------------
+
+/* Fails the build if the map stops covering the pad. */
+typedef char cn_v13_dirty_map_covers_pad[
+    (CN_V13_DIRTY_BYTES * 8 * CN_V13_FILL_BLOCK == CN_SCRATCHPAD_MEMORY_V13) ? 1 : -1];
+
+static __thread uint8_t *cn_vm_tls_dirty = NULL;
+
+int cn_vm_dirty_enable(int on)
+{
+    if (!on)
+    {
+        free(cn_vm_tls_dirty);
+        cn_vm_tls_dirty = NULL;
+        return 1;
+    }
+    if (cn_vm_tls_dirty == NULL)
+        cn_vm_tls_dirty = (uint8_t *)malloc(CN_V13_DIRTY_BYTES);
+    return cn_vm_tls_dirty != NULL;
+}
+
+uint8_t *cn_vm_dirty_map(void)
+{
+    return cn_vm_tls_dirty;
+}
+
+// ---------------------------------------------------------------------------
 // cn_vm_execute
 //
 // Runs exactly CN_PROGRAM_SIZE steps through prog, using the for-loop
@@ -217,6 +246,12 @@ void cn_vm_execute(cn_vm_program_t *prog, uint8_t *scratchpad, uint64_t regs[CN_
     const int    pc_mask = CN_PROGRAM_SIZE - 1;   // CN_PROGRAM_SIZE is a power of 2
 
     int pc = 0;
+
+    /* Read once: 2048 calls per hash, and the branch on it inside the write
+     * case is the same way every time, so it predicts perfectly. NULL on the
+     * verification path, which is why the cost there is a not-taken branch
+     * rather than a read-modify-write per store. */
+    uint8_t * const dirty = cn_vm_tls_dirty;
 
     // Each access feeds the next one's address, so the reads form a pointer chase
     // the CPU can't run ahead of. Same trick as CryptoNight's state_index. A
@@ -281,6 +316,8 @@ void cn_vm_execute(cn_vm_program_t *prog, uint8_t *scratchpad, uint64_t regs[CN_
             memcpy(&tmp, &scratchpad[addr], sizeof(uint64_t));
             tmp ^= regs[src];
             memcpy(&scratchpad[addr], &tmp, sizeof(uint64_t));
+            if (dirty != NULL)
+                dirty[addr >> 10] |= (uint8_t)(1u << ((addr >> 7) & 7));
             chain += tmp;        // keep the dependency chain rolling through writes
             break;
         }

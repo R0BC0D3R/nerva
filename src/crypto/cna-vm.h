@@ -100,6 +100,36 @@ uint32_t cn_vm_screen_cost(const uint8_t seed[32], uint32_t limit);
  * of nonces can run the key schedules eight at a time with HC128_Init_x8. */
 uint32_t cn_vm_screen_cost_from_state(HC128_State *rng, uint32_t limit);
 
+/* Dirty-block tracking for the recomputed final pass. Mining only.
+ *
+ * v13 writes the whole 8 MB pad in the fill and reads the whole 8 MB back in
+ * the final pass. A screened nonce barely touches it in between: at threshold 4
+ * the VM does at most four memory operations per pass, so under 12% of the
+ * blocks are ever written and the final pass can regenerate the rest instead of
+ * reading them. Regenerating costs an AES pseudo-round per block, which is the
+ * fill's cost again; reading costs 128 bytes off DRAM. On a machine that is
+ * memory bound at 30 threads the AES is the cheaper side.
+ *
+ * It has to be opt-in because cn_vm_execute is also the verification path,
+ * where a nonce is not screened and does hundreds of thousands of writes per
+ * hash. There the marking is pure overhead and the pad is fully dirty anyway.
+ * The map is per thread and NULL means no tracking, which is the behaviour the
+ * daemon has always had.
+ *
+ * One bit per CN_V13_FILL_BLOCK bytes of pad, bit b of byte n covering block
+ * n * 8 + b. The caller clears it before the fill and sets the bits for any
+ * writes it makes outside the VM; cn_vm_execute sets the rest. */
+#define CN_V13_FILL_BLOCK   128    /* INIT_SIZE_BLK * AES_BLOCK_SIZE */
+#define CN_V13_DIRTY_BYTES  8192   /* CN_SCRATCHPAD_MEMORY_V13 / CN_V13_FILL_BLOCK / 8 */
+
+/* Turn tracking on or off for the calling thread. Returns 1 on success, 0 if
+ * the map could not be allocated, in which case tracking stays off and hashing
+ * is still correct. */
+int cn_vm_dirty_enable(int on);
+
+/* The calling thread's map, or NULL when tracking is off. */
+uint8_t *cn_vm_dirty_map(void);
+
 #ifdef __cplusplus
 }
 #endif

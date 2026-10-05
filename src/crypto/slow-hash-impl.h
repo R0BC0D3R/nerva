@@ -245,9 +245,15 @@ void cn_slow_hash_v13(cn_hash_context_t *context, const void *data, size_t lengt
     const uint32_t init_size_byte = (uint32_t)(init_size_blk * AES_BLOCK_SIZE);
 
     RDATA_ALIGN16 uint8_t expandedKey[240];
+    RDATA_ALIGN16 uint8_t expandedKeyFill[240];
+    RDATA_ALIGN16 uint8_t fill_text[INIT_SIZE_BLK * AES_BLOCK_SIZE];
+    RDATA_ALIGN16 uint8_t clean_blk[INIT_SIZE_BLK * AES_BLOCK_SIZE];
     uint8_t *text = (uint8_t *)malloc(init_size_byte);
     union cn_slow_hash_state state;
     size_t i;
+
+    /* Non-NULL only on a mining thread that asked for it. See cna-vm.h. */
+    uint8_t * const dirty = cn_vm_dirty_map();
 
     static void (*const extra_hashes[4])(const void *, size_t, char *) = {
         hash_extra_blake, hash_extra_groestl, hash_extra_jh, hash_extra_skein};
@@ -255,6 +261,15 @@ void cn_slow_hash_v13(cn_hash_context_t *context, const void *data, size_t lengt
     hash_process(&state.hs, data, length);
     memcpy(text, state.init, init_size_byte);
     aes_expand_key((OAES_CTX *)context->oaes_ctx, state.hs.b, expandedKey);
+    if (dirty != NULL)
+    {
+        /* The final pass replays this fill, and by the time it runs the key it
+         * was derived from is gone: state.k is XORed with the VM's registers
+         * first, and state.k is hs.b[0..64), which covers both this key and the
+         * final pass's. Keep the expansion rather than the 32 bytes. */
+        memcpy(expandedKeyFill, expandedKey, sizeof(expandedKey));
+        memset(dirty, 0, CN_V13_DIRTY_BYTES);
+    }
     for (i = 0; i < CN_SCRATCHPAD_MEMORY_V13 / init_size_byte; i++)
     {
         aes_pseudo_round(text, text, expandedKey, init_size_blk);
@@ -291,6 +306,13 @@ void cn_slow_hash_v13(cn_hash_context_t *context, const void *data, size_t lengt
         int ri;
         for (ri = 0; ri < CN_RANDOM_VALUES; ri++)
         {
+            /* These land on the pad outside the VM, so the final pass must not
+             * regenerate the blocks they touch. Marked for every entry,
+             * including operators that happen to write the value back
+             * unchanged: a bit set on a clean block only costs a read, a bit
+             * missed corrupts the hash silently. */
+            if (dirty != NULL)
+                dirty[rv.indices[ri] >> 10] |= (uint8_t)(1u << ((rv.indices[ri] >> 7) & 7));
             switch (rv.operators[ri])
             {
             case ADD:  hp_state[rv.indices[ri]] += (uint8_t)rv.values[ri]; break;
@@ -334,8 +356,48 @@ void cn_slow_hash_v13(cn_hash_context_t *context, const void *data, size_t lengt
 
     memcpy(text, state.init, init_size_byte);
     aes_expand_key((OAES_CTX *)context->oaes_ctx, &state.hs.b[32], expandedKey);
-    for (i = 0; i < CN_SCRATCHPAD_MEMORY_V13 / init_size_byte; i++)
-        aes_pseudo_round_xor(text, text, expandedKey, &hp_state[i * init_size_byte], init_size_blk);
+    if (dirty == NULL)
+    {
+        for (i = 0; i < CN_SCRATCHPAD_MEMORY_V13 / init_size_byte; i++)
+            aes_pseudo_round_xor(text, text, expandedKey, &hp_state[i * init_size_byte], init_size_blk);
+    }
+    else
+    {
+        /* Same arithmetic, but a block the VM never wrote is regenerated rather
+         * than read. The fill is a chain, so this walks it forward in step: the
+         * final pass is already sequential over the same blocks in the same
+         * order, which is why no checkpoints are needed. A clean block is
+         * exactly what the fill stored, aes_pseudo_round of the running fill
+         * text XOR the salt at the same offset.
+         *
+         * fill_text starts where the fill started. state.init is hs.b[64..192)
+         * and the register XOR above only touched hs.b[0..64), so it is still
+         * the value the fill began from. */
+        memcpy(fill_text, state.init, init_size_byte);
+        for (i = 0; i < CN_SCRATCHPAD_MEMORY_V13 / init_size_byte; i++)
+        {
+            aes_pseudo_round(fill_text, fill_text, expandedKeyFill, init_size_blk);
+            if (dirty[i >> 3] & (1u << (i & 7)))
+            {
+                aes_pseudo_round_xor(text, text, expandedKey, &hp_state[i * init_size_byte], init_size_blk);
+            }
+            else
+            {
+                const uint32_t p_off = (uint32_t)(i * init_size_byte);
+                const uint8_t * const sp = (const uint8_t *)salt + (p_off & (CN_SALT_MEMORY - 1));
+                uint32_t k;
+                for (k = 0; k < init_size_byte; k += 8)
+                {
+                    uint64_t t, sv;
+                    memcpy(&t, fill_text + k, 8);
+                    memcpy(&sv, sp + k, 8);
+                    t ^= sv;
+                    memcpy(clean_blk + k, &t, 8);
+                }
+                aes_pseudo_round_xor(text, text, expandedKey, clean_blk, init_size_blk);
+            }
+        }
+    }
     memcpy(state.init, text, init_size_byte);
     hash_permutation(&state.hs);
     extra_hashes[state.hs.b[0] & 3](&state, 200, hash);
@@ -526,6 +588,15 @@ void cn_slow_hash_v13(cn_hash_context_t *context, const void *data, size_t lengt
     oaes_ctx * const aes_ctx = (oaes_ctx *)context->oaes_ctx;
     size_t i, j;
 
+    /* Non-NULL only on a mining thread that asked for it. See cna-vm.h. The
+     * software arm is not what anyone mines on; it is here so the recomputed
+     * final pass has a second, independent implementation for the digest
+     * harness to check the hardware one against. */
+    uint8_t *dirty = cn_vm_dirty_map();
+    uint8_t fill_exp[256];
+    uint8_t fill_text[INIT_SIZE_BLK * AES_BLOCK_SIZE];
+    uint8_t clean_blk[INIT_SIZE_BLK * AES_BLOCK_SIZE];
+
     static void (*const extra_hashes[4])(const void *, size_t, char *) = {
         hash_extra_blake, hash_extra_groestl, hash_extra_jh, hash_extra_skein};
 
@@ -533,6 +604,20 @@ void cn_slow_hash_v13(cn_hash_context_t *context, const void *data, size_t lengt
     memcpy(text, state.init, init_size_byte);
     memcpy(aes_key, state.hs.b, AES_KEY_SIZE);
     oaes_key_import_data(aes_ctx, aes_key, AES_KEY_SIZE);
+    if (dirty != NULL)
+    {
+        /* The final pass imports a different key over this one, so the
+         * expansion has to be kept now. 240 bytes for a 32-byte key; the guard
+         * is here so a changed expansion falls back to reading the pad rather
+         * than overrunning the buffer. */
+        if (aes_ctx->key->exp_data_len > sizeof(fill_exp))
+            dirty = NULL;
+        else
+        {
+            memcpy(fill_exp, aes_ctx->key->exp_data, aes_ctx->key->exp_data_len);
+            memset(dirty, 0, CN_V13_DIRTY_BYTES);
+        }
+    }
     for (i = 0; i < CN_SCRATCHPAD_MEMORY_V13 / init_size_byte; i++)
     {
         for (j = 0; j < init_size_blk; j++)
@@ -570,6 +655,13 @@ void cn_slow_hash_v13(cn_hash_context_t *context, const void *data, size_t lengt
         int ri;
         for (ri = 0; ri < CN_RANDOM_VALUES; ri++)
         {
+            /* These land on the pad outside the VM, so the final pass must not
+             * regenerate the blocks they touch. Marked for every entry,
+             * including operators that happen to write the value back
+             * unchanged: a bit set on a clean block only costs a read, a bit
+             * missed corrupts the hash silently. */
+            if (dirty != NULL)
+                dirty[rv.indices[ri] >> 10] |= (uint8_t)(1u << ((rv.indices[ri] >> 7) & 7));
             switch (rv.operators[ri])
             {
             case ADD:  hp_state[rv.indices[ri]] += (uint8_t)rv.values[ri]; break;
@@ -613,11 +705,37 @@ void cn_slow_hash_v13(cn_hash_context_t *context, const void *data, size_t lengt
 
     memcpy(text, state.init, init_size_byte);
     oaes_key_import_data(aes_ctx, &state.hs.b[32], AES_KEY_SIZE);
+    if (dirty != NULL)
+        memcpy(fill_text, state.init, init_size_byte);
     for (i = 0; i < CN_SCRATCHPAD_MEMORY_V13 / init_size_byte; i++)
     {
+        const uint8_t *src = &hp_state[i * init_size_byte];
+        if (dirty != NULL)
+        {
+            /* Walk the fill's chain forward in step with the final pass, and
+             * regenerate any block the VM never wrote instead of reading it.
+             * See the hardware arm for why no checkpoints are needed. */
+            for (j = 0; j < init_size_blk; j++)
+                aesb_pseudo_round(&fill_text[AES_BLOCK_SIZE * j], &fill_text[AES_BLOCK_SIZE * j], fill_exp);
+            if ((dirty[i >> 3] & (1u << (i & 7))) == 0)
+            {
+                const uint32_t p_off = (uint32_t)(i * init_size_byte);
+                const uint8_t * const sp = (const uint8_t *)salt + (p_off & (CN_SALT_MEMORY - 1));
+                uint32_t k;
+                for (k = 0; k < init_size_byte; k += 8)
+                {
+                    uint64_t t, sv;
+                    memcpy(&t, fill_text + k, 8);
+                    memcpy(&sv, sp + k, 8);
+                    t ^= sv;
+                    memcpy(clean_blk + k, &t, 8);
+                }
+                src = clean_blk;
+            }
+        }
         for (j = 0; j < init_size_blk; j++)
         {
-            xor_blocks(&text[j * AES_BLOCK_SIZE], &hp_state[i * init_size_byte + j * AES_BLOCK_SIZE]);
+            xor_blocks(&text[j * AES_BLOCK_SIZE], &src[j * AES_BLOCK_SIZE]);
             aesb_pseudo_round(&text[AES_BLOCK_SIZE * j], &text[AES_BLOCK_SIZE * j], aes_ctx->key->exp_data);
         }
     }

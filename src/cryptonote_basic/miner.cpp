@@ -40,6 +40,7 @@
 #include "cryptonote_basic_impl.h"
 #include "cryptonote_format_utils.h"
 #include "cryptonote_core/cryptonote_tx_utils.h"
+#include "crypto/cna-vm.h"
 #include "file_io_utils.h"
 #include "common/command_line.h"
 #include "common/util.h"
@@ -123,6 +124,19 @@ namespace cryptonote
      * vectorisation saves. Off by default for that reason, and worth trying on
      * a machine with fewer cores or more cache per core. */
     const command_line::arg_descriptor<bool>        arg_mining_screen_batch = {"mining-screen-batch", "Screen v13 nonces eight at a time (helps on low core counts, not on many)", false, true};
+    /* v13 fills all 8 MB of the pad and reads all 8 MB back in the final pass.
+     * A screened nonce writes almost none of it in between: at threshold 4 the
+     * only blocks ever written are the 32 the random values poke, so the final
+     * pass can regenerate the rest from the fill's AES chain instead of reading
+     * them. That trades DRAM bandwidth for AES throughput, which is the right
+     * way round on a machine running enough threads to be memory bound.
+     *
+     * Mining only. It needs the VM to record which blocks it wrote, and the VM
+     * is also the verification path, where a nonce is unscreened, writes
+     * hundreds of thousands of times and leaves the pad fully dirty. Tracking
+     * there would be pure overhead, so the recording is per thread and off
+     * unless a mining thread turns it on. */
+    const command_line::arg_descriptor<bool>        arg_mining_recompute = {"mining-recompute-final", "Regenerate unwritten v13 pad blocks in the final pass instead of reading them (pairs with --mining-screen-threshold)", false, true};
     const command_line::arg_descriptor<bool>        arg_mining_affinity = {"mining-affinity", "Pin mining threads to physical cores, one per core and inside a single L3 group when they fit", false, true};
 
     /* Mining thread affinity. The v13 scratchpad is 8 MB per thread and only
@@ -307,6 +321,7 @@ namespace cryptonote
     m_screen_threshold(0),
     m_screen_batch(false),
     m_screened_out(0),
+    m_recompute_final(false),
     m_pausers_count(0),
     m_threads_total(0),
     m_donate_percent(MINING_DEFAULT_DONATION_LEVEL),
@@ -586,6 +601,7 @@ namespace cryptonote
     command_line::add_arg(desc, arg_mining_affinity);
     command_line::add_arg(desc, arg_mining_screen);
     command_line::add_arg(desc, arg_mining_screen_batch);
+    command_line::add_arg(desc, arg_mining_recompute);
   }
   //-----------------------------------------------------------------------------------------------------
   bool miner::init(const boost::program_options::variables_map& vm, network_type nettype)
@@ -643,6 +659,7 @@ namespace cryptonote
     m_mining_affinity = command_line::get_arg(vm, arg_mining_affinity);
     m_screen_threshold = command_line::get_arg(vm, arg_mining_screen);
     m_screen_batch = command_line::get_arg(vm, arg_mining_screen_batch);
+    m_recompute_final = command_line::get_arg(vm, arg_mining_recompute);
     if(!cryptonote::get_account_address_from_str(info, nettype, DONATION_ADDR))
     {
       LOG_ERROR("Invalid donation address, starting daemon canceled");
@@ -734,6 +751,13 @@ namespace cryptonote
     }
     else
       MGUSER_CYAN("Mining has started with " << threads_count << " threads, good luck!" );
+
+    /* Say what is on, so a measurement run can be checked against what it was
+     * meant to be measuring rather than against the binary's name. */
+    if (m_screen_threshold != 0 || m_recompute_final)
+      MGUSER_YELLOW("v13 miner options: screen threshold " << m_screen_threshold
+                    << (m_screen_batch ? " (batched)" : "")
+                    << ", final pass " << (m_recompute_final ? "recomputed" : "read from pad"));
 
     if( get_is_background_mining_enabled() )
     {
@@ -861,6 +885,11 @@ namespace cryptonote
     // point and reading one would report the worst tier no matter what the
     // allocation actually got.
     uint8_t tier_reported_version = 0;   // 0 = nothing reported yet
+    /* Per thread, and only on a mining thread. Verification runs the same VM
+     * and must not pay for the recording. */
+    const bool recompute_final = m_recompute_final && cn_vm_dirty_enable(1);
+    if (m_recompute_final && !recompute_final)
+      MERROR("Miner thread [" << th_local_index << "] could not allocate the dirty map, reading the pad instead");
     /* Screening batch. Accepted nonces are held here and hashed one at a time,
      * so only the screening is batched and the hash path is untouched. */
     enum { SCREEN_BATCH = 8 };
@@ -1032,6 +1061,7 @@ namespace cryptonote
       ++m_hashes;
       ++m_total_hashes;
     }
+    cn_vm_dirty_enable(0);
     crypto::cn_hash_context_free(hash_context);
     MGINFO("Miner thread stopped ["<< th_local_index << "]");
     --m_threads_active;

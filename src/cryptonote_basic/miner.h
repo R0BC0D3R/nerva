@@ -159,6 +159,10 @@ namespace cryptonote
     uint32_t m_screen_threshold;
     bool m_screen_batch;
     std::atomic<uint64_t> m_screened_out;
+    /* Regenerate unwritten pad blocks in v13's final pass instead of reading
+     * them. Mining only, and only worth it on screened nonces, which barely
+     * write the pad. See cna-vm.h. */
+    bool m_recompute_final;
     uint8_t m_donate_percent;
     uint8_t m_donate_counter;
     volatile bool m_donating;
