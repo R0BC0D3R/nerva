@@ -112,17 +112,17 @@ int cn_hardware_aes_supported(void)
 
 /* See hash-ops.h. Per thread so a mining thread can turn it on without
  * changing what verification does on the same process's other threads. */
-static __thread int cn_v13_tls_nt_fill = 0;
+static __thread int cn_tls_nt_fill = 0;
 
-int cn_v13_nt_fill_enable(int on)
+int cn_nt_fill_enable(int on)
 {
-    cn_v13_tls_nt_fill = on ? 1 : 0;
+    cn_tls_nt_fill = on ? 1 : 0;
     return 1;
 }
 
-int cn_v13_nt_fill(void)
+int cn_nt_fill(void)
 {
-    return cn_v13_tls_nt_fill;
+    return cn_tls_nt_fill;
 }
 
 #if defined(CN_V13_PHASE_TIMING)

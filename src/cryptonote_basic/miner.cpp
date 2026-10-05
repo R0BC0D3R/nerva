@@ -948,7 +948,7 @@ namespace cryptonote
     if (m_recompute_final && !recompute_final)
       MERROR("Miner thread [" << th_local_index << "] could not allocate the dirty map, reading the pad instead");
     if (m_nt_fill)
-      crypto::cn_v13_nt_fill_enable(1);
+      crypto::cn_nt_fill_enable(1);
     /* Screening batch. Accepted nonces are held here and hashed one at a time,
      * so only the screening is batched and the hash path is untouched. */
     enum { SCREEN_BATCH = 8 };
@@ -1141,7 +1141,7 @@ namespace cryptonote
 #endif
     }
     cn_vm_dirty_enable(0);
-    crypto::cn_v13_nt_fill_enable(0);
+    crypto::cn_nt_fill_enable(0);
     crypto::cn_hash_context_free(hash_context);
     MGINFO("Miner thread stopped ["<< th_local_index << "]");
     --m_threads_active;

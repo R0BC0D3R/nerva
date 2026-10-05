@@ -163,13 +163,13 @@ static void run(cn_hash_context_t *ctx, const char *tag, int seeds, uint32_t thr
 
                 if (v & 1) { if (!cn_vm_dirty_enable(1)) { fprintf(stderr, "no dirty map\n"); exit(2); } }
                 else cn_vm_dirty_enable(0);
-                cn_v13_nt_fill_enable((v & 2) ? 1 : 0);
+                cn_nt_fill_enable((v & 2) ? 1 : 0);
 
                 fn(ctx, inputs[k], strlen(inputs[k]), out, seed);
                 if (v == 1) nd = dirty_blocks(cn_vm_dirty_map());
 
                 cn_vm_dirty_enable(0);
-                cn_v13_nt_fill_enable(0);
+                cn_nt_fill_enable(0);
 
                 if (v == 0) continue;
 

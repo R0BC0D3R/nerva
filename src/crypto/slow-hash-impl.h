@@ -270,7 +270,7 @@ void cn_slow_hash_v13(cn_hash_context_t *context, const void *data, size_t lengt
 #if defined(__x86_64__) || defined(__i386__)
     /* See hash-ops.h. Mining only, and a performance switch only: the pad comes
      * out byte for byte the same either way. */
-    const int nt_fill = cn_v13_nt_fill();
+    const int nt_fill = cn_nt_fill();
 #endif
 
     static void (*const extra_hashes[4])(const void *, size_t, char *) = {

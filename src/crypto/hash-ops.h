@@ -208,8 +208,8 @@ int cn_hardware_aes_supported(void);
  *
  * Returns 1 on success. x86 only; elsewhere enabling it is accepted and does
  * nothing. */
-int cn_v13_nt_fill_enable(int on);
-int cn_v13_nt_fill(void);
+int cn_nt_fill_enable(int on);
+int cn_nt_fill(void);
 
 /* Per-phase cycle counts for the v13 hash, so the cost breakdown is measured
  * rather than inferred from instruction counts. Compiled in only when

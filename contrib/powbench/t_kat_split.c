@@ -1,11 +1,18 @@
-/* Which hash variant does a build change?
+/* Does a build change any hash variant, and does the non-temporal fill?
  *
- * cn_slow_hash_known_answer_test accumulates one ok flag across v10, v11, v13
- * and v14, so a failure says only that the build is wrong, not where. This
- * prints a digest per variant so two builds can be diffed and the culprit named.
+ * Two jobs, neither of which cn_slow_hash_known_answer_test can do on its own
+ * because it folds every vector into a single ok flag:
  *
- * Inputs and parameters match the known-answer test's, including its zeroed
- * salt and zeroed random values, so a difference here is a difference there.
+ *  1. Print a digest per variant, so two builds can be diffed and the variant
+ *     that changed can be named.
+ *  2. Run every variant twice, with the non-temporal fill off and on, and
+ *     compare. Streaming stores must leave the pad byte for byte identical, so
+ *     a difference here is a bug in cn_fill_store rather than a property of the
+ *     algorithm. This matters because expand_key() is shared by v8, v11, v10
+ *     and v9, so one change to it touches four consensus paths at once.
+ *
+ * Inputs and parameters are the known-answer test's own, transcribed from its
+ * tables, including its zeroed salt and zeroed random values.
  *
  * Local experiment, not kept.
  */
@@ -28,81 +35,116 @@ int crypto_has_aesni(void)
 static const char live_in[] = "nerva live-algorithm known-answer vector";
 static const char v8_in[]   = "nerva cna v8 known-answer vector";
 
-static void show(const char *tag, const char *h)
+enum { V7_8 = 78, V9 = 9, V10 = 10, V11 = 11, V13 = 13, V14 = 14 };
+
+typedef struct {
+    const char *tag;
+    int         ver;
+    uint32_t    iters;
+    uint8_t     blk;
+    uint16_t    xx, yy, zz, ww;
+} kat_case_t;
+
+/* v14's block count comes from CN_V8_INIT_SIZE_BLK, not from its table. */
+static const kat_case_t cases[] = {
+    { "v10 kat[0] iters=0",  V10,  0, 8, 2, 2, 2, 2 },
+    { "v10 kat[1] iters=17", V10, 17, 4, 3, 2, 2, 3 },
+    { "v10 kat[2] iters=64", V10, 64, 2, 2, 3, 3, 2 },
+    { "v11 kat[0] iters=0",  V11,  0, 8, 4, 4, 0, 0 },
+    { "v11 kat[1] iters=17", V11, 17, 4, 5, 6, 0, 0 },
+    { "v11 kat[2] iters=63", V11, 63, 2, 8, 8, 0, 0 },
+    { "v13 kat",             V13,  0, 0, 0, 0, 0, 0 },
+    { "v14 kat[0] iters=0",  V14,  0, 0, 4, 4, 0, 0 },
+    { "v14 kat[1] iters=1",  V14,  1, 0, 4, 5, 0, 0 },
+    { "v14 kat[2] iters=17", V14, 17, 0, 5, 4, 0, 0 },
+    { "v14 kat[3] iters=64", V14, 64, 0, 6, 6, 0, 0 },
+    { "v14 kat[4] iters=63", V14, 63, 0, 8, 8, 0, 0 },
+    { "v9  iters=8",         V9,   8, 0, 0, 0, 0, 0 },
+    { "v7_8 iters=8",        V7_8, 8, 0, 0, 0, 0, 0 },
+};
+
+static void run_case(cn_hash_context_t *ctx, const kat_case_t *c, char *h)
+{
+    uint8_t seed[32];
+    int i;
+
+    /* the known-answer test pins both before every vector */
+    memset(&ctx->random_values, 0, sizeof(ctx->random_values));
+    memset(ctx->salt, 0, CN_SALT_MEMORY);
+
+    switch (c->ver)
+    {
+    case V10:
+        cn_slow_hash_v10(ctx, live_in, sizeof(live_in) - 1, h,
+                         c->iters, c->blk, c->xx, c->yy, c->zz, c->ww);
+        break;
+    case V11:
+        cn_slow_hash_v11(ctx, live_in, sizeof(live_in) - 1, h,
+                         c->iters, c->blk, c->xx, c->yy);
+        break;
+    case V13:
+        for (i = 0; i < 32; i++) seed[i] = (uint8_t)(i * 7u + 3u);
+        cn_slow_hash_v13(ctx, live_in, sizeof(live_in) - 1, h, seed);
+        break;
+    case V14:
+        cn_slow_hash_v14(ctx, v8_in, sizeof(v8_in) - 1, h,
+                         c->iters, CN_V8_INIT_SIZE_BLK, c->xx, c->yy);
+        break;
+    case V9:
+        cn_slow_hash_v9(ctx, live_in, sizeof(live_in) - 1, h, c->iters);
+        break;
+    default:
+        cn_slow_hash_v7_8(ctx, live_in, sizeof(live_in) - 1, h, c->iters);
+        break;
+    }
+}
+
+static void hex(const char *h)
 {
     int i;
-    printf("%-26s ", tag);
     for (i = 0; i < HASH_SIZE; i++) printf("%02x", (unsigned char)h[i]);
-    putchar('\n');
 }
 
 int main(void)
 {
     cn_hash_context_t *ctx = cn_hash_context_create();
-    char h[HASH_SIZE];
-    uint8_t seed[32];
-    int i;
+    char warm[HASH_SIZE];
+    size_t k;
+    int mismatches = 0;
 
     if (ctx == NULL) { fprintf(stderr, "no context\n"); return 2; }
-    for (i = 0; i < 32; i++) seed[i] = (uint8_t)(i * 7u + 3u);
 
+    /* the dispatchers allocate lazily, so run one hash before touching salt */
     memset(&ctx->random_values, 0, sizeof(ctx->random_values));
-    cn_slow_hash_v11(ctx, live_in, sizeof(live_in) - 1, h, 8, 8, 4, 4);
+    cn_slow_hash_v11(ctx, live_in, sizeof(live_in) - 1, warm, 8, 8, 4, 4);
     if (ctx->salt == NULL) { fprintf(stderr, "no salt\n"); return 2; }
 
-#define RESET() do { memset(&ctx->random_values, 0, sizeof(ctx->random_values)); \
-                     memset(ctx->salt, 0, CN_SALT_MEMORY); } while (0)
-
-    /* the known-answer test's own parameter sets, read out of its tables */
-    RESET(); cn_slow_hash_v10(ctx, live_in, sizeof(live_in) - 1, h, 0, 8, 2, 2, 2, 2);
-    show("v10 kat[0] iters=0", h);
-    RESET(); cn_slow_hash_v10(ctx, live_in, sizeof(live_in) - 1, h, 17, 4, 3, 2, 2, 3);
-    show("v10 kat[1] iters=17", h);
-    RESET(); cn_slow_hash_v10(ctx, live_in, sizeof(live_in) - 1, h, 64, 2, 2, 3, 3, 2);
-    show("v10 kat[2] iters=64", h);
-
-    RESET(); cn_slow_hash_v11(ctx, live_in, sizeof(live_in) - 1, h, 0, 8, 4, 4);
-    show("v11 kat[0] iters=0", h);
-    RESET(); cn_slow_hash_v11(ctx, live_in, sizeof(live_in) - 1, h, 17, 4, 5, 6);
-    show("v11 kat[1] iters=17", h);
-    RESET(); cn_slow_hash_v11(ctx, live_in, sizeof(live_in) - 1, h, 63, 2, 8, 8);
-    show("v11 kat[2] iters=63", h);
-
-    RESET(); cn_slow_hash_v13(ctx, live_in, sizeof(live_in) - 1, h, seed);
-    show("v13 kat", h);
-
-    RESET(); cn_slow_hash_v14(ctx, v8_in, sizeof(v8_in) - 1, h, 0, CN_V8_INIT_SIZE_BLK, 4, 4);
-    show("v14 kat[0] iters=0", h);
-    RESET(); cn_slow_hash_v14(ctx, v8_in, sizeof(v8_in) - 1, h, 64, CN_V8_INIT_SIZE_BLK, 6, 6);
-    show("v14 kat[3] iters=64", h);
-
-    /* Same arguments, same process, same context: does the digest depend on
-     * anything other than its inputs? Run once, run an unrelated hash, run
-     * again. A difference here is a reproducibility bug, not a timing one. */
-    RESET(); cn_slow_hash_v10(ctx, live_in, sizeof(live_in) - 1, h, 0, 8, 2, 2, 2, 2);
-    show("v10 kat[0] first", h);
-    RESET(); cn_slow_hash_v13(ctx, live_in, sizeof(live_in) - 1, h, seed);
-    RESET(); cn_slow_hash_v10(ctx, live_in, sizeof(live_in) - 1, h, 0, 8, 2, 2, 2, 2);
-    show("v10 kat[0] after v13", h);
-    RESET(); cn_slow_hash_v11(ctx, live_in, sizeof(live_in) - 1, h, 63, 2, 8, 8);
-    RESET(); cn_slow_hash_v10(ctx, live_in, sizeof(live_in) - 1, h, 0, 8, 2, 2, 2, 2);
-    show("v10 kat[0] after v11", h);
-
+    for (k = 0; k < sizeof(cases) / sizeof(cases[0]); k++)
     {
-        cn_hash_context_t *fresh = cn_hash_context_create();
-        char h2[HASH_SIZE];
-        memset(&fresh->random_values, 0, sizeof(fresh->random_values));
-        cn_slow_hash_v11(fresh, live_in, sizeof(live_in) - 1, h2, 8, 8, 4, 4);
-        memset(&fresh->random_values, 0, sizeof(fresh->random_values));
-        memset(fresh->salt, 0, CN_SALT_MEMORY);
-        cn_slow_hash_v10(fresh, live_in, sizeof(live_in) - 1, h2, 0, 8, 2, 2, 2, 2);
-        show("v10 kat[0] fresh ctx", h2);
-        cn_hash_context_free(fresh);
+        char h_off[HASH_SIZE], h_on[HASH_SIZE];
+
+        cn_nt_fill_enable(0);
+        run_case(ctx, &cases[k], h_off);
+        cn_nt_fill_enable(1);
+        run_case(ctx, &cases[k], h_on);
+        cn_nt_fill_enable(0);
+
+        printf("%-22s ", cases[k].tag);
+        hex(h_off);
+        if (memcmp(h_off, h_on, HASH_SIZE) != 0)
+        {
+            mismatches++;
+            printf("   NON-TEMPORAL MISMATCH -> ");
+            hex(h_on);
+        }
+        putchar('\n');
     }
 
+    printf("\n%d cases, %d non-temporal mismatches\n",
+           (int)(sizeof(cases) / sizeof(cases[0])), mismatches);
     printf("known-answer test: %s\n",
            cn_slow_hash_known_answer_test() ? "PASS" : "FAIL");
 
     cn_hash_context_free(ctx);
-    return 0;
+    return mismatches ? 1 : 0;
 }

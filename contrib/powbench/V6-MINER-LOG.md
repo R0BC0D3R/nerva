@@ -1289,6 +1289,76 @@ been removed. **A published optimisation's percentage is a property of the miner
 it was measured in, not of the optimisation.** That is lesson 5 again, and it
 has now cost a prediction twice.
 
+### 9. v8's small pad already defeats the non-temporal store attack, and that is luck worth understanding
+
+Non-temporal stores were worth **+22% on v6**, the largest single win of the
+whole project after screening. The obvious question for v8 is how much an
+attacker gets for free there today. The answer, measured, is **nothing: it is a
+large loss at every thread count.**
+
+`expand_key()` in `slow-hash.h` is shared by v8, v11, v10 and v9, so one change
+covers four consensus paths. Streaming stores were added to it behind the same
+per-thread switch v13 uses, verified bit-identical over 14 vectors spanning
+every variant, and measured A-B-B-A per thread with the salt restored before
+every nonce so both arms hash identical work:
+
+```
+threads   pad total   ordinary stores   streaming stores   streaming is
+   4        4 MB        2,697,270         6,810,160          -60.4%
+   8        8 MB        2,638,065         6,838,888          -61.4%
+  16       16 MB        2,986,368         7,035,463          -57.6%
+  24       24 MB        4,000,884         7,347,284          -45.6%
+  30       30 MB        4,646,828         7,666,864          -39.4%
+
+cycles per nonce, 1.3M nonces total, 0 digest mismatches
+```
+
+**Why, and this is the part that generalises.** v13's pad is 8 MB a thread, so at
+any useful thread count it cannot stay in cache; an ordinary store misses, pays
+a read-for-ownership out to DRAM, and streaming skips that read. v8's pad is
+1 MB. At 30 threads that is 30 MB against 32 MB of L3 per CCD with 15 threads on
+each, so **the pad never leaves cache, the fill's stores never reach DRAM, and
+there is no read-for-ownership to save.** Streaming only forces traffic that was
+not happening.
+
+The shape confirms the mechanism rather than just the verdict. The streaming arm
+is nearly flat across thread counts, 6.81M to 7.67M cycles, because it always
+goes to DRAM. The ordinary arm climbs 76% as cache pressure grows. The two
+converge and do not cross inside the usable range.
+
+#### What this is and is not
+
+It **is** a measured defensive property of v8: the attack that gave the most on
+v6 gives nothing here, and the pad size is the reason.
+
+It is **not** something to rely on blindly, for two reasons.
+
+**It is machine-dependent, and the dependence runs the wrong way.** The defence
+is that threads times 1 MB stays under L3. On this 7950X, 32 MB of L3 per CCD,
+that holds comfortably. On the i7-7700HQ in this project's second machine, 6 MB
+of L3 with 8 threads, 8 MB of pads does **not** fit, and streaming stores could
+well win there. **Untested, and worth testing**, because "v8 is safe from this"
+would then be true only on large-cache machines, which is the opposite of the
+machines that need protecting.
+
+**It raises a bigger question than it answers.** If v8's pad is cache-resident
+at every realistic thread count on a modern desktop CPU, then the memory in
+memory-hard is doing less work than the design intends. CryptoNight's original
+2 MB was sized against the L3 of 2014; caches have grown far faster than the pad
+has. A pad that fits in cache is cache-hard rather than memory-hard, which is a
+weaker property and a friendlier one to an ASIC with embedded SRAM. The
+measurement here does not settle that, and the contention visible in the
+ordinary column, 76% growth from 8 to 30 threads, says the pads are not getting
+a free ride. But **the question deserves asking directly rather than inheriting
+the answer from CryptoNight**, and nothing in FINDINGS asks it.
+
+#### Rule
+
+A pad sized to exceed cache is doing a different job from a pad that fits in it,
+and which one a design has depends on the machine, not on the algorithm. **State
+the pad size as a ratio to the target machine's cache per thread, not in
+megabytes**, and re-check it when caches grow.
+
 ## Current state, and how to pick this up cold
 
 Branch `perf/v13-fused-pad-init` on remote `robcoder` (R0BC0D3R/nerva). Nothing
@@ -1335,6 +1405,7 @@ output somewhere else; check the md5, not the path.
 | non-temporal fill | shipped, `--mining-nontemporal-fill`, default off; +22% alone, +12% on top of the recompute |
 | eight-wide screen | **re-measured: +9.1% at 30 threads**, not the zero first recorded |
 | phase timing | `CN_V13_PHASE_TIMING`, off; instruments the real hash, see the breakdown above |
+| non-temporal fill, shared | `cn_fill_store` in the shared `expand_key()`, covering v8, v11, v10 and v9; same switch, default off. **Measured a 39% to 61% loss on v8 at every thread count**, see lesson 9 |
 
 ### Next, and it is not what it was this morning
 

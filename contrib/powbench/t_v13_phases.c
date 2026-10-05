@@ -132,7 +132,7 @@ static void *worker(void *arg)
     /* Match the configuration being measured, per thread, as miner.cpp does. */
     if (g_recompute && !cn_vm_dirty_enable(1))
     { fprintf(stderr, "thread %d: no dirty map\n", w->id); return NULL; }
-    cn_v13_nt_fill_enable(g_nt_fill);
+    cn_nt_fill_enable(g_nt_fill);
 
     /* One hash first, so the lazy allocations happen outside the timed window.
      * The salt cannot be filled before it: it does not exist until then. */
@@ -191,7 +191,7 @@ static void *worker(void *arg)
         w->phase[i] = cn_v13_phase_cycles[i];
 
     cn_vm_dirty_enable(0);
-    cn_v13_nt_fill_enable(0);
+    cn_nt_fill_enable(0);
     cn_hash_context_free(ctx);
     return NULL;
 }
