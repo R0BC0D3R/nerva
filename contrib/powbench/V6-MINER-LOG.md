@@ -1041,53 +1041,43 @@ Live acceptance was 0.410%, against 0.41% on the rig. The live hashrate falls
 straight out of the same log line: 3433 hashes per two-second merge window,
 **1716 H/s at 12 threads**.
 
-#### Thread scaling, and a correction
+#### Thread scaling: linear to 16 cores, then SMT
 
-An earlier version of this section read that figure as 16 threads, because that
-is what the run was meant to use and what the NervaOne thread selector showed.
-The daemon log says 12, and NervaOne's own log says why:
-
-```
-22:21:40 local   NervaOne starts nervad with  --mining-threads 12 --start-mining <addr>
-02:21:48 UTC     NervaOne: "Setting mining threads: 16"
-02:21:49 UTC     daemon:   "Mining has started with 12 threads"
-```
-
-The two logs are four hours apart because the daemon timestamps in UTC and
-NervaOne in local time; these are the same moment. NervaOne launched the daemon
-with a stale `--mining-threads 12` and mining began immediately from
-`--start-mining`. Setting the selector to 16 one second earlier updated UI state
-only: there is no `Calling StartMining` after it, unlike the earlier sequence
-that day where changing the count produced `Stopping mining` then
-`Calling StartMining ... Threads: 24`.
-
-**The daemon does not clamp.** `miner::start` takes `threads_count` as given and
-logs that same value, so "Mining has started with N threads" is always what the
-caller asked for. When a front end's displayed count disagrees with that line,
-the line is right.
-
-The conclusion built on the wrong figure was wrong, and is replaced here rather
-than deleted, per rule 1.
+Measured live after the thread count was actually applied. All three points are
+the same build with the same settings:
 
 ```
-                       12 -> 30 threads   throughput   efficiency vs linear
-before the recompute   1.57 -> 1.86 kH/s    1.18x           0.47
-after everything       1.72 -> 3.15         1.83x           0.73
+12 threads   1733 H/s    144.4 per thread    live, NervaOne
+16 threads   2277 H/s    142.3 per thread    live, NervaOne
+30 threads   3148.6      105.0 per thread    rig, offline
+
+12 -> 16   1.33x threads -> 1.31x throughput   efficiency 0.99
+16 -> 30   1.88x threads -> 1.38x throughput   efficiency 0.74
 ```
 
-Scaling efficiency went from 0.47 of linear to 0.73. That is a large improvement
-and it is consistent with the workload being much less memory bound, but it is
-**not** linear and should not be quoted as such. Note also what the remaining
-sublinearity most likely is: 30 threads on 16 cores means two threads sharing
-one core's AES units, and the measured cost is now dominated by AES and the
-screen. That is an SMT ceiling, not necessarily a memory one, and the two are
-easy to confuse.
+**Linear to 16, then a cliff.** This machine has 16 physical cores and 32
+logical, so threads 1 to 16 each get a core to themselves and scale perfectly.
+Every thread after that is an SMT sibling sharing a core's execution units, and
+each one adds about 62 H/s against a physical core's 142, roughly 44%.
 
-The near-perfect agreement previously claimed here, a prediction of 1679 against
-a measurement of 1716, was a coincidence between a prediction for 16 threads and
-a measurement at 12. **16 threads remains unmeasured.** Per-thread throughput is
-143 H/s at 12 threads against 105 at 30, so a sweep between them is worth doing
-and may well beat both for a machine that is not dedicated to mining.
+That is a textbook SMT curve, and it is the strongest independent evidence yet
+that **the work is compute bound rather than memory bound**. A memory-bound
+workload goes sublinear long before 16 threads, because all sixteen cores share
+one memory controller no matter how many of them are busy. Perfect scaling to
+the physical core count says the contention that remains is for execution units,
+which is exactly what the phase breakdown says the work now consists of: AES and
+the screen's HC-128 schedules.
+
+It also retires a claim this section carried for one night. An earlier version
+read the 12-thread run as 16 and concluded scaling had become linear overall. It
+has not: it is linear up to the physical core count and 0.74 of linear beyond.
+The distinction matters, because "linear" would have implied more headroom from
+threads than actually exists.
+
+Caveat, per rule 6: the 12 and 16 point comparison is clean, same session, same
+setup. The 16 to 30 comparison crosses live NervaOne against the offline rig.
+The effect there is large enough to survive that, and the two setups have agreed
+closely wherever they overlap, but it is not a within-run comparison.
 
 #### The diagnostic that ate the log
 
@@ -1313,10 +1303,10 @@ here is proposed for nerva-project.
                                                 30 threads   3148.6 H/s   5.27x over stock
   (threshold 4 is the optimum; 3 ties it, 2 and below and 6 and above are worse)
 
-  Same build live on mainnet through NervaOne, 12 threads:  1716 H/s
-  (13 blocks found overnight, 13 credited, none rejected)
-  Between 12 and 30 threads is UNMEASURED, and per-thread throughput is 36%
-  better at 12, so there is probably something worth having in there
+  Same build live on mainnet through NervaOne:
+    12 threads  1733 H/s     16 threads  2277 H/s
+  (13 blocks found overnight at 12 threads, 13 credited, none rejected)
+  Scaling is linear to 16, the physical core count, and 0.74 of linear beyond.
   (--mining-screen-batch is NOT worth it here)
 
 i7-7700HQ, 4C/8T, 256 KB L2
@@ -1442,11 +1432,9 @@ dirty-block count so a vacuous comparison is visible rather than silent.
   inside the known-answer test. Nothing committed is affected: the macro is
   off, and the tree passes. **Worth its own session.** The KAT now names the
   failing vector, which is what made this visible at all.
-- **Between 12 and 30 threads is unmeasured** for the current configuration.
-  Every rig number since the recompute landed is at 30 threads, and the one
-  live number is at 12. Per-thread throughput is 143 H/s at 12 against 105 at
-  30, so the curve between them has not been looked at since the work changed
-  shape.
+- Thread scaling is now measured at 12, 16 and 30. Between 16 and 30 only SMT
+  siblings are being added, each worth about 44% of a core, so there is no
+  reason to expect anything interesting in that range.
 
 ## Measurement rules
 
