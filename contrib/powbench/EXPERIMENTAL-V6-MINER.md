@@ -51,17 +51,14 @@ macOS x64 and arm64, FreeBSD x86_64, Android arm64, and ARM v7 and v8. It can
 also be run on demand from the Actions tab with "Run workflow", which works on
 any branch.
 
-**From a release (easiest, no account needed).** If a pre-release is published
-on the fork, its assets download without signing in. This is the right link to
-put in a post.
-
 **From Actions artifacts.** Actions tab, newest `depends` run on branch
-`perf/v13-fused-pad-init`, then the artifact for your platform. Note that
-**GitHub requires a signed-in account to download workflow artifacts** and they
-expire, so this is fine for developers and poor for a public post.
+`perf/v13-fused-pad-init`, then the artifact for your platform. **GitHub
+requires a signed-in account to download workflow artifacts**, and they expire
+after a while. A free account is enough.
 
-**Building it yourself** trusts nobody. The branch builds exactly like upstream;
-see [../../docs/BUILDING.md](../../docs/BUILDING.md).
+**Building it yourself** trusts nobody, and is the better option if you would
+rather not download a binary from a stranger's branch. It builds exactly like
+upstream Nerva; see [../../docs/BUILDING.md](../../docs/BUILDING.md).
 
 ```
 git clone https://github.com/R0BC0D3R/nerva
@@ -70,9 +67,10 @@ git checkout perf/v13-fused-pad-init
 make release
 ```
 
-### Publishing a pre-release from the artifacts
+### If you would rather publish a pre-release
 
-For whoever maintains the branch. After a `depends` run finishes:
+Not the plan, kept because it is the only way to hand binaries to someone
+without a GitHub account. After a `depends` run finishes:
 
 ```
 gh run download <run-id> --dir dist
