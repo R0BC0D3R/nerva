@@ -46,6 +46,6 @@ gcc -O2 -maes -march=x86-64 -fno-strict-aliasing -ffp-contract=off \
     src/crypto/hash-extra-blake.c src/crypto/hash-extra-groestl.c \
     src/crypto/hash-extra-jh.c src/crypto/hash-extra-skein.c \
     contrib/epee/src/memwipe.c \
-    -pthread -o "$OUT" -lm
+    -static -pthread -o "$OUT" -lm
 
 echo "built $OUT"

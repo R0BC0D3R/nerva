@@ -1333,13 +1333,49 @@ v6 gives nothing here, and the pad size is the reason.
 
 It is **not** something to rely on blindly, for two reasons.
 
-**It is machine-dependent, and the dependence runs the wrong way.** The defence
-is that threads times 1 MB stays under L3. On this 7950X, 32 MB of L3 per CCD,
-that holds comfortably. On the i7-7700HQ in this project's second machine, 6 MB
-of L3 with 8 threads, 8 MB of pads does **not** fit, and streaming stores could
-well win there. **Untested, and worth testing**, because "v8 is safe from this"
-would then be true only on large-cache machines, which is the opposite of the
-machines that need protecting.
+**It is machine-dependent, but not in the way first assumed, and the correction
+is the useful part.** The first version of this section said the defence was
+"threads times 1 MB stays under L3", and predicted that the i7-7700HQ, 6 MB of
+L3 with 8 threads and 8 MB of pads, would flip the sign. Measured there:
+
+```
+laptop, 4 cores, 6 MB L3        ordinary     streaming    streaming is
+2 threads  (2 MB, fits)         4,744,656    5,118,068      -7.30%
+4 threads  (4 MB, fits)         4,777,506    5,191,240      -7.97%
+6 threads  (6 MB, at the line)  6,841,954    7,263,431      -5.80%
+8 threads  (8 MB, over)         8,589,103    9,188,864      -6.53%
+```
+
+**It never flips, and it does not even trend.** Exceeding L3 by a third changes
+nothing. So "fits in cache" is the wrong threshold.
+
+What does fit the data is the **over-subscription ratio**, how many times the
+working set exceeds L3:
+
+```
+                      pads     L3      ratio    streaming
+v8, laptop, 2 threads   2 MB    6 MB    0.3x      -7.3%
+v8, laptop, 8 threads   8 MB    6 MB    1.3x      -6.5%
+v8, 7950X, 30 threads  30 MB   64 MB    0.5x     -39.4%
+v13, 7950X, 30 threads 240 MB  64 MB    3.8x     +22%
+```
+
+The mechanism this implies: streaming stores remove the fill's
+read-for-ownership, but they also guarantee that whatever reads the pad next
+goes to DRAM. At 0.3x to 1.3x a useful fraction of the pad is still cached, so
+the forced DRAM reads cost about what the removed RFO saved, and the net is a
+small loss. At 3.8x nothing was going to be cached anyway, so the removed RFO is
+pure gain with no added read cost.
+
+**The attack switches on somewhere well above 1.3x over-subscription, not at
+1.0x.** v13 at 8 MB a thread sits at 3.8x and is wide open. v8 at 1 MB sits at
+0.3x to 1.3x everywhere tested and is not. That is a far more useful boundary
+than "fits or does not fit", and it is only visible because the laptop was
+measured rather than reasoned about.
+
+The larger penalty on the desktop, 39% to 61% against the laptop's 6% to 8%, is
+the same mechanism from the other side: a big fast L3 makes the cached read the
+streaming store gives up much more valuable.
 
 **It raises a bigger question than it answers.** If v8's pad is cache-resident
 at every realistic thread count on a modern desktop CPU, then the memory in
@@ -1392,8 +1428,11 @@ blocks is roughly 655,000 AES operations, call it 330,000 cycles, against maybe
 throughput figures, not a measurement; what is measured is the mechanism behind
 it, in lesson 9, where streaming stores lost 39% to 61% for the same reason.*
 
-So v8 is protected from this, and from the non-temporal store attack, **by one
-property and the same one in both cases: threads times 1 MB stays under L3.**
+So v8 is protected from this, and from the non-temporal store attack, by one
+property and the same one in both cases: **the pad's working set does not exceed
+L3 by enough to matter.** Lesson 9 puts that threshold well above 1.3x
+over-subscription, measured on two machines; v8 sits between 0.3x and 1.3x
+everywhere tested, and v13 at 3.8x is where both attacks pay.
 
 #### The consequence that inverts the usual intuition
 
@@ -1461,8 +1500,15 @@ So the rule for any future change:
 
 If v8's pad is ever resized, the sweep count has to scale with it, or the resize
 is worse than useless. If it is left at 1 MB, the safety is real but it is
-cache-residency safety: **state it as such, and re-check it as caches grow**, per
-lesson 9.
+over-subscription safety: **state it as a ratio to L3 rather than in megabytes,
+and re-check it as caches and thread counts change**, per lesson 9.
+
+The quantitative version, which is what a future change should be checked
+against: **v8 at 1 MB a thread reaches v13's 3.8x over-subscription only at
+roughly 24 threads on a 6 MB L3, or at a 4 MB pad on a 64 MB one.** Either is a
+plausible accident. A pad increase to 4 MB, the size v13 had before HF13 raised
+it, would put v8 straight into the regime that is now measured to be worth 1.29x
+to an attacker.
 
 ## Current state, and how to pick this up cold
 
