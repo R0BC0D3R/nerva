@@ -933,6 +933,64 @@ namespace cryptonote
       MDEBUG("MINING RESUMED");
   }
   //-----------------------------------------------------------------------------------------------------
+  /* Only the nonce differs between candidate blobs, and get_block_hashing_blob
+   * reserialises the whole block for each one: the header, a 32-byte previous
+   * hash, and a merkle root over the transaction hashes, into a fresh string.
+   * Measured at 3,080 cycles a candidate, 5.6% of the screen, and the screen
+   * runs 242 times per accepted nonce.
+   *
+   * So serialise once per template and patch the four nonce bytes. The offset
+   * is found by serialising twice with different nonces and taking the run that
+   * differs, rather than by reimplementing the varint layout of the fields in
+   * front of it, which would rot silently if the header ever changed.
+   *
+   * Then it is checked: patching has to reproduce a fresh serialisation for
+   * several nonces, which also settles the byte order without assuming one. If
+   * any of that fails the fast path stays off and the miner reserialises as
+   * before. Getting this wrong would not produce an invalid block, because the
+   * hash itself is computed from the real block, but it would screen the wrong
+   * nonce and quietly cost throughput, which is exactly the kind of failure
+   * worth a self-check. */
+  static inline void patch_nonce(blobdata &blob, size_t off, uint32_t nonce)
+  {
+    blob[off + 0] = (char)(uint8_t)(nonce         & 0xFFu);
+    blob[off + 1] = (char)(uint8_t)((nonce >> 8)  & 0xFFu);
+    blob[off + 2] = (char)(uint8_t)((nonce >> 16) & 0xFFu);
+    blob[off + 3] = (char)(uint8_t)((nonce >> 24) & 0xFFu);
+  }
+
+  static bool blob_nonce_offset(block b, blobdata &base, size_t &off)
+  {
+    b.nonce = 0u;
+    const blobdata lo = get_block_hashing_blob(b);
+    b.nonce = 0xFFFFFFFFu;
+    const blobdata hi = get_block_hashing_blob(b);
+    if (lo.size() != hi.size() || lo.size() < 4)
+      return false;
+
+    size_t first = lo.size(), ndiff = 0;
+    for (size_t i = 0; i < lo.size(); i++)
+      if (lo[i] != hi[i]) { if (ndiff == 0) first = i; ndiff++; }
+    if (ndiff != 4 || first + 4 > lo.size())
+      return false;
+    for (size_t i = first; i < first + 4; i++)
+      if (lo[i] == hi[i]) return false;          // the four must be contiguous
+
+    static const uint32_t probes[4] = {1u, 0x12345678u, 0xDEADBEEFu, 0x80000001u};
+    for (size_t k = 0; k < 4; k++)
+    {
+      b.nonce = probes[k];
+      blobdata got = lo;
+      patch_nonce(got, first, probes[k]);
+      if (got != get_block_hashing_blob(b))
+        return false;
+    }
+
+    base = lo;
+    off = first;
+    return true;
+  }
+  //-----------------------------------------------------------------------------------------------------
   bool miner::worker_thread()
   {
     uint32_t th_local_index = boost::interprocess::ipcdetail::atomic_inc32(&m_thread_index);
@@ -973,6 +1031,12 @@ namespace cryptonote
     uint32_t accepted[SCREEN_BATCH];
     size_t accepted_n = 0, accepted_i = 0;
     block b;
+    /* Hashing blob for the current template, with the nonce patched per
+     * candidate. Rebuilt whenever the template changes. */
+    blobdata screen_blob;
+    size_t screen_nonce_off = 0;
+    bool screen_blob_ok = false;
+    blobdata batch_blobs[SCREEN_BATCH];
     ++m_threads_active;
     while(!m_stop)
     {
@@ -1007,6 +1071,19 @@ namespace cryptonote
         // Queued nonces were screened against the previous blob, so their
         // estimates no longer describe anything. Drop them.
         accepted_n = accepted_i = 0;
+        if (m_screen_threshold != 0 && b.major_version == 13)
+        {
+          /* NERVA_NO_BLOB_HOIST=1 forces the old per-candidate path, so the
+           * two sides of the A/B are the same binary. */
+          static const bool hoist_off = (getenv("NERVA_NO_BLOB_HOIST") != NULL);
+          screen_blob_ok = !hoist_off && blob_nonce_offset(b, screen_blob, screen_nonce_off);
+          if (!screen_blob_ok)
+            MWARNING("Miner thread [" << th_local_index << "] could not locate the nonce in the "
+                     "hashing blob, rebuilding it per candidate instead");
+          else
+            for (size_t k = 0; k < SCREEN_BATCH; k++)
+              batch_blobs[k] = screen_blob;
+        }
       }
 
       if(!local_template_ver)//no any set_block_template call
@@ -1028,14 +1105,15 @@ namespace cryptonote
        * time; nothing about the hash changes. */
       if (m_screen_threshold != 0 && b.major_version == 13 && !m_screen_batch)
       {
-#if defined(CN_V13_PHASE_TIMING)
-        const uint64_t scr_t0 = __rdtsc();
-        const uint32_t scr_est = screen_block_nonce_v13(hash_context, m_pbc, b, height, m_screen_threshold);
-        m_screen_cycles.fetch_add(__rdtsc() - scr_t0, std::memory_order_relaxed);
+        uint32_t scr_est;
+        if (screen_blob_ok)
+        {
+          patch_nonce(screen_blob, screen_nonce_off, nonce);
+          scr_est = screen_block_nonce_v13(hash_context, m_pbc, screen_blob, height, m_screen_threshold);
+        }
+        else
+          scr_est = screen_block_nonce_v13(hash_context, m_pbc, b, height, m_screen_threshold);
         if (scr_est > m_screen_threshold)
-#else
-        if (screen_block_nonce_v13(hash_context, m_pbc, b, height, m_screen_threshold) > m_screen_threshold)
-#endif
         {
           ++m_screened_out;
           nonce += m_threads_total;
@@ -1046,17 +1124,23 @@ namespace cryptonote
       {
         if (accepted_n == 0)
         {
-          blobdata blobs[SCREEN_BATCH];
+          blobdata fallback_blobs[SCREEN_BATCH];
           uint32_t est[SCREEN_BATCH];
           uint32_t cand[SCREEN_BATCH];
           size_t nb = 0;
           for (; nb < SCREEN_BATCH; nb++)
           {
             cand[nb] = nonce + (uint32_t)nb * m_threads_total;
-            b.nonce = cand[nb];
-            blobs[nb] = get_block_hashing_blob(b);
+            if (screen_blob_ok)
+              patch_nonce(batch_blobs[nb], screen_nonce_off, cand[nb]);
+            else
+            {
+              b.nonce = cand[nb];
+              fallback_blobs[nb] = get_block_hashing_blob(b);
+            }
           }
-          screen_block_nonces_v13_x8(hash_context, m_pbc, blobs, nb,
+          screen_block_nonces_v13_x8(hash_context, m_pbc,
+                                     screen_blob_ok ? batch_blobs : fallback_blobs, nb,
                                      height, m_screen_threshold, est);
           for (size_t k = 0; k < nb; k++)
           {

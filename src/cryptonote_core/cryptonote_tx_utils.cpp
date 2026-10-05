@@ -775,6 +775,15 @@ namespace cryptonote
     cn_screen_cycles_init = cn_screen_cycles_blob = 0;
   }
 
+  /* For a caller that already has the hashing blob. The miner does: only the
+   * nonce differs between candidates, so it serialises once per template and
+   * patches four bytes, instead of reserialising the whole block 242 times per
+   * accepted nonce. */
+  uint32_t screen_block_nonce_v13(crypto::cn_hash_context_t *context, Blockchain *bc, const blobdata &blob, uint64_t height, uint32_t limit)
+  {
+    return screen_block_nonce_v13(context, bc->get_db(), blob, height, limit);
+  }
+  //---------------------------------------------------------------
   uint32_t screen_block_nonce_v13(crypto::cn_hash_context_t *context, Blockchain *bc, const block &b, uint64_t height, uint32_t limit)
   {
     if (b.major_version != 13)

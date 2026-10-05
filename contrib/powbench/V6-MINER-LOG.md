@@ -1090,6 +1090,54 @@ level, visible at `--log-level 1`, which is what the measurement scripts already
 pass. **A diagnostic added for a measurement has to be given a log level before
 it ships**, and the place that becomes obvious is someone else's overnight log.
 
+### Hoisting the hashing blob: 6% of the screen, under 2% of throughput
+
+`get_block_hashing_blob` reserialised the whole block for every candidate nonce,
+header plus a merkle root over the transaction hashes into a fresh string, when
+only the nonce differs. The miner now serialises once per template and patches
+four bytes. The offset is found by serialising twice with different nonces and
+taking the run that differs, then checked by confirming that patching reproduces
+a fresh serialisation for four probe values; if any of that fails it falls back
+to the old path and warns.
+
+```
+                cycles/candidate    of which blob
+blob per candidate    55,992            3,166
+blob hoisted          52,641                0
+removed                3,351            6.0% of the screen
+```
+
+Throughput at 30 threads is between 0% and 2%: a drift-controlled A-B-B-A gave
++0.17% at 0.4% drift, and a back-to-back pair gave +1.78%. **Per-thread compute
+savings do not convert to throughput one for one at 30 threads on 16 cores**,
+because a freed execution slot goes to the SMT sibling. The cycles figure is the
+honest one; the throughput figure is bounded, not resolved.
+
+Kept anyway: it is strictly less work, it validates itself, and it falls back
+safely.
+
+#### Three measurement lessons, all self-inflicted
+
+**A rewritten script dropped a diagnostic that existed for a reason.** When this
+A/B was written fresh instead of derived from an earlier one, it lost the
+page-tier check that the project added after an early run came back with two
+baselines 98% apart. Without it a 17% outlier looked like a result for several
+minutes. **A script rewrite has to carry the checks forward, and the checks are
+the part worth copying.**
+
+**An explicit log-category string replaces the default set, it does not extend
+it.** `--log-level "*:WARNING,miner.screen:INFO"` silently dropped `user:INFO`
+and `global:INFO`, so the options banner and the page tier both vanished and the
+run aborted on a missing banner. The spec has to list everything it wants:
+`*:WARNING,user:INFO,global:INFO,miner.screen:INFO`.
+
+**This rig's 16-thread numbers are bimodal and not currently usable.** Three
+runs, every point on huge pages, readings clustering at either ~2280 or ~1950
+H/s, with one 36-second window spanning both. `--mining-affinity` did not fix
+it, so it is not thread placement. 30 threads is stable to 0.4% and is where
+conclusions should be drawn until this is understood. **Noted as open rather
+than explained.**
+
 ### Where this leaves the project
 
 Each row at its own best thread count, which is the only fair way to compare
@@ -1556,6 +1604,8 @@ output somewhere else; check the md5, not the path.
 | non-temporal fill | shipped, `--mining-nontemporal-fill`, default off; +22% alone, +12% on top of the recompute |
 | eight-wide screen | **re-measured: +9.1% at 30 threads**, not the zero first recorded |
 | phase timing | `CN_V13_PHASE_TIMING`, off; instruments the real hash, see the breakdown above |
+| screen profiling | on, its own log category; `--log-level "*:WARNING,user:INFO,global:INFO,miner.screen:INFO"` |
+| hoisted hashing blob | on, `NERVA_NO_BLOB_HOIST=1` disables; removes 3,351 cycles a candidate, under 2% of throughput at 30 threads |
 | non-temporal fill, shared | `cn_fill_store` in the shared `expand_key()`, covering v8, v11, v10 and v9; same switch, default off. **Measured a 39% to 61% loss on v8 at every thread count**, see lesson 9 |
 
 ### Next, and it is not what it was this morning
@@ -1657,6 +1707,14 @@ dirty-block count so a vacuous comparison is visible rather than silent.
 - Thread scaling is now measured at 12, 16 and 30. Between 16 and 30 only SMT
   siblings are being added, each worth about 44% of a core, so there is no
   reason to expect anything interesting in that range.
+- **This rig's 16-thread readings are bimodal**, roughly 2280 or 1950 H/s, on
+  huge pages, with affinity pinning on, and with one sampling window spanning
+  both modes. Unexplained. Draw conclusions at 30 threads until it is.
+- The screen is two HC-128 key schedules at about 59% plus a walk that is mostly
+  keystream generation. `--mining-screen-batch` already vectorises the
+  schedules eight wide. The walk, about 30% of the screen and 12.5% of a nonce,
+  is the largest piece nothing has attacked, and it resists the same treatment
+  because lanes diverge at different points.
 
 ## Measurement rules
 
