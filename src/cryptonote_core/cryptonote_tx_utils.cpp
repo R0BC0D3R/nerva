@@ -46,7 +46,21 @@ using namespace epee;
 #include "cryptonote_core/blockchain.h"
 #include "crypto/crypto.h"
 #include "crypto/cna-vm.h"
+
+/* Cycle counter for the screen profiling further down. x86 only, and guarded
+ * because this file is cross-compiled for ARM, iOS, Android and FreeBSD:
+ * including <x86intrin.h> unconditionally here broke the ARM and iOS builds
+ * while the x86-64 build this was developed on stayed green.
+ *
+ * Elsewhere it returns zero, the counters stay at zero, and the miner skips
+ * the report. Nothing depends on these numbers; they are a research
+ * diagnostic. */
+#if defined(__x86_64__) || defined(__i386__) || defined(_M_X64) || defined(_M_IX86)
 #include <x86intrin.h>
+static inline uint64_t cn_screen_tsc() { return __rdtsc(); }
+#else
+static inline uint64_t cn_screen_tsc() { return 0; }
+#endif
 #include "crypto/hc128-x8.h"
 #include "crypto/hash.h"
 #include "ringct/rctSigs.h"
@@ -792,9 +806,9 @@ namespace cryptonote
      * them. Timed because the first attempt to attribute the screen's cost
      * subtracted one harness from another and charged this to
      * get_cna_v6_seed. */
-    const uint64_t t_blob0 = __rdtsc();
+    const uint64_t t_blob0 = cn_screen_tsc();
     const blobdata blob = get_block_hashing_blob(b);
-    cn_screen_cycles_blob += __rdtsc() - t_blob0;
+    cn_screen_cycles_blob += cn_screen_tsc() - t_blob0;
     return screen_block_nonce_v13(context, bc->get_db(), blob, height, limit);
   }
   //---------------------------------------------------------------
@@ -804,22 +818,22 @@ namespace cryptonote
       return UINT32_MAX;                      // unavailable, so do not skip
     const uint64_t stable_height = height - 256;
 
-    const uint64_t t_begin = __rdtsc();
+    const uint64_t t_begin = cn_screen_tsc();
     crypto::hash blob_hash;
     get_blob_hash(blob, blob_hash);
 
     HC128_State rng_state;
-    const uint64_t t_init0 = __rdtsc();
+    const uint64_t t_init0 = cn_screen_tsc();
     HC128_Init(&rng_state, (unsigned char *)blob_hash.data, (unsigned char *)blob_hash.data + 16);
-    cn_screen_cycles_init += __rdtsc() - t_init0;
+    cn_screen_cycles_init += cn_screen_tsc() - t_init0;
 
     // Only the first 64 bytes of the salt are needed, which is one of its 4096
     // iterations. The program seed is the same combination get_block_longhash_v13
     // forms, so the estimate is of the program that nonce would really run.
     char prefix[64];
-    const uint64_t t_seed0 = __rdtsc();
+    const uint64_t t_seed0 = cn_screen_tsc();
     db.get_cna_v6_seed(prefix, &rng_state, stable_height);
-    cn_screen_cycles_seed += __rdtsc() - t_seed0;
+    cn_screen_cycles_seed += cn_screen_tsc() - t_seed0;
 
     uint8_t seed[32];
     const uint8_t *salt_bytes = reinterpret_cast<const uint8_t *>(prefix);
@@ -828,7 +842,7 @@ namespace cryptonote
       seed[i] = hash_bytes[i] ^ salt_bytes[i];
 
     const uint32_t est = cn_vm_screen_cost(seed, limit);
-    cn_screen_cycles_total += __rdtsc() - t_begin;
+    cn_screen_cycles_total += cn_screen_tsc() - t_begin;
     cn_screen_calls++;
     return est;
   }
